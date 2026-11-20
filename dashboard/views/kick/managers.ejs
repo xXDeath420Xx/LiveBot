@@ -1,4 +1,4 @@
-<%- include('_head', { pageTitle: 'Manager console', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Manager console', csrfToken, kickUser: user, kickTab: 'managers', isManager: true, isAdmin }) %>
 <%
   var nameOf = function (b) { return b.username || b.platform_user_id || ''; };
 %>
@@ -10,7 +10,6 @@
       <p class="sub">The shared lists every connected channel is protected by.</p>
     </div>
   </div>
-  <%- include('_tabs', { active: 'managers', isManager: true, isAdmin }) %>
 
   <dl class="cf-kpis">
     <div class="cf-kpi"><dt>Banlist</dt><dd><%= Number(counts.banlist || 0).toLocaleString() %></dd></div>

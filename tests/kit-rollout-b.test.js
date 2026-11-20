@@ -132,7 +132,8 @@ function stubs() {
         },
         counting: { guild, channels },
         minigames: { guild, channels },
-        owo: { guild, owoConfig: { enabled: 1, prefix: 'owo', cooldown_seconds: 15 }, owoStats: { players: 12, hunts: 340 } },
+        // The critters game page (page key owo) loads everything from its API; the server renders only the pickers.
+        critters: { guild },
         rpg: { guild, rpgStats: { totalCharacters: 2, activeQuests: 1, topPlayers: [{ character_name: 'Aria', class: 'Mage', level: 12, experience: 3400 }] }, characters: [{ character_name: 'Aria', class: 'Mage', level: 12 }], quests: [] },
         economy: {
             guild, roles,

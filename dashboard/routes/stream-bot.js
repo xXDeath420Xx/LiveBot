@@ -43,7 +43,7 @@ const automationsChanged = (sb, profileId) => { try { sb.hub.notify(profileId, '
 import fs from 'node:fs';
 import {
     PLATFORM_LABEL, TIP_LABEL, managedGuilds, eventView, catalog, guildIdsIn, automationSummary, runView, dispatchView, deviceView,
-    tipSourceView, connectionNotice, scopeRows, studioView, soundView,
+    tipSourceView, connectionNotice, scopeRows, studioView, soundView, youtubePanel,
 } from '../services/stream-bot-view.js';
 
 const router = express.Router();
@@ -371,11 +371,11 @@ router.get('/stream/bot/connections', needPage, pageRoute(async (req, res) => {
             const h = healthById.get(c.id) || null;
             return {
                 id: c.id, platform: c.platform, platformLabel: PLATFORM_LABEL[c.platform] || c.platform, login: c.login, displayName: c.display_name || c.login,
-                verifiedVia: c.verified_via, linkedAt: c.linked_at ? new Date(c.linked_at).toISOString() : null,
+                channelId: c.platform_user_id, verifiedVia: c.verified_via, linkedAt: c.linked_at ? new Date(c.linked_at).toISOString() : null,
                 health: h ? {
                     ok: h.ok, grants: h.grants || null, eventsub: h.eventsub ? { total: h.eventsub.total, enabled: h.eventsub.enabled, failing: h.eventsub.failing } : null,
                     coverage: h.coverage || null, webhook: h.webhook ? { known: h.webhook.known, chat: h.webhook.chat, missing: h.webhook.missing, error: h.webhook.error ? 'Kick did not answer' : null } : null,
-                    lastChatAt: h.lastChatAt ? new Date(h.lastChatAt).toISOString() : null, chatSend: h.chatSend ?? null,
+                    lastChatAt: h.lastChatAt ? new Date(h.lastChatAt).toISOString() : null, chatSend: h.chatSend ?? null, kickBot: h.kickBot ?? null, youtube: h.youtube ?? null,
                 } : null,
             };
         }),
@@ -387,6 +387,7 @@ router.get('/stream/bot/connections', needPage, pageRoute(async (req, res) => {
         tipSources: tipSources.map((s) => tipSourceView(s, guildNames)),
         tipOptions: options,
         botSettings: { storeChat: profile.storeChat, webhookAllowHosts: profile.webhookAllowHosts || [] },
+        youtube: youtubePanel(sb.youtube, profile.id),   // YouTube Live (H-741): off and why, or live state and quota
     });
 }));
 
@@ -396,9 +397,11 @@ router.get('/stream/bot/devices', needPage, pageRoute(async (req, res) => {
     const connected = sb.hub.connected(profile.id);
     const onlineIds = new Set(connected.map((d) => d.deviceId));
     const live = new Map(connected.map((d) => [d.deviceId, d]));
+    // Phase 5: Lights, Audio (Voicemeeter) and Stream Deck sections (core/stream-bot/devices; API in stream-bot-devices.js).
+    const hardware = sb.devices ? await sb.devices.service.pageData(profile.id).catch((err) => { logger.warn(`${LOG} hardware data failed`, { error: err?.message }); return null; }) : null;
     res.render('stream-bot/devices', {
         user: req.user, active: 'devices', pageTitle: 'Devices', profile,
-        devices: devices.map((d) => ({ ...deviceView(d, onlineIds), studio: studioView(live.get(d.id)) })), wsUrl: WS_URL,
+        devices: devices.map((d) => ({ ...deviceView(d, onlineIds), studio: studioView(live.get(d.id)) })), wsUrl: WS_URL, hardware,
     });
 }));
 
@@ -618,14 +621,17 @@ router.post('/stream/bot/api/channels/link', needApi, apiRoute(async (req, res) 
     const { sb, profile } = await load(req);
     const platform = String(req.body?.platform || '');
     const id = String(req.body?.id || '');
-    if (!['twitch', 'kick'].includes(platform) || !/^\d{1,20}$/.test(id)) return res.status(400).json({ ok: false, error: 'Pick a channel to link.' });
+    const idOk = platform === 'youtube' ? /^UC[A-Za-z0-9_-]{22}$/.test(id) : /^\d{1,20}$/.test(id);
+    if (!['twitch', 'kick', 'youtube'].includes(platform) || !idOk) return res.status(400).json({ ok: false, error: 'Pick a channel to link.' });
     const list = await linkableChannels(pool, req.user.id, profile.id, sb.store);
     const c = list.find((x) => x.platform === platform && x.id === id);
     if (!c) return res.status(400).json({ ok: false, error: 'You can only link a channel you signed in with. Connect it first.' });
     const r = await sb.store.linkChannel(profile.id, { platform, platformUserId: c.id, login: c.login, displayName: c.displayName, verifiedVia: c.via });
     if (!r.ok) return res.status(409).json({ ok: false, error: 'That channel is linked to another CertiFried account.' });
     let kick = null;
-    if (platform === 'twitch') {
+    if (platform === 'youtube') {
+        sb.youtube?.service?.checkNow(profile.id).catch((err) => logger.warn(`${LOG} YouTube check after link failed`, { error: err?.message }));
+    } else if (platform === 'twitch') {
         import('../../core/twitch-eventsub-manager.js').then((m) => m.subscribeBroadcaster(c.id, c.login))
             .catch((err) => logger.warn(`${LOG} EventSub subscribe after link failed`, { error: err?.message }));
     } else {
@@ -647,11 +653,31 @@ router.post('/stream/bot/api/channels/link', needApi, apiRoute(async (req, res) 
 router.delete('/stream/bot/api/channels/:id', needApi, apiRoute(async (req, res) => {
     const id = idOf(req.params.id);
     const { sb, profile } = await load(req);
+    const before = id ? await sb.store.getChannel(profile.id, id).catch(() => null) : null;
     const ok = id ? await sb.store.unlinkChannel(profile.id, id) : false;
     if (!ok) return res.status(404).json({ ok: false, error: 'That channel is not linked.' });
     sb.ingest.invalidate(profile.id);
     sb.io.invalidate(profile.id);
+    if (before?.platform === 'youtube') {
+        // YouTube Live (H-741): stop reading it now, and drop the sign-in (revoked at Google) unless multicast still uses it.
+        sb.youtube?.service?.reload().catch(() => {});
+        await sb.youtube?.forget?.(req.user.id).catch((err) => logger.warn(`${LOG} YouTube sign-in removal failed`, { error: err?.message }));
+    }
     res.json({ ok: true });
+}));
+
+// ── YouTube Live (H-741): look for a live broadcast now (1 quota unit; once a minute per profile) ──
+const youtubeChecks = new Map();
+router.post('/stream/bot/api/youtube/check', needApi, apiRoute(async (req, res) => {
+    const { sb, profile } = await load(req);
+    const svc = sb.youtube?.service;
+    if (!svc) return res.status(409).json({ ok: false, error: 'YouTube is not set up on this server yet.' });
+    const last = youtubeChecks.get(profile.id) || 0;
+    if (Date.now() - last < 60_000) return res.status(429).json({ ok: false, error: 'Checked less than a minute ago. Try again shortly.' });
+    if (youtubeChecks.size > 5000) youtubeChecks.clear();
+    youtubeChecks.set(profile.id, Date.now());
+    const status = await svc.checkNow(profile.id);
+    res.json({ ok: true, channels: status.channels, quota: status.quota });
 }));
 
 // ── tip sources ──
@@ -822,6 +848,8 @@ router.delete('/stream/bot/api/devices/:id', needApi, apiRoute(async (req, res) 
     const { sb, profile } = await load(req);
     const device = id ? await sb.store.getDevice(profile.id, id) : null;
     if (!device) return res.status(404).json({ ok: false, error: 'That device does not exist.' });
+    // Remove (H-765): revoke first, so the token is dead even if the delete fails, then delete the row.
+    await sb.store.revokeDevice(profile.id, id);
     await sb.store.deleteDevice(profile.id, id);
     sb.hub.disconnectDevice(id);
     closeDockStreams(id);

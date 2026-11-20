@@ -92,7 +92,7 @@ router.post('/', async (req, res) => {
         // live posts deleted, leaving the server on the shared bot.
         let botInfo;
         try {
-            botInfo = await testBotConnection(bot_token);
+            botInfo = await testBotConnection(bot_token, { requirePrivilegedIntents: true });
         } catch (validationError) {
             return res.status(400).json({
                 error: 'Bot validation failed',
@@ -105,6 +105,35 @@ router.post('/', async (req, res) => {
         );
         if (registered.length > 0 && !registered[0].guild_id) {
             return res.status(400).json({ error: 'This bot is already registered in the system.' });
+        }
+
+        // The bot this server already uses (a new token after a reset, or "Replace" with the same bot):
+        // update its token in place and restart it. Before H-804 this removed the server's mapping first
+        // and then refused ("already registered"), leaving the server on the shared bot.
+        if (registered.length > 0 && registered[0].guild_id) {
+            const sameToken = encryption.encrypt(bot_token);
+            const sameName = botInfo.username || `Bot ${botInfo.id}`;
+            await pool.execute('UPDATE custom_bots SET bot_token = ?, client_id = ?, bot_name = ? WHERE bot_id = ?',
+                [JSON.stringify(sameToken), client_id, sameName, botInfo.id]);
+            let started = true;
+            let startProblem = null;
+            if (global.botManager) {
+                try {
+                    const [maps] = await pool.execute('SELECT guild_id FROM guild_bot_mapping WHERE bot_id = ?', [botInfo.id]);
+                    await global.botManager.removeCustomBot(botInfo.id).catch(() => {});
+                    await global.botManager.addCustomBot({ bot_id: botInfo.id, bot_token: sameToken, guild_ids: maps.map(m => m.guild_id) });
+                    for (const m of maps) global.botManager.updateGuildMapping(m.guild_id, botInfo.id);
+                } catch (e) { started = false; startProblem = e.message; }
+            }
+            logger.info(`[Custom Bot API] Token updated for bot ${botInfo.id} (${sameName}) in guild ${guildId} by ${req.user.username}${started ? '' : ` (start failed: ${startProblem})`}`);
+            // The page reads the HTTP status: a bot that did not start shows its error instead of reloading.
+            return res.status(started ? 200 : 502).json({
+                success: started, bot_id: botInfo.id, bot_name: sameName, started,
+                message: started
+                    ? 'This server already uses this bot: its token was updated and it was restarted.'
+                    : `The token was saved, but the bot did not start: ${startProblem}. It tries again at the next restart.`,
+                error: started ? undefined : `The bot did not start: ${startProblem}`,
+            });
         }
 
         // Check if guild already has a custom bot — if so, remove it first
@@ -186,6 +215,7 @@ router.post('/', async (req, res) => {
         `, [guildId, bot_id, req.user.id]);
 
         // Start the bot immediately
+        let startProblem = null;
         if (global.botManager) {
             try {
                 const [mappings] = await pool.execute(
@@ -200,17 +230,23 @@ router.post('/', async (req, res) => {
                 global.botManager.updateGuildMapping(guildId, bot_id);
             } catch (startError) {
                 logger.error(`[Custom Bot API] Bot created but failed to start: ${startError.message}`);
-                // Don't fail the request — bot is in DB, will start on next PM2 restart
+                startProblem = startError.message;
             }
         }
 
-        logger.info(`[Custom Bot API] Self-service bot ${bot_id} (${botName}) created by ${req.user.username} for guild ${guildId}`);
+        logger.info(`[Custom Bot API] Self-service bot ${bot_id} (${botName}) created by ${req.user.username} for guild ${guildId}${startProblem ? ` (start failed: ${startProblem})` : ''}`);
 
-        res.json({
-            success: true,
+        // Said as it is (H-804): the bot is saved either way and tries again at the next restart, but the
+        // page must not report "now active" when it could not log in.
+        res.status(startProblem ? 502 : 200).json({
+            success: !startProblem,
+            started: !startProblem,
             bot_id,
             bot_name: botName,
-            message: 'Custom bot set up successfully and is now active!'
+            message: startProblem
+                ? `The bot was saved, but it did not start: ${startProblem}. It tries again at the next restart; check its token and intents in the Discord Developer Portal.`
+                : 'Custom bot set up successfully and is now active!',
+            error: startProblem ? `The bot did not start: ${startProblem}` : undefined,
         });
     } catch (error) {
         logger.error('[Custom Bot API] Error creating bot:', error);

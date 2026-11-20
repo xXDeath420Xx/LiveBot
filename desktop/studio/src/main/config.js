@@ -1,6 +1,7 @@
 'use strict';
 /*
- * Settings (plain JSON) and secrets (the device token and the OBS password).
+ * Settings (plain JSON) and secrets (the device token, the OBS password, the Stream Deck pairing token, and one token per
+ * paired light: dev:hue:<bridge id>, dev:nanoleaf:<id>).
  *
  *   createConfig({ dir, safeStorage, logger?, localKey? })
  *     get()                 a copy of the settings
@@ -39,11 +40,22 @@ const DEFAULTS = Object.freeze({
     app: { startWithWindows: false, startMinimised: true, theme: 'dark', checkUpdates: true },
     // Voice commands: microphone off until the person turns it on.
     voice: { enabled: false, inputDeviceId: 'default', mode: 'always', pttKey: 'F13', threshold: 0.7, phrases: [] },
-    // VOD-safe music (always on): the music source's UUID, and the optional record-without-music choice.
-    music: { sourceUuid: null, recordWithoutMusic: false, prevRecTracks: null, kickMusic: 'unknown' },
+    // VOD-safe music (only while song requests are on, 0.2.6): the music source's UUID, the optional record-without-music
+    // choice, and the server's last word on song requests (null: not told yet, so the 0.2.5 behaviour, enforced, holds).
+    music: { sourceUuid: null, recordWithoutMusic: false, prevRecTracks: null, kickMusic: 'unknown', songRequests: null },
+    // Phase 5. Lights: no network search until the person chooses Find lights (enabled), then at every start. Known lights
+    // (no tokens; those are secrets) and Hue bridges with their pinned certificate fingerprints.
+    lights: { enabled: false, drivers: { govee: true, hue: true, lifx: true, nanoleaf: true, elgato: true, litra: true }, known: [], hue: { bridges: [] } },
+    // Voicemeeter control: off until turned on; the DLL is loaded only then.
+    voicemeeter: { enabled: false },
+    // The Stream Deck plugin's local connection: off until turned on; 127.0.0.1 only.
+    streamdeck: { enabled: false, port: 39720 },
 });
 
-const SECRET_NAMES = new Set(['deviceToken', 'obsPassword']);
+const SECRET_NAMES = new Set(['deviceToken', 'obsPassword', 'streamdeckToken']);
+// Phase 5: one secret per paired light (Hue bridge user, Nanoleaf token), named dev:<driver>:<id>.
+const DEVICE_SECRET = /^dev:[a-z0-9-]{1,20}:[A-Za-z0-9._-]{1,80}$/;
+const isSecretName = (n) => SECRET_NAMES.has(n) || DEVICE_SECRET.test(String(n));
 
 function isObj(v) { return v && typeof v === 'object' && !Array.isArray(v); }
 
@@ -108,6 +120,7 @@ function createConfig({ dir, safeStorage, logger = null, localKey = null }) {
         return e.scheme === 'dpapi' ? dpapiOpen(e.data) : localOpen(e.data);
     }
     function save() { writeJson(secretsFile, secrets); }
+    const allNames = () => [...new Set([...SECRET_NAMES, ...Object.keys(secrets).filter(isSecretName)])];
 
     const api = {
         get: () => JSON.parse(JSON.stringify(settings)),
@@ -126,7 +139,7 @@ function createConfig({ dir, safeStorage, logger = null, localKey = null }) {
             return api.getSecret(name) != null;   // saved but unreadable now counts as not saved
         },
         getSecret(name) {
-            if (!SECRET_NAMES.has(name)) return null;
+            if (!isSecretName(name)) return null;
             if (memory.has(name)) return memory.get(name);
             if (!entryOf(secrets[name])) return null;
             const v = read(name);
@@ -138,7 +151,7 @@ function createConfig({ dir, safeStorage, logger = null, localKey = null }) {
             return v;
         },
         setSecret(name, value) {
-            if (!SECRET_NAMES.has(name)) throw new Error('unknown_secret');
+            if (!isSecretName(name)) throw new Error('unknown_secret');
             memory.delete(name);
             if (value == null || value === '') {
                 delete secrets[name];
@@ -172,14 +185,14 @@ function createConfig({ dir, safeStorage, logger = null, localKey = null }) {
         },
         storageMode() {
             if (memory.size) return 'memory';
-            for (const n of SECRET_NAMES) if (entryOf(secrets[n])?.scheme === 'local') return 'local';
+            for (const n of allNames()) if (entryOf(secrets[n])?.scheme === 'local') return 'local';
             return 'dpapi';
         },
         upgradeSecrets() {
             const out = { moved: 0, dropped: 0, keyRemoved: false };
             if (!api.secureStorageAvailable()) return out;
             let changed = false;
-            for (const n of SECRET_NAMES) {
+            for (const n of allNames()) {
                 const e = entryOf(secrets[n]);
                 if (!e || e.scheme !== 'local') continue;
                 const plain = localOpen(e.data);
@@ -198,9 +211,9 @@ function createConfig({ dir, safeStorage, logger = null, localKey = null }) {
                 out.moved++;
             }
             if (changed) save();
-            const stillLocal = [...SECRET_NAMES].some((n) => entryOf(secrets[n])?.scheme === 'local');
+            const stillLocal = allNames().some((n) => entryOf(secrets[n])?.scheme === 'local');
             const onDisk = readJson(secretsFile, {});
-            const diskLocal = [...SECRET_NAMES].some((n) => entryOf(onDisk?.[n])?.scheme === 'local');
+            const diskLocal = [...new Set([...SECRET_NAMES, ...Object.keys(isObj(onDisk) ? onDisk : {}).filter(isSecretName)])].some((n) => entryOf(onDisk?.[n])?.scheme === 'local');
             if (!stillLocal && !diskLocal && key.exists()) {
                 out.keyRemoved = key.remove();
                 if (out.keyRemoved) logger?.info('Windows secure storage works again; secrets moved to it and the local key was deleted', { moved: out.moved });
@@ -212,4 +225,4 @@ function createConfig({ dir, safeStorage, logger = null, localKey = null }) {
     return api;
 }
 
-module.exports = { createConfig, DEFAULTS, merge, entryOf };
+module.exports = { createConfig, DEFAULTS, merge, entryOf, isSecretName };

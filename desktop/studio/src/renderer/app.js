@@ -116,6 +116,9 @@
         renderUpdate();
         renderVoice();
         renderVod();
+        renderLights();
+        renderAudio();
+        renderStreamdeck();
     }
 
     function logItem(a) {
@@ -435,12 +438,14 @@
     function renderVod() {
         const v = S.vod;
         if (!v) return;
-        $('vod-pill').textContent = v.vodSafe ? 'Protected' : 'Music paused';
-        $('vod-pill').className = `pill ${v.vodSafe ? 'ok' : 'bad'}`;
+        const off = v.enforced === false;
+        $('vod-pill').textContent = off ? 'Song requests off' : v.vodSafe ? 'Protected' : 'Music paused';
+        $('vod-pill').className = `pill ${off ? '' : v.vodSafe ? 'ok' : 'bad'}`;
         $('vod-reason').textContent = v.vodSafe ? '' : (v.reason || '');
-        $('vod-reason').className = `msg${v.vodSafe ? '' : ' bad'}`;
+        $('vod-reason').className = `msg${v.vodSafe || off ? '' : ' bad'}`;
+        $('vod-remove').hidden = !(off && v.sourceExists);
         $('vod-track').textContent = v.vodTrack ? `Track ${v.vodTrack} (live audio on track ${v.liveTrack})` : '-';
-        $('vod-source').textContent = v.sourceReady ? v.sourceName : '-';
+        $('vod-source').textContent = v.sourceReady || v.sourceExists ? v.sourceName : '-';
         document.querySelectorAll('.vod-track-n').forEach((n) => { n.textContent = v.vodTrack || 2; });
         $('vod-warn-wrap').hidden = !v.warnings.length;
         $('vod-warn').tBodies[0].replaceChildren(...v.warnings.map((w) => el('tr', null, el('td', { text: w.name }),
@@ -451,6 +456,123 @@
         if (document.activeElement !== $('vod-kick')) $('vod-kick').value = v.kickMusic || 'unknown';
         $('vod-record').checked = !!v.recordWithoutMusic;
     }
+    $('vod-remove').addEventListener('click', async () => {
+        try { await call('vod:removeSource'); setMsg('vod-msg', 'The CertiFried Music source was removed from OBS.', 'ok'); } catch (err) { setMsg('vod-msg', err.message, 'bad'); }
+    });
+
+    // ── lights (Phase 5) ──
+    const DRIVER_LABEL = { govee: 'Govee', hue: 'Philips Hue', lifx: 'LIFX', nanoleaf: 'Nanoleaf', elgato: 'Elgato', litra: 'Logitech Litra' };
+    const LIGHT_ERRORS = {
+        no_lights: 'No lights yet.', device_offline: 'That light did not answer. Is it on and on the same network?', needs_pairing: 'Pair it first.',
+        cert_changed: 'The Hue bridge presented a different certificate than when it was paired. Forget it and pair again.', not_supported: 'That light cannot do this.',
+    };
+    const lightError = (err) => LIGHT_ERRORS[String(err.message || '').split(':')[0]] || err.message;
+    function renderLights() {
+        const L = S.lights;
+        if (!L) return;
+        $('lights-pill').textContent = L.busy === 'finding' ? 'Looking' : L.busy === 'pairing' ? 'Pairing' : L.enabled ? `${L.devices.filter((d) => d.online).length} online` : 'Off';
+        $('lights-pill').className = `pill ${L.enabled ? 'ok' : ''}`;
+        $('lights-find').disabled = !!L.busy;
+        $('lights-find').textContent = L.enabled ? 'Look again' : 'Find lights';
+        $('lights-off').hidden = !L.enabled;
+        $('lights-notes').replaceChildren(...(L.notes || []).map((n) => el('li', { text: n.message })));
+        const rows = (L.devices || []).map((d) => {
+            const state = d.needsPairing ? 'Needs pairing' : d.online ? 'Online' : 'Offline';
+            const caps = [d.caps && d.caps.color ? 'colour' : null, d.caps && d.caps.white ? 'white' : null, d.caps && (d.caps.scenes || []).length ? `${d.caps.scenes.length} scenes` : null, d.caps && (d.caps.effects || []).length ? `${d.caps.effects.length} effects` : null].filter(Boolean).join(', ');
+            const btns = [];
+            if (d.needsPairing) btns.push(el('button', { class: 'btn small', text: 'Pair', onclick: async (e) => {
+                const hint = d.driver === 'hue' ? 'Press the button on the Hue bridge now. Studio waits 30 seconds.' : 'Hold the power button on the Nanoleaf for 5 to 7 seconds until the lights flash. Studio waits 30 seconds.';
+                setMsg('lights-msg', hint);
+                e.target.disabled = true;
+                try { const r = await call('lights:pair', { id: d.id }); setMsg('lights-msg', r.result.message || (r.result.ok ? 'Paired.' : 'Not paired.'), r.result.ok ? 'ok' : 'bad'); } catch (err) { setMsg('lights-msg', lightError(err), 'bad'); }
+                e.target.disabled = false;
+            } }));
+            else if (d.kind !== 'bridge') btns.push(el('button', { class: 'btn small', text: 'Test', onclick: async () => {
+                try { await call('lights:test', { id: d.id }); setMsg('lights-msg', `${d.name}: flashed.`, 'ok'); } catch (err) { setMsg('lights-msg', `${d.name}: ${lightError(err)}`, 'bad'); }
+            } }));
+            btns.push(el('button', { class: 'btn small ghost', text: 'Forget', 'aria-label': `Forget ${d.name}`, onclick: async () => {
+                try { await call('lights:forget', { id: d.id }); setMsg('lights-msg', `${d.name} forgotten.`, 'ok'); } catch (err) { setMsg('lights-msg', err.message, 'bad'); }
+            } }));
+            return el('tr', null,
+                el('td', null, el('span', { text: d.name }), d.model ? el('span', { class: 'sub', text: d.model }) : null),
+                el('td', null, el('span', { text: `${DRIVER_LABEL[d.driver] || d.driver}${d.kind === 'group' ? ' room' : d.kind === 'bridge' ? ' bridge' : ''}` }), caps ? el('span', { class: 'sub', text: caps }) : null),
+                el('td', { text: state }),
+                el('td', { class: 'light-actions' }, ...btns));
+        });
+        $('lights-table').tBodies[0].replaceChildren(...rows);
+        $('lights-table').hidden = !rows.length;
+        $('lights-empty').hidden = !!rows.length;
+        const box = $('lights-drivers');
+        if (!box.childElementCount) {
+            for (const k of Object.keys(DRIVER_LABEL)) {
+                const cb = el('input', { type: 'checkbox', id: `lights-driver-${k}` });
+                cb.addEventListener('change', () => call('lights:drivers', { drivers: { [k]: cb.checked } }).catch(() => {}));
+                box.append(el('label', { class: 'check' }, cb, ` ${DRIVER_LABEL[k]}`));
+            }
+        }
+        for (const k of Object.keys(DRIVER_LABEL)) { const cb = $(`lights-driver-${k}`); if (cb && document.activeElement !== cb) cb.checked = (L.drivers || {})[k] !== false; }
+    }
+    $('lights-find').addEventListener('click', async () => {
+        setMsg('lights-msg', 'Looking for lights on your network and USB...');
+        try { const r = await call('lights:find'); setMsg('lights-msg', `Found ${r.count} light${r.count === 1 ? '' : 's'}.`, 'ok'); } catch (err) { setMsg('lights-msg', err.message, 'bad'); }
+    });
+    $('lights-off').addEventListener('click', async () => { try { await call('lights:off'); setMsg('lights-msg', 'Studio no longer looks for lights. Light actions are refused until you choose Find lights again.', 'ok'); } catch (err) { setMsg('lights-msg', err.message, 'bad'); } });
+    $('lights-add').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try { const r = await call('lights:add', { driver: $('lights-add-driver').value, address: $('lights-add-address').value }); setMsg('lights-add-msg', `Added ${r.count}.`, 'ok'); $('lights-add-address').value = ''; } catch (err) { setMsg('lights-add-msg', lightError(err), 'bad'); }
+    });
+
+    // ── Voicemeeter (Phase 5) ──
+    const VM_TYPE = { basic: 'Voicemeeter', banana: 'Voicemeeter Banana', potato: 'Voicemeeter Potato' };
+    function renderAudio() {
+        const V = S.voicemeeter;
+        if (!V) return;
+        const i = V.info;
+        const on = !!V.settings.enabled;
+        if (document.activeElement !== $('vm-enabled')) $('vm-enabled').checked = on;
+        const label = !on ? 'Off' : !i ? 'Not checked' : !i.installed ? 'Not installed' : !i.running ? 'Not running' : (VM_TYPE[i.type] || 'Running');
+        $('vm-pill').textContent = label;
+        $('vm-pill').className = `pill ${on && i && i.running ? 'ok' : on && i && !i.running ? 'warn' : ''}`;
+        $('vm-version').textContent = i && i.version ? i.version : '-';
+        $('vm-strips').textContent = i && i.strips && i.strips.length ? i.strips.map((x) => x.label || `Strip ${x.index + 1}`).join(', ') : '-';
+        $('vm-buses').textContent = i && i.buses && i.buses.length ? i.buses.map((x) => x.label || x.name || `Bus ${x.index + 1}`).join(', ') : '-';
+        $('vm-profiles').textContent = i && i.profiles && i.profiles.length ? i.profiles.join(', ') : 'None saved yet';
+        $('vm-macro').textContent = i ? (i.macroButtons ? 'Running' : 'Not running') : '-';
+    }
+    $('vm-enabled').addEventListener('change', async (e) => {
+        try { await call('voicemeeter:settings', { enabled: e.target.checked }); setMsg('vm-msg', e.target.checked ? 'Voicemeeter control is on.' : 'Voicemeeter control is off.', 'ok'); } catch (err) { e.target.checked = !e.target.checked; setMsg('vm-msg', err.message, 'bad'); }
+    });
+    $('vm-detect').addEventListener('click', async () => { try { await call('voicemeeter:detect'); setMsg('vm-msg', 'Checked.', 'ok'); } catch (err) { setMsg('vm-msg', err.message, 'bad'); } });
+
+    // ── Stream Deck (Phase 5) ──
+    function renderStreamdeck() {
+        const D = S.streamdeck;
+        if (!D) return;
+        const on = !!D.settings.enabled;
+        if (document.activeElement !== $('sd-enabled')) $('sd-enabled').checked = on;
+        if (document.activeElement !== $('sd-port')) $('sd-port').value = D.settings.port;
+        $('sd-pill').textContent = !on ? 'Off' : D.error ? 'Not running' : D.clients ? `${D.clients} connected` : 'Waiting for the plugin';
+        $('sd-pill').className = `pill ${on && !D.error ? (D.clients ? 'ok' : 'warn') : on ? 'bad' : ''}`;
+        if (D.error) setMsg('sd-msg', D.error, 'bad');
+        $('sd-install').disabled = !D.pluginBundled;
+        for (const id of ['sd-show', 'sd-copy', 'sd-regen']) $(id).disabled = !on;
+    }
+    async function sdToken(regenerate) { const r = await call('streamdeck:token', { regenerate: !!regenerate }); return r.token; }
+    $('sd-enabled').addEventListener('change', async (e) => {
+        try { await call('streamdeck:settings', { enabled: e.target.checked }); setMsg('sd-msg', e.target.checked ? 'The plugin can connect now. Paste the token into one of its keys.' : 'The Stream Deck connection is off.', 'ok'); } catch (err) { e.target.checked = !e.target.checked; setMsg('sd-msg', err.message, 'bad'); }
+    });
+    $('sd-port').addEventListener('change', async (e) => { try { await call('streamdeck:settings', { port: Number(e.target.value) }); setMsg('sd-msg', 'Port saved. Set the same port in the plugin.', 'ok'); } catch (err) { setMsg('sd-msg', err.message, 'bad'); } });
+    $('sd-show').addEventListener('click', async () => {
+        const t = $('sd-token');
+        if (t.type === 'text') { t.type = 'password'; t.value = ''; $('sd-show').textContent = 'Show token'; return; }
+        try { t.value = await sdToken(false); t.type = 'text'; $('sd-show').textContent = 'Hide token'; } catch (err) { setMsg('sd-msg', err.message, 'bad'); }
+    });
+    $('sd-copy').addEventListener('click', async () => { try { await call('app:copy', { text: await sdToken(false) }); setMsg('sd-msg', 'Token copied.', 'ok'); } catch (err) { setMsg('sd-msg', err.message, 'bad'); } });
+    $('sd-regen').addEventListener('click', async () => {
+        try { const tok = await sdToken(true); if ($('sd-token').type === 'text') $('sd-token').value = tok; setMsg('sd-msg', 'New token made. Connected keys must get the new one.', 'ok'); } catch (err) { setMsg('sd-msg', err.message, 'bad'); }
+    });
+    $('sd-install').addEventListener('click', async () => { try { await call('streamdeck:install'); setMsg('sd-msg', 'The Stream Deck app is installing the plugin.', 'ok'); } catch (err) { setMsg('sd-msg', err.message, 'bad'); } });
+
     $('vod-check').addEventListener('click', async () => { try { await call('vod:check'); setMsg('vod-msg', 'Checked.', 'ok'); } catch (err) { setMsg('vod-msg', err.message, 'bad'); } });
     $('vod-kick').addEventListener('change', (e) => call('vod:kick', { choice: e.target.value }).catch(() => {}));
     $('vod-record').addEventListener('change', async (e) => {

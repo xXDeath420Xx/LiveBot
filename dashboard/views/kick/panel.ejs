@@ -1,4 +1,4 @@
-<%- include('_head', { pageTitle: 'Your channels', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Your channels', csrfToken, kickUser: user, kickTab: 'channels', isManager, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
 
   <div class="pagehead">
     <div>
@@ -7,7 +7,6 @@
       <p class="sub">Protection and chat tools for the Kick channels you own.</p>
     </div>
   </div>
-  <%- include('_tabs', { active: 'channels', isManager, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
 
   <% var totalBanned = 0, totalDeleted = 0, totalDormant = 0, enrolledCount = 0;
      channels.forEach(function (c) { totalBanned += (c.stats.banned || 0); totalDeleted += (c.stats.deleted || 0); totalDormant += (c.stats.dormant || 0); if (c.enabled) enrolledCount++; }); %>

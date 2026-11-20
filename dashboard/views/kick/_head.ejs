@@ -1,69 +1,48 @@
+<%#
+  Kick Defender pages (/kick, dashboard/routes/kick-defender.js and kick-channel.js): the shared site frame
+  (partials/site-head, site-header, site-footer via _foot.ejs) plus the Kick Defender bar under the site header.
+  Kick sign-in is separate from the Discord login, so the Kick account (or "Sign in with Kick") sits in that bar.
+  Locals: pageTitle, kickUser, csrfToken, kickTab ('channels'|'features'|'managers'|'admin', the current bar tab),
+  isManager / isAdmin (show those tabs), extraCss (page CSS, trusted).
+%>
 <!DOCTYPE html>
 <html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <script>
-    // Anti-flash: the theme is on <html> before first paint.
-    // Signed in, the server rendered the theme saved in Settings: that value is the
-    // authority (Dark included) and is copied to storage. Signed out, the choice
-    // made with the footer's theme switch is read from storage; with none, Dark.
-    (function () {
-        try {
-            var d = document.documentElement, saved = <%= locals.userPrefs ? 'true' : 'false' %>;
-            var t = localStorage.getItem('ui-theme');
-            var n = localStorage.getItem('ui-density');
-            if (saved) {
-                localStorage.setItem('ui-theme', d.getAttribute('data-theme') || 'dark');
-                localStorage.setItem('ui-density', d.getAttribute('data-density') || 'comfortable');
-            } else {
-                if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t);
-                if (n && /^[a-z]{3,12}$/.test(n)) d.setAttribute('data-density', n);
-            }
-        } catch (e) { /* private mode / storage disabled — server value stands */ }
-    })();
-    </script>
-    <!-- Auto theme (core/user-preferences.js AUTO_THEME_SCRIPT): follow the OS light/dark setting. Dark Reader: the site has its own themes. -->
-    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
-  <meta name="darkreader-lock">
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="noindex" />
-  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
-  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Kick Defender' %> - Kick Defender | CertiFried</title>
-  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+<%- include('partials/site-head', { title: (typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' · ' : '') + 'Kick Defender · CertiFried', description: 'Kick Defender: a shared banlist, scam-link protection, automod and chat tools for Kick channels, run from the CertiFried dashboard.', noindex: true }) %>
   <script src="/js/kick-dashboard.js"></script>
   <link rel="stylesheet" href="/css/channel-bot.css">
+  <link rel="stylesheet" href="/css/cf-settings.css">
   <style>
-    /* Kick Defender pages: cf-ui.css (tokens, header, buttons, inputs) + cf-settings.css (sections,
-       rows, KPIs, notices) carry the look. Only Kick's own mark (the green square, the active-tab
+    /* Kick Defender pages: cf-ui.css (tokens, buttons, inputs), cf-site.css (the site frame) and cf-settings.css
+       (sections, rows, KPIs, notices) carry the look. Only Kick's own mark (the green square, the current-tab
        underline and the chart's "banned" series) uses Kick green; everything else is the site palette. */
     :root { --kick: #53fc18; }
     /* Light/Sand: neon Kick green vanishes on a light surface (chart bars, tab underline); a deeper Kick green keeps 3:1. */
     :root:is([data-theme="light"], [data-theme="sand"]) { --kick: #2b8a0a; }
-    *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
-    .kick-main { flex: 1 0 auto; width: 100%; max-width: 64rem; margin: 0 auto;
-      padding: calc(var(--cf-header-h) + var(--cf-8)) var(--cf-5) var(--cf-12); min-width: 0; }
+    .kick-main { max-width: 64rem; padding-top: var(--cf-8); padding-bottom: var(--cf-12); min-width: 0; }
 
-    /* Site header actions + phone menu */
-    .navbar .navbar-actions { display: flex; align-items: center; gap: var(--cf-2); margin-left: auto; min-width: 0; }
+    /* Kick Defender bar (same shape as partials/section-tabs.ejs) with the Kick account on the right */
+    .kick-bar { border-bottom: 1px solid var(--cf-border); background: var(--cf-bg); }
+    .kick-bar-inner { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 2px; min-height: 42px; }
+    .kick-bar-name { display: inline-flex; align-items: center; gap: 8px; margin-right: 10px; font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); text-decoration: none; white-space: nowrap; }
+    .kick-bar-name::before { content: ''; width: 10px; height: 10px; border-radius: 2px; background: var(--kick); flex: none; }
+    .kick-bar-tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    .kick-bar-tabs::-webkit-scrollbar { display: none; }
+    .kick-bar-tabs a { display: inline-flex; align-items: center; height: 42px; padding: 0 10px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2); text-decoration: none; white-space: nowrap; box-shadow: inset 0 -2px 0 transparent; }
+    .kick-bar-tabs a:hover { color: var(--cf-text); }
+    .kick-bar-tabs a[aria-current="page"] { color: var(--cf-text); box-shadow: inset 0 -2px 0 var(--kick); }
+    .kick-bar-account { margin-left: auto; padding-left: 12px; display: flex; align-items: center; gap: var(--cf-2); flex: none; }
     .kick-account { display: inline-flex; align-items: center; gap: 8px; font-size: var(--cf-text-sm); color: var(--cf-text-2); max-width: 12rem; }
     .kick-account span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .kick-account img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none; background: var(--cf-surface-2); }
-    .mobile-menu-btn { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
-      background: transparent; border: 1px solid var(--cf-border); color: var(--cf-text); cursor: pointer; }
-    .mobile-menu-btn svg { width: 20px; height: 20px; }
-    .mobile-menu { display: none; position: fixed; top: var(--cf-header-h); left: 0; right: 0; z-index: 999;
-      border-bottom: 1px solid var(--cf-border); }
-    .mobile-menu.is-open { display: block; }
-    .mobile-menu-inner { display: flex; flex-direction: column; }
-    .mobile-menu-link { display: block; padding: 10px 12px; border-radius: var(--cf-radius); color: var(--cf-text-2); text-decoration: none; font-size: var(--cf-text-md); }
-    @media (max-width: 768px) {
-      .mobile-menu-btn { display: inline-flex; }
-      .kick-account span { display: none; }
-      .navbar .navbar-actions .btn { display: none; }
+    @media (max-width: 640px) {
+      .kick-bar-inner { padding: 0 12px; flex-wrap: wrap; }
+      .kick-bar-name { display: none; }
+      .kick-bar-tabs { order: 2; flex: 1 0 100%; }
+      .kick-bar-account { order: 1; margin-left: 0; padding: 6px 0 0; flex: 1 0 100%; justify-content: space-between; }
     }
 
-    /* Page head: product mark, title, tabs */
+    /* Page head: product mark, title, in-page tabs */
     .kick-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 6px;
       font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); }
     .kick-eyebrow::before { content: ''; width: 10px; height: 10px; border-radius: 2px; background: var(--kick); flex: none; }
@@ -107,66 +86,32 @@
     .kick-acct-head { display: flex; align-items: center; gap: var(--cf-3); }
     .kick-acct-head img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; background: var(--cf-surface-2); }
     .kick-scopes { font-size: var(--cf-text-xs); overflow-wrap: anywhere; }
-    .kick-foot { max-width: 64rem; margin: 0 auto; padding: 0 var(--cf-5); }
-    .kick-foot .footer-links { display: flex; flex-wrap: wrap; }
     @media (max-width: 640px) {
       .kick-main { padding-left: var(--cf-4); padding-right: var(--cf-4); }
       .kick-search { max-width: none; }
     }
     <%- typeof extraCss !== 'undefined' ? extraCss : '' %>
   </style>
-    <link rel="stylesheet" href="/css/a11y.css">
-    <link rel="stylesheet" href="/css/dropdowns.css">
-    <link rel="stylesheet" href="/css/themes.css">
-    <% if (locals.uiCustomCss) { %><style id="custom-theme"><%- uiCustomCss %></style><% } %>
-    <link rel="stylesheet" href="/css/cf-ui.css">
-    <link rel="stylesheet" href="/css/cf-settings.css">
 </head>
-<body>
-  <a class="skip-to-content" href="#main-content">Skip to main content</a>
-  <% var _ku = (typeof kickUser !== 'undefined' && kickUser) ? kickUser : null; %>
-  <nav class="navbar" aria-label="Site">
-    <div class="navbar-container">
-      <a href="/" class="navbar-brand">
-        <img src="/images/CertiFried.png" alt="" class="navbar-logo">
-        <span>CertiFried</span>
-      </a>
-      <div class="navbar-links">
-        <a href="/">Home</a>
-        <a href="/kick"<%- _ku ? ' aria-current="page"' : '' %>>Kick Defender</a>
-        <a href="/kick/features">Features</a>
-        <a href="/docs#kick-defender">Docs</a>
-        <a href="/status">Status</a>
-      </div>
-      <div class="navbar-actions">
-        <% if (_ku) { %>
-          <span class="kick-account" title="Signed in with Kick">
-            <% if (_ku.avatar) { %><img src="<%= _ku.avatar %>" alt="" onerror="this.remove()"><% } %>
-            <span><%= _ku.name || 'Kick account' %></span>
-          </span>
-          <a href="/tokes-bot/auth/logout" class="btn btn-secondary btn-sm">Sign out</a>
-        <% } else { %>
-          <a href="/tokes-bot/auth/kick" class="btn btn-primary btn-sm">Sign in with Kick</a>
-        <% } %>
-        <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
-      </div>
-    </div>
-  </nav>
-  <div class="mobile-menu" id="mobileMenu">
-    <div class="mobile-menu-inner">
-      <a href="/" class="mobile-menu-link">Home</a>
-      <a href="/kick" class="mobile-menu-link">Kick Defender</a>
-      <a href="/kick/features" class="mobile-menu-link">Features</a>
-      <a href="/docs#kick-defender" class="mobile-menu-link">Docs</a>
-      <a href="/status" class="mobile-menu-link">Status</a>
+<body class="cfs-body">
+<% var _ku = (typeof kickUser !== 'undefined' && kickUser) ? kickUser : null; %>
+<%- include('partials/site-header', { active: '', user: null, returnTo: locals.sitePath || '/kick' }) %>
+<nav class="kick-bar" aria-label="Kick Defender">
+  <div class="kick-bar-inner">
+    <a class="kick-bar-name" href="/kick">Kick Defender</a>
+    <%- include('_tabs', { active: typeof kickTab !== 'undefined' ? kickTab : '', isManager: typeof isManager !== 'undefined' && isManager, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
+    <div class="kick-bar-account">
       <% if (_ku) { %>
-        <a href="/tokes-bot/auth/logout" class="mobile-menu-link">Sign out</a>
+        <span class="kick-account" title="Signed in with Kick">
+          <% if (_ku.avatar) { %><img src="<%= _ku.avatar %>" alt="" onerror="this.remove()"><% } %>
+          <span><%= _ku.name || 'Kick account' %></span>
+        </span>
+        <a href="/tokes-bot/auth/logout" class="btn btn-secondary btn-sm">Sign out of Kick</a>
       <% } else { %>
-        <a href="/tokes-bot/auth/kick" class="mobile-menu-link">Sign in with Kick</a>
+        <a href="/tokes-bot/auth/kick" class="btn btn-primary btn-sm">Sign in with Kick</a>
       <% } %>
     </div>
   </div>
+</nav>
 
-  <main id="main-content" class="kick-main page-content" tabindex="-1">
+<main id="main-content" class="cfs-main kick-main page-content" tabindex="-1">

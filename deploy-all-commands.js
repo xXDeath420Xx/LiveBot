@@ -9,6 +9,7 @@ import encryption from './utils/encryption.js';
 // Same builder as the automatic deploy: mounts (core/command-mounts.js) and only slash-registered
 // commands (core/command-registration.js). Raw module JSON went over Discord's 100 cap.
 import { buildDeployJson } from './core/command-mounts.js';
+import { withEntryPoint } from './utils/entry-point-command.js';
 
 dotenv.config();
 
@@ -81,7 +82,7 @@ async function deployGlobal(token, clientId, botName) {
 
         const data = await rest.put(
             Routes.applicationCommands(clientId),
-            { body: commands }
+            { body: await withEntryPoint(rest, clientId, commands) } // keeps the Discord Activity's Entry Point command
         );
 
         console.log(`[${botName}] Successfully deployed ${data.length} global commands`);

@@ -27,7 +27,7 @@
 // Top-level commands served only as text. Moved commands (core/command-mounts.js) are listed under
 // their own name: `cc` is listed because it is the command; `/tools cc` only ever existed as a mount.
 export const TEXT_COMMANDS = new Set([
-    // OwO, merged back into one text tree (TEXT_MERGE)
+    // Critters (the /owo game), merged back into one text tree (TEXT_MERGE)
     'owo', 'owo2', 'owo-profile', 'autohunt',
     // Fun and social
     'fun', 'owoify', 'luck', 'imagine', 'cah', 'economy', 'cannabis',

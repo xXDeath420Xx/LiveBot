@@ -541,6 +541,18 @@ export async function handleCinemaStart(interaction) {
     // The starter's voice channel, else the server's default one; and the host role, if set.
     const start = await resolveWatchPartyStart(interaction.member, interaction.guild);
     if (!start.ok) { await interaction.reply({ content: start.error, ephemeral: true }); return true; }
+
+    // Watch Together servers (docs/activities.md): launch the Discord Activity with this pick, not the Go Live stream.
+    const watchCfg = await getConfig(interaction.guildId);
+    if (watchCfg?.watch_mode === 'activity') {
+      const { launchWatchFromPicker } = await import('../activities/launch.js');
+      return launchWatchFromPicker(interaction, {
+        itemId: q ? q.items[0].id : itemId, audioIndex: sel.audioIndex, subIndex: sel.subIndex,
+        queue: q ? q.items.map((it) => ({ itemId: it.id, label: it.label })) : null,
+        libraryId: watchCfg.jellyfin_library_id || null,
+        clear: () => { pending.delete(interaction.user.id); pendingQueue.delete(interaction.user.id); },
+      });
+    }
     const vc = start.vc;
 
     // Re-check the global lock right before starting (TOCTOU guard).

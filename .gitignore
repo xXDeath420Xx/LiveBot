@@ -106,3 +106,8 @@ dump.rdb
 /audit-*.json
 /audit-*.csv
 *-audit-output.txt
+# Backup restore progress (core/backup-restore.js): server layout names and member ids
+/data/backup-restore-runs/
+
+# Service-key .env backups hold live secrets (utils/env-file.js) — never commit
+/backups/env/

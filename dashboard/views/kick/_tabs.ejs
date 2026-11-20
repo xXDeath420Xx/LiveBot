@@ -1,8 +1,9 @@
-<%# Top-level Kick Defender tabs. Locals: active ('channels'|'features'|'managers'|'admin'), isManager, isAdmin. %>
+<%# Kick Defender tabs, shown in the Kick Defender bar (kick/_head.ejs). Locals: active ('channels'|'features'|'managers'|'admin'), isManager, isAdmin. %>
 <% var _act = typeof active !== 'undefined' ? active : ''; %>
-<nav class="kick-tabs" aria-label="Kick Defender">
+<div class="kick-bar-tabs">
   <a href="/kick"<%- _act === 'channels' ? ' aria-current="page"' : '' %>>Channels</a>
   <a href="/kick/features"<%- _act === 'features' ? ' aria-current="page"' : '' %>>Features</a>
   <% if (typeof isManager !== 'undefined' && isManager) { %><a href="/kick/managers"<%- _act === 'managers' ? ' aria-current="page"' : '' %>>Manager console</a><% } %>
   <% if (typeof isAdmin !== 'undefined' && isAdmin) { %><a href="/kick/admin"<%- _act === 'admin' ? ' aria-current="page"' : '' %>>Connected accounts</a><% } %>
-</nav>
+  <a href="/docs#kick-defender">Docs</a>
+</div>

@@ -1,0 +1,115 @@
+<%#
+  GET /stream/bot/viewers (dashboard/routes/stream-bot-viewers.js). Locals: ready (migration 464 has run), settings (viewer settings),
+  filters { q, platform, seen, sort, dir, page }, rows (rowView), total, pages, count, watch { linked, twitch, kick, chatters,
+  needsReapprove, sample[], running }, hrefs { sort{}, prev, next }, seenChoices, sortLabels. Search, filters, sorting and paging are
+  plain GET forms and links; the page needs no script.
+%>
+<%- include('_head', { pageTitle: 'Viewers', active: 'viewers' }) %>
+<%
+  const _cols = [['name', 'Viewer'], ['points', settings.currency.charAt(0).toUpperCase() + settings.currency.slice(1)], ['watch', 'Watched'], ['messages', 'Messages'], ['last_seen', 'Last seen']];
+  const _sorted = (k) => filters.sort === k ? (filters.dir === 'asc' ? 'ascending' : 'descending') : null;
+  const _filtered = !!(filters.q || filters.platform || filters.seen);
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Viewers</h1>
+        <p class="cf-page-sub">Everyone who watched or chatted on your linked channels: watch time, messages and <%= settings.currency %>. Kept until a viewer has not been seen for 400 days.</p>
+    </div>
+    <div class="cf-page-actions">
+        <a class="btn btn-secondary btn-sm" href="/stream/bot/viewers/settings">Settings</a>
+        <% if (ready && count) { %><a class="btn btn-secondary btn-sm" href="/stream/bot/viewers/export.csv" download>Export CSV</a><% } %>
+    </div>
+</div>
+<%- include('_tabs', { active: 'viewers' }) %>
+
+<% if (!ready) { %>
+<section class="cf-section"><div class="cf-rows"><div class="cf-state cf-state--compact"><p class="cf-state-title">Viewer records start after the next CertiFried update.</p></div></div></section>
+<% } else { %>
+<% if (!settings.tracking) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Tracking is off, so nothing new is recorded. Turn it on in <a href="/stream/bot/viewers/settings">Settings</a>.</div></div>
+<% } else if (!watch.linked.length) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Link a Twitch, Kick or YouTube channel on the <a href="/stream/bot/connections">Connections</a> page first.</div></div>
+<% } else if (watch.needsReapprove) { %>
+<div class="cf-notice"><div class="cf-notice-body">On Twitch only people who chat earn watch time until you re-approve the Stream bot grant. <a href="/stream/bot/connections">Re-approve on Connections</a> to count everyone in chat, lurkers included.</div></div>
+<% } %>
+
+<dl class="cf-kpis" aria-label="At a glance">
+    <div class="cf-kpi"><dt>Viewers recorded</dt><dd class="cf-kpi-value"><%= count.toLocaleString('en-US') %></dd></div>
+    <div class="cf-kpi"><dt>Watch time on Twitch</dt><dd class="cf-kpi-value"><%= watch.twitch ? (watch.chatters ? 'Everyone' : 'Chatters') : 'Off' %></dd><dd class="cf-kpi-sub"><%= watch.twitch ? (watch.chatters ? 'in chat, lurkers too' : 'who chatted in 10 minutes') : 'no Twitch channel' %></dd></div>
+    <div class="cf-kpi"><dt>Watch time on Kick</dt><dd class="cf-kpi-value"><%= watch.kick ? 'Chatters' : 'Off' %></dd><dd class="cf-kpi-sub"><%= watch.kick ? 'Kick has no viewer list' : 'no Kick channel' %></dd></div>
+    <% if (watch.youtube) { %><div class="cf-kpi"><dt>Watch time on YouTube</dt><dd class="cf-kpi-value">Chatters</dd><dd class="cf-kpi-sub">YouTube has no viewer list</dd></div><% } %>
+</dl>
+<% if (watch.sample.length) { %>
+<p class="cf-muted sb-viewers-sample">Last count: <% watch.sample.forEach((s, i) => { %><%= i ? '; ' : '' %><%= s.where %>, <%= s.text %><% }) %>.</p>
+<% } %>
+
+<section class="cf-section" aria-labelledby="sb-vw-title">
+    <h2 class="sr-only" id="sb-vw-title">Viewer records</h2>
+    <div class="cf-rows">
+        <form class="sb-filters" method="get" action="/stream/bot/viewers" role="search" aria-label="Filter viewers">
+            <div class="sb-filter">
+                <label for="sb-vw-q">Name</label>
+                <input type="search" id="sb-vw-q" name="q" value="<%= filters.q %>" maxlength="100" placeholder="Search names">
+            </div>
+            <div class="sb-filter">
+                <label for="sb-vw-platform">Platform</label>
+                <select id="sb-vw-platform" name="platform">
+                    <option value="">Twitch and Kick</option>
+                    <option value="twitch"<% if (filters.platform === 'twitch') { %> selected<% } %>>Twitch</option>
+                    <option value="kick"<% if (filters.platform === 'kick') { %> selected<% } %>>Kick</option>
+                    <option value="youtube"<% if (filters.platform === 'youtube') { %> selected<% } %>>YouTube</option>
+                </select>
+            </div>
+            <div class="sb-filter">
+                <label for="sb-vw-seen">Seen</label>
+                <select id="sb-vw-seen" name="seen">
+                    <% seenChoices.forEach(([d, label]) => { %><option value="<%= d %>"<% if (d === filters.seen) { %> selected<% } %>><%= label %></option><% }) %>
+                </select>
+            </div>
+            <div class="sb-filter">
+                <label for="sb-vw-sort">Sort by</label>
+                <select id="sb-vw-sort" name="sort">
+                    <% Object.entries(sortLabels).forEach(([k, label]) => { %><option value="<%= k %>"<% if (k === filters.sort) { %> selected<% } %>><%= k === 'points' ? _cols[1][1] : label %></option><% }) %>
+                </select>
+            </div>
+            <div class="sb-filter sb-filter-end">
+                <button type="submit" class="btn btn-primary btn-sm">Show</button>
+                <% if (_filtered) { %><a class="btn btn-secondary btn-sm" href="/stream/bot/viewers">Clear</a><% } %>
+            </div>
+        </form>
+        <% if (!rows.length) { %>
+        <div class="cf-state"><p class="cf-state-title"><%= _filtered ? 'No viewers match.' : 'No viewers yet.' %></p>
+            <p class="cf-state-text"><%= _filtered ? 'Try a shorter name or another time range.' : 'Viewers appear here when they chat, follow or subscribe, and every 5 minutes while you are live. You can also bring them over from Firebot or Streamer.bot on the Import tab.' %></p></div>
+        <% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack sb-viewers-table">
+                <caption class="sr-only"><%= total.toLocaleString('en-US') %> viewer<%= total === 1 ? '' : 's' %>, sorted by <%= sortLabels[filters.sort].toLowerCase() %></caption>
+                <thead><tr>
+                    <% _cols.forEach(([k, label]) => { %><th scope="col"<% if (_sorted(k)) { %> aria-sort="<%= _sorted(k) %>"<% } %>><a href="<%= hrefs.sort[k] %>"><%= label %></a></th><% }) %>
+                    <th scope="col">Rank</th>
+                </tr></thead>
+                <tbody>
+                    <% rows.forEach((r) => { %>
+                    <tr>
+                        <td><a href="/stream/bot/viewers/<%= r.id %>"><%= r.name %></a> <span class="cf-cell-muted"><%= r.platformLabel %><% if (r.linked) { %>, linked<% } %></span></td>
+                        <td class="cf-nowrap"><%= r.points %></td>
+                        <td class="cf-nowrap"><%= r.watch %></td>
+                        <td class="cf-nowrap"><%= r.messages %></td>
+                        <td class="cf-nowrap cf-cell-muted"><time datetime="<%= r.lastSeen %>"><%= r.lastSeenText %></time></td>
+                        <td><%= r.rank %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-muted">Page <%= filters.page %> of <%= pages %>, <%= total.toLocaleString('en-US') %> viewer<%= total === 1 ? '' : 's' %></span>
+            <% if (hrefs.prev) { %><a class="btn btn-secondary btn-sm" href="<%= hrefs.prev %>">Previous</a><% } %>
+            <% if (hrefs.next) { %><a class="btn btn-secondary btn-sm" href="<%= hrefs.next %>">Next</a><% } %>
+        </div>
+        <% } %>
+    </div>
+</section>
+<% } %>
+
+<%- include('_foot') %>

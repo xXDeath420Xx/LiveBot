@@ -104,7 +104,7 @@ export default {
       .addStringOption(o => o.setName('confirm')
         .setDescription('Type the server name EXACTLY to run for real. Leave blank for a dry run (changes nothing).'))
       .addBooleanOption(o => o.setName('waive-soak')
-        .setDescription('Skip the 24h parity soak on removals — the wait only, never the parity checks (default: yes)'))
+        .setDescription('Skip the 24h parity soak on removals — the wait only, never the parity checks (default: no)'))
       .addStringOption(o => o.setName('exclude')
         .setDescription('Comma-separated bot IDs to leave alone (after reading a dry run)'))),
 
@@ -142,7 +142,8 @@ export default {
       if (confirm && !live) {
         return interaction.editReply(`That did not match. To run for real, type the server name exactly: **${guild.name}**. Nothing ran.`);
       }
-      const waiveSoak = interaction.options.getBoolean('waive-soak') ?? true;
+      // Default no, like the dashboard, which asks for SKIP SOAK (H-809; it defaulted to yes here).
+      const waiveSoak = interaction.options.getBoolean('waive-soak') ?? false;
       const exclude = (interaction.options.getString('exclude') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
       // The scan is needed by BOTH paths, not just the live one: the dry run's whole job is to

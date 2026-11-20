@@ -11,12 +11,16 @@ import logger from './logger.js';
  * @param {string} botToken - Decrypted bot token
  * @returns {Promise<Object>} Bot info or throws error
  */
-export async function testBotConnection(botToken) {
+export async function testBotConnection(botToken, { requirePrivilegedIntents = false } = {}) {
     logger.info('[Bot Validator] Testing bot connection...');
 
-    // Only use Guilds intent for validation — privileged intents may not be enabled yet
+    // Guilds only by default: privileged intents may not be enabled yet. requirePrivilegedIntents logs in
+    // with the three privileged intents core/bot-manager.js createClient() needs, so a bot that could
+    // never start is refused before anything changes (register H-804).
     const testClient = new Client({
-        intents: [GatewayIntentBits.Guilds]
+        intents: requirePrivilegedIntents
+            ? [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildPresences]
+            : [GatewayIntentBits.Guilds]
     });
 
     return new Promise((resolve, reject) => {
@@ -66,7 +70,11 @@ export async function testBotConnection(botToken) {
         // Attempt login
         testClient.login(botToken).catch(error => {
             clearTimeout(timeout);
-            logger.error('[Bot Validator] ✗ Bot login failed:', error);
+            // A wrong token or missing intents is the person's own input, answered with a 400 and the
+            // reason: one warn line, not an ERROR with a stack (2026-11-20: those read as a dead custom bot).
+            const refused = error?.code === 'TokenInvalid' || /invalid token|disallowed intents/i.test(error?.message || '');
+            if (refused) logger.warn(`[Bot Validator] Token refused by Discord: ${error.message}`);
+            else logger.error('[Bot Validator] ✗ Bot login failed:', error);
 
             let errorMessage = 'Invalid bot token';
             if (error.message.includes('TOKEN_INVALID') || error.message.includes('invalid token')) {

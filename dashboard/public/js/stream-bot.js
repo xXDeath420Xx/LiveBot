@@ -138,14 +138,14 @@
     }
 
     // ── editor ─────────────────────────────────────────────────────────────────────────────
-    var PLATFORM = { twitch: 'Twitch', kick: 'Kick', streamelements: 'StreamElements', streamlabs: 'Streamlabs', kofi: 'Ko-fi', bmac: 'Buy Me a Coffee', throne: 'Throne', fourthwall: 'Fourthwall', studio: 'CertiFried Studio', bot: 'Stream bot', test: 'Test' };
+    var PLATFORM = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', streamelements: 'StreamElements', streamlabs: 'Streamlabs', kofi: 'Ko-fi', bmac: 'Buy Me a Coffee', throne: 'Throne', fourthwall: 'Fourthwall', studio: 'CertiFried Studio', bot: 'Stream bot', test: 'Test' };
     // Power-up or Bits trigger, Counter changed trigger, If checks (2026-11-19 stream actions).
     var BITS_KIND = { any: 'Any use of Bits', cheer: 'Cheers only', power_up: 'Any power-up', combo: 'Combos', message_effect: 'Power-up: message effect', celebration: 'Power-up: celebration', gigantify_an_emote: 'Power-up: giant emote' };
     var CHECK_LABEL = { role: 'The viewer\'s role', amount: 'The amount', text: 'The message, name or reward', metadata: 'An event detail or argument' };
     var MODE = { command: 'A command, like !hello', contains: 'Message contains', exact: 'Message is exactly', starts: 'Message starts with', word: 'Message has the word', regex: 'Message matches a pattern' };
     var ROLE = { everyone: 'Everyone', broadcaster: 'Broadcaster', moderator: 'Moderator', vip: 'VIP', subscriber: 'Subscriber' };
     var OPTION = {
-        platform: { event: 'Where the event came from', twitch: 'Twitch', kick: 'Kick', all: 'Twitch and Kick' },
+        platform: { event: 'Where the event came from', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube (while you are live)', all: 'All your linked channels' },
         scope: { channel: 'Your channel', user: 'The viewer' },
         visible: { show: 'Show', hide: 'Hide', toggle: 'Switch' },
         state: {
@@ -192,12 +192,46 @@
             });
             return OVL.loading;
         }
+        // Lights, presets and Voicemeeter (Phase 5) for the light and Voicemeeter actions, read once from /stream/bot/api/devices/choices.
+        var DEV = { data: null, loading: null };
+        function deviceChoices() {
+            if (DEV.loading) return DEV.loading;
+            DEV.loading = call('GET', '/stream/bot/api/devices/choices').then(function (r) {
+                DEV.data = r.ok ? r.data : { lights: [], presets: [], vm: { targets: [], profiles: [] } };
+                return DEV.data;
+            });
+            return DEV.loading;
+        }
+        /** A select filled from deviceChoices(); keeps a saved value that is not reported now. */
+        function deviceSelect(step, f, list, emptyText, missingText, allText) {
+            var s = el('select');
+            function fill() {
+                clear(s);
+                var items = list() || [];
+                if (allText) s.appendChild(el('option', { text: allText, attrs: { value: '' } }));
+                else s.appendChild(el('option', { text: DEV.data ? (items.length ? 'Pick one' : emptyText) : 'Loading', attrs: { value: '' } }));
+                options(s, items, step[f.name]);
+                if (step[f.name] && !items.some(function (x) { return String(x.value) === String(step[f.name]); })) {
+                    s.appendChild(el('option', { text: missingText + ' (' + step[f.name] + ')', attrs: { value: String(step[f.name]) } }));
+                    s.value = String(step[f.name]);
+                }
+            }
+            fill();
+            deviceChoices().then(fill);
+            s.addEventListener('change', function () { step[f.name] = s.value; });
+            return s;
+        }
         /** Names CertiFried Studio reported for a suggest kind (scenes, sources, inputs ...), given the step's other fields. */
         function suggestions(kind, step) {
             var obs = ST && ST.obs;
             var uniq = function (list) { var seen = {}; return list.filter(function (x) { if (!x || seen[x]) return false; seen[x] = true; return true; }); };
             if (kind === 'sounds') return uniq((ST && ST.sounds) || []);
             if (kind === 'media') { overlayChoices(); return uniq(OVL.media || []); }
+            if (kind === 'lightScenes') {
+                deviceChoices();
+                var lt = ((DEV.data && DEV.data.lights) || []).filter(function (x) { return x.value === step.device; })[0];
+                return uniq(lt ? lt.scenes || [] : []);
+            }
             if (!obs) return [];
             var src = obs.sources || {};
             var allItems = function () { var out = []; Object.keys(src).forEach(function (k) { out = out.concat(src[k] || []); }); return out; };
@@ -453,8 +487,14 @@
                     out.push(field('At most', numberInput(c.count, set('count'), { min: 1, max: 1000, step: 1 }), { hint: 'Runs' }));
                     out.push(field('Within seconds', numberInput(c.windowSeconds, set('windowSeconds'), { min: 1, max: 86400, step: 1 })));
                     break;
-                default:
-                    out.push(el('p', { className: 'sb-field-hint', text: 'Unknown condition; remove it.' }));
+                default: {
+                    // Registered conditions (viewer points, watch time, messages): number fields from the catalogue.
+                    var fl = (CONDLABEL[c.type] || {}).fields || [];
+                    if (!fl.length) { out.push(el('p', { className: 'sb-field-hint', text: 'Unknown condition; remove it.' })); break; }
+                    fl.forEach(function (fd) {
+                        if (fd.kind === 'number') out.push(field(fd.label, numberInput(c[fd.name], set(fd.name), { min: fd.min, max: fd.max, step: fd.step || 1 })));
+                    });
+                }
             }
             return out;
         }
@@ -485,7 +525,11 @@
                 pick.setAttribute('data-focus', 'cond-add');
                 var add = el('button', { className: 'btn btn-secondary btn-sm', text: 'Add condition', attrs: { type: 'button' } });
                 add.addEventListener('click', function () {
-                    S.conditions.push(COND_DEFAULT[pick.value] ? COND_DEFAULT[pick.value]() : { type: pick.value });
+                    S.conditions.push(COND_DEFAULT[pick.value] ? COND_DEFAULT[pick.value]() : (function () {
+                        var c = { type: pick.value };
+                        ((CONDLABEL[pick.value] || {}).fields || []).forEach(function (fd) { if (fd.default !== undefined) c[fd.name] = fd.default; });
+                        return c;
+                    })());
                     dirty = true;
                     focusKey = 'cond-' + (S.conditions.length - 1);
                     renderConditions();
@@ -545,10 +589,11 @@
                 if (f.suggest && f.kind === 'text') {
                     var sg = suggestInput(step, f, set);
                     var empty = !suggestions(f.suggest, step).length;
-                    if (f.suggest !== 'sounds' && f.suggest !== 'media' && !(ST && ST.obs)) wantsObs = true;
+                    if (f.suggest !== 'sounds' && f.suggest !== 'media' && f.suggest !== 'lightScenes' && !(ST && ST.obs)) wantsObs = true;
                     var box = field(f.label, sg.input, {
                         hint: f.suggest === 'sounds' && empty ? 'Upload sounds on the Sounds tab, or type a file name from the sounds folder in Studio.'
-                            : f.suggest === 'media' ? 'The name of an image or video under Overlays, Images and videos. Variables work here.' : (f.optional ? 'Optional.' : null),
+                            : f.suggest === 'media' ? 'The name of an image or video under Overlays, Images and videos. Variables work here.'
+                            : f.suggest === 'lightScenes' ? 'Hue scenes, Nanoleaf effects and Govee or LIFX cloud scenes of the light picked above.' : (f.optional ? 'Optional.' : null),
                     });
                     box.appendChild(sg.list);
                     out.push(box);
@@ -630,6 +675,30 @@
                         out.push(field(f.label, ov, { hint: 'Make overlays on the Overlays tab.' }));
                         break;
                     }
+                    case 'light': {
+                        var lightList = function () { return ((DEV.data && DEV.data.lights) || []).filter(function (x) { return x.kind !== 'bridge' || (step.type === 'light.scene' && x.scenes && x.scenes.length); }); };
+                        var ls = deviceSelect(step, f, lightList, 'No lights yet', 'A light that is not reported right now', step.type === 'light.scene' ? null : 'All lights');
+                        out.push(field(f.label, ls, { hint: 'Lights CertiFried Studio found on your PC, and Govee or LIFX cloud lights (Devices page). Cloud lights work without Studio.' }));
+                        break;
+                    }
+                    case 'lightPreset':
+                        out.push(field(f.label, deviceSelect(step, f, function () { return DEV.data && DEV.data.presets; }, 'No presets yet', 'A preset that was deleted'), { hint: 'Make presets on the Devices page, under Light presets.' }));
+                        break;
+                    case 'vmTarget':
+                        out.push(field(f.label, deviceSelect(step, f, function () {
+                            var t = DEV.data && DEV.data.vm && DEV.data.vm.targets;
+                            if (t && t.length) return t;
+                            var all = [];
+                            for (var i = 0; i < 8; i++) all.push({ value: 'strip:' + i, label: 'Strip ' + (i + 1) });
+                            for (var j = 0; j < 8; j++) all.push({ value: 'bus:' + j, label: 'Bus ' + (j + 1) });
+                            return all;
+                        }, 'No strips', 'A strip or bus Voicemeeter does not have'), { hint: 'Names come from Voicemeeter through CertiFried Studio (Audio).' }));
+                        break;
+                    case 'vmProfile': {
+                        var vmProfiles = function () { return DEV.data && DEV.data.vm && DEV.data.vm.profiles; };
+                        out.push(field(f.label, deviceSelect(step, f, vmProfiles, 'No settings files reported', 'A file Studio has not reported'), { hint: 'Save settings in Voicemeeter (Menu, Save Settings) into Documents\\Voicemeeter; Studio lists them.' }));
+                        break;
+                    }
                     case 'automation': {
                         var a = el('select');
                         var others = (D.automations || []).filter(function (x) { return x.id !== S.id; });
@@ -668,6 +737,7 @@
             if (wantsObs) out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'Open CertiFried Studio with OBS connected to fill these lists.' }));
             if (def.outputs && def.outputs.length) out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'Later actions in this run can use ' + def.outputs.map(function (o) { return '{' + o + '}'; }).join(' and ') + '.' }));
             if (def.platforms && def.platforms.length === 1 && def.platforms[0] === 'twitch') out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'Twitch only: Kick has no way to do this. It works on your Twitch channel through the Stream bot grant.' }));
+            if (def.platforms && def.platforms.length === 1 && def.platforms[0] === 'youtube') out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'YouTube only, on the viewer behind a YouTube event, while you are live. It uses a large share of the daily YouTube allowance, so it pauses when the allowance runs low.' }));
             if (def.target === 'studio' || def.target === 'overlay') {
                 out.push(field('Wait for a device (seconds)', numberInput(step.queueSeconds != null ? step.queueSeconds : 120, function (v) { step.queueSeconds = v; }, { min: 0, max: 3600, step: 1 }),
                     { hint: 'If nothing is connected, it waits this long for one, then expires.' }));
@@ -773,6 +843,7 @@
                     head.appendChild(el('span', { className: 'cf-pill is-warn', text: C.targetLabels[def.target] }));
                 }
                 if (def.platforms && def.platforms.length === 1 && def.platforms[0] === 'twitch') head.appendChild(el('span', { className: 'cf-pill', text: 'Twitch only' }));
+                if (def.platforms && def.platforms.length === 1 && def.platforms[0] === 'youtube') head.appendChild(el('span', { className: 'cf-pill', text: 'YouTube only' }));
                 head.appendChild(tools);
                 var block = el('div', { className: 'sb-block' }, [head]);
                 var fields = stepFields(step, depth, label);
@@ -802,8 +873,8 @@
                 var og = el('optgroup', { attrs: { label: g } });
                 byGroup[g].forEach(function (a) {
                     var needs = (a.target === 'studio' || a.target === 'overlay') && !(C.devicesOnline && C.devicesOnline[a.target]);
-                    var twitchOnly = a.platforms && a.platforms.length === 1 && a.platforms[0] === 'twitch';
-                    og.appendChild(el('option', { text: a.label + (needs ? ' (' + C.targetLabels[a.target] + ')' : '') + (twitchOnly ? ' (Twitch only)' : ''), attrs: { value: a.type } }));
+                    var only = a.platforms && a.platforms.length === 1 ? ({ twitch: ' (Twitch only)', youtube: ' (YouTube only)' })[a.platforms[0]] || '' : '';
+                    og.appendChild(el('option', { text: a.label + (needs ? ' (' + C.targetLabels[a.target] + ')' : '') + only, attrs: { value: a.type } }));
                 });
                 pick.appendChild(og);
             });
@@ -961,7 +1032,7 @@
                         say('The channel is linked, but Kick did not accept the event subscription: ' + r.data.kick.error + ' Reload this page to see its state.', 'warn');
                         return;
                     }
-                    window.location.assign('/stream/bot/connections?ok=linked_' + (platform === 'kick' ? 'kick' : 'twitch'));
+                    window.location.assign('/stream/bot/connections?ok=linked_' + (platform === 'kick' || platform === 'youtube' ? platform : 'twitch'));
                 });
             });
         });
@@ -972,6 +1043,23 @@
                 call('DELETE', '/stream/bot/api/channels/' + encodeURIComponent(b.getAttribute('data-unlink-channel'))).then(function (r) {
                     if (r.ok) window.location.assign('/stream/bot/connections?ok=unlinked');
                     else { b.disabled = false; say(errorText(r, 'Could not unlink it.'), 'bad'); }
+                });
+            });
+        });
+        // YouTube Live (H-741): look for a live broadcast now (the server allows it once a minute).
+        Array.prototype.forEach.call(document.querySelectorAll('[data-youtube-check]'), function (b) {
+            b.addEventListener('click', function () {
+                var label = b.textContent;
+                b.disabled = true;
+                b.textContent = 'Checking';
+                call('POST', '/stream/bot/api/youtube/check', {}).then(function (r) {
+                    b.textContent = label;
+                    if (!r.ok) { b.disabled = false; say(errorText(r, 'Could not check YouTube.'), 'bad'); return; }
+                    var list = r.data.channels || [];
+                    if (list.some(function (c) { return c.live; })) { window.location.reload(); return; }
+                    b.disabled = false;
+                    var err = list.map(function (c) { return c.error; }).filter(Boolean)[0];
+                    say(err ? 'YouTube: ' + err : 'No live broadcast on your YouTube channel right now.', err ? 'warn' : 'ok');
                 });
             });
         });
@@ -1096,7 +1184,7 @@
             });
         }
         deviceAction('data-revoke-device', 'POST', '/revoke', 'Revoke %s? It is disconnected now and its token stops working.');
-        deviceAction('data-delete-device', 'DELETE', '', 'Delete %s? It is disconnected and removed from the list.');
+        deviceAction('data-delete-device', 'DELETE', '', 'Remove %s? Its token stops working, it is disconnected now, and it is deleted from the list. This cannot be undone.');
     }
 
     // ── sounds ─────────────────────────────────────────────────────────────────────────────

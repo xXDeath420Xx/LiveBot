@@ -10,6 +10,10 @@
 //                                                 config.css, Geist-Variable.woff2, Geist-OFL.txt, and
 //                                                 dist/PANEL-BUILD.txt (sizes, hash, URLs)
 //   node frontend/greenhouse/build.mjs --check    only check an existing dist/panel/
+//   node frontend/greenhouse/build.mjs --activity dist/activity/: the Discord Activity's copy (activity host mode,
+//                                                 docs/activities.md): src/activity-entry.js, assets under assets/
+//                                                 (relative), served at /activity/greenhouse/ by
+//                                                 dashboard/routes/activities/index.js. Built with the website (no flag).
 //
 // The panel build is NOT minified (Twitch guideline 2.5: reviewers read the code as shipped). The website
 // build is minified and its file names carry a content hash, so they can be cached for a year.
@@ -101,7 +105,7 @@ ${light.join('\n')}
 
 async function bundleJs(target, { minify }) {
     const out = await esbuild.build({
-        entryPoints: [path.join(SRC, target === 'web' ? 'web-entry.js' : 'main.js')],
+        entryPoints: [path.join(SRC, target === 'web' ? 'web-entry.js' : target === 'activity' ? 'activity-entry.js' : 'main.js')],
         bundle: true,
         write: false,
         format: 'iife',
@@ -118,10 +122,14 @@ async function bundleJs(target, { minify }) {
     return out.outputFiles[0].text;
 }
 
-async function bundleCss({ minify, web = false }) {
-    const extra = web ? ['styles/fonts-web.css', 'styles/web.css'].map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('') : '';
+async function bundleCss({ minify, web = false, activity = false }) {
+    const extraFiles = web || activity ? ['styles/fonts-web.css', 'styles/web.css', ...(activity ? ['styles/activity.css'] : [])] : [];
+    const extra = extraFiles.map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('');
+    let appCss = fs.readFileSync(path.join(SRC, 'styles/app.css'), 'utf8');
+    // The Activity uses the website's wide layout: its [data-target="web"] rules apply to the activity target too.
+    if (activity) appCss = appCss.replaceAll('[data-target="web"]', ':is([data-target="web"], [data-target="activity"])');
     const out = await esbuild.build({
-        stdin: { contents: tokensCss() + fs.readFileSync(path.join(SRC, 'styles/app.css'), 'utf8') + extra, loader: 'css', resolveDir: path.join(SRC, 'styles') },
+        stdin: { contents: tokensCss() + appCss + extra, loader: 'css', resolveDir: path.join(SRC, 'styles') },
         bundle: true,
         write: false,
         external: ['*.woff2'],
@@ -138,8 +146,8 @@ const readFont = (name) => fs.readFileSync(path.join(FONTS, name));
 const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#151619"/><path d="M16 26v-9" stroke="#b4e04f" stroke-width="2" stroke-linecap="round"/><path d="M16 17c0-5-3.5-8-9-8 0 5 3.5 8 9 8zM16 15c0-4.5 3.4-7.5 8.5-7.5 0 4.5-3.4 7.5-8.5 7.5z" fill="#b4e04f"/></svg>\n`;
 
 /** Website build: dist/web/index.html and hashed assets for /greenhouse/assets/. */
-export async function buildWeb({ outDir = path.join(HERE, 'dist/web'), assetBase = '/greenhouse/assets' } = {}) {
-    const [js, rawCss] = await Promise.all([bundleJs('web', { minify: true }), bundleCss({ minify: true, web: true })]);
+export async function buildWeb({ outDir = path.join(HERE, 'dist/web'), assetBase = '/greenhouse/assets', target = 'web' } = {}) {
+    const [js, rawCss] = await Promise.all([bundleJs(target, { minify: true }), bundleCss({ minify: true, web: target === 'web', activity: target === 'activity' })]);
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.mkdirSync(path.join(outDir, 'assets'), { recursive: true });
     // Fonts get content-hashed names too; the stylesheet refers to them by those names (same folder).
@@ -159,6 +167,11 @@ export async function buildWeb({ outDir = path.join(HERE, 'dist/web'), assetBase
         .replace('{{JS}}', names.JS).replace('{{CSS}}', names.CSS).replace('{{ICON}}', names.ICON).replace('{{FONT}}', names.FONT);
     fs.writeFileSync(path.join(outDir, 'index.html'), html);
     return { outDir, files: names, jsBytes: Buffer.byteLength(js), cssBytes: Buffer.byteLength(css) };
+}
+
+/** Discord Activity build (activity host mode): dist/activity/index.html and assets/, every address relative. */
+export function buildActivity({ outDir = path.join(HERE, 'dist/activity') } = {}) {
+    return buildWeb({ outDir, assetBase: 'assets', target: 'activity' });
 }
 
 /** Twitch panel build: dist/panel/ (readable) and the zip to upload. */
@@ -267,7 +280,7 @@ export function checkPanel(dir) {
 
 async function cli() {
     const args = new Set(process.argv.slice(2));
-    const only = args.has('--web') ? 'web' : args.has('--panel') ? 'panel' : args.has('--check') ? 'check' : 'both';
+    const only = args.has('--web') ? 'web' : args.has('--panel') ? 'panel' : args.has('--check') ? 'check' : args.has('--activity') ? 'activity' : 'both';
     const t0 = Date.now();
     if (only === 'check') {
         const problems = checkPanel(path.join(HERE, 'dist/panel'));
@@ -277,6 +290,10 @@ async function cli() {
     if (only === 'web' || only === 'both') {
         const w = await buildWeb();
         console.log(`web:   ${path.relative(process.cwd(), w.outDir)}  js ${w.jsBytes} B (minified), css ${w.cssBytes} B`);
+    }
+    if (only === 'activity' || only === 'both') {
+        const a = await buildActivity();
+        console.log(`activity: ${path.relative(process.cwd(), a.outDir)}  js ${a.jsBytes} B (minified), css ${a.cssBytes} B`);
     }
     if (only === 'panel' || only === 'both') {
         const p = await buildPanel();

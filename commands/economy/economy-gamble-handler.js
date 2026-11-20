@@ -13,13 +13,15 @@ async function trackGambleAchievements(interaction, result) {
         1
     );
 
-    if (result.won && result.winAmount >= 10000) {
+    // 'event' achievements complete on eventData.value; 'count' ones on the progress passed (H-808: both
+    // used to pass 1 / { completed: true }, so Lucky Streak and Millionaire could never be earned).
+    if (result.won && result.winAmount >= 1000) {
         await interaction.client.achievementManager.trackAchievement(
             interaction.user.id,
             interaction.guild.id,
             'big_win',
             1,
-            { completed: true }
+            { value: result.winAmount }
         );
     }
 
@@ -28,8 +30,7 @@ async function trackGambleAchievements(interaction, result) {
             interaction.user.id,
             interaction.guild.id,
             'millionaire',
-            1,
-            { completed: true }
+            result.newBalance
         );
     }
 }

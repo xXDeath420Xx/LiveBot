@@ -116,7 +116,10 @@ export async function streamBotPages(demo, { root, editId = 32 }) {
         ok: true, grants: { streamBot: { status: 'active', grantedAt: D(2026, 11, 18, 17, 0), scopes: grantScopes.length }, serverAnalytics: null, serverWrite: null },
         eventsub: { total: 17, enabled: 17, failing: 0 }, coverage: scopes.coverage({ streamBot: grantScopes }), webhook: null, lastChatAt: null, chatSend: null,
     };
-    const kickHealth = { ok: true, grants: null, eventsub: null, coverage: null, webhook: { known: true, chat: true, missing: [], error: null }, lastChatAt: iso(2026, 11, 18, 20, 39), chatSend: true };
+    // H-787: the Kick channel bot sign-in, made before channel:write was added (the row shows the missing permission and the button).
+    const kickBot = (await imp('core/stream-bot/kick-scopes.js')).kickBotStatus({ hasToken: true, needsRelink: false, defenderEnabled: true,
+        scopes: 'user:read chat:write events:subscribe channel:read moderation:ban moderation:chat_message:manage' });
+    const kickHealth = { ok: true, grants: null, eventsub: null, coverage: null, webhook: { known: true, chat: true, missing: [], error: null }, lastChatAt: iso(2026, 11, 18, 20, 39), chatSend: true, kickBot };
 
     const common = { profile };
     return {
@@ -158,6 +161,9 @@ export async function streamBotPages(demo, { root, editId = 32 }) {
             channels: [
                 { id: 1, platform: 'twitch', platformLabel: 'Twitch', login: TW.login, displayName: TW.display_name, verifiedVia: 'stream_bot_grant', linkedAt: iso(2026, 11, 18, 17, 0), health: twitchHealth },
                 { id: 2, platform: 'kick', platformLabel: 'Kick', login: KK.login, displayName: KK.display_name, verifiedVia: 'stream_platform_accounts', linkedAt: iso(2026, 11, 18, 17, 5), health: kickHealth },
+                // YouTube Live (H-741): linked through the Google sign-in, not live at the moment the page was drawn.
+                { id: 3, platform: 'youtube', platformLabel: 'YouTube', login: 'maplehollow', displayName: 'Maple Hollow', channelId: 'UCmApLeHoLLoW00000000001', verifiedVia: 'stream_platform_accounts', linkedAt: iso(2026, 11, 18, 17, 10),
+                    health: { ok: true, grants: null, eventsub: null, coverage: null, webhook: null, lastChatAt: null, chatSend: null, kickBot: null, youtube: { signIn: 'ok', scopes: ['https://www.googleapis.com/auth/youtube.force-ssl'] } } },
             ],
             linkable: [],
             // A grant from before the chat moderation and shoutout scopes: the page asks to re-approve.
@@ -169,7 +175,11 @@ export async function streamBotPages(demo, { root, editId = 32 }) {
                 view.tipSourceView({ id: 2, source: 'kofi', ref: guild.id, enabled: true, status: 'new', last_error: null, last_event_at: null, has_secret: false }, new Map([[guild.id, guild.name]])),
             ],
             tipOptions: { kofi: [{ id: guild.id, name: guild.name }], fourthwall: [], throne: null, bmac: false },
-            botSettings: { storeChat: profile.storeChat, webhookAllowHosts: profile.webhookAllowHosts } } },
+            botSettings: { storeChat: profile.storeChat, webhookAllowHosts: profile.webhookAllowHosts },
+            youtube: { enabled: true,
+                channels: [{ channelId: 'UCmApLeHoLLoW00000000001', login: 'maplehollow', live: false, title: 'Cozy farming with chat', transport: null, startedAt: null,
+                    lastCheckAt: iso(2026, 11, 18, 20, 40), nextCheckAt: iso(2026, 11, 18, 20, 50), lastMessageAt: iso(2026, 11, 18, 19, 58), messages: 0, error: null, errorCode: null, reading: false }],
+                quota: { day: '2026-11-18', used: 3420, limit: 10000, share: 0.342, level: 'normal', explanation: 'Chat is read continuously.', resetAt: iso(2026, 11, 19, 8, 0), profileUnits: 3420, profileCalls: 690 } } } },
         'stream-bot-automation-edit-flow': { template: 'stream-bot/automation-edit', locals: { ...common, active: 'automations', pageTitle: flow.name, automation: flow,
             editorData: {
                 automation: { id: flow.id, name: flow.name, enabled: flow.enabled, trigger_type: flow.trigger_type, trigger_config: flow.trigger_config, conditions: flow.conditions, actions: flow.actions },
@@ -182,6 +192,28 @@ export async function streamBotPages(demo, { root, editId = 32 }) {
                 limits: { perProfile: 50, messages: 10, messageMax: 500, intervalMin: 1, intervalMax: 1440, linesMax: 1000, nameMax: 100 }, linkedPlatforms: ['twitch', 'kick'] } } },
         'stream-bot-devices': { template: 'stream-bot/devices', locals: { ...common, active: 'devices', pageTitle: 'Devices',
             devices: [view.deviceView({ id: 4, kind: 'overlay', name: 'Alerts overlay', tokenHint: 'x7Qa', capabilities: [], clientInfo: null, createdAt: D(2026, 11, 18, 17, 20), lastSeenAt: null, revokedAt: null }, new Set())],
-            wsUrl: 'wss://certifriedmultitool.com/stream/bot/ws' } },
+            wsUrl: 'wss://certifriedmultitool.com/stream/bot/ws',
+            // Phase 5: the Lights, Light presets, Audio and Stream Deck sections (core/stream-bot/devices/service.js pageData()).
+            hardware: {
+                studio: { live: true, name: 'Maple Hollow streaming PC', reported: true, reportedAt: iso(2026, 11, 19, 18, 2) },
+                lights: [
+                    { id: 'elgato:BW33K1A01234', driver: 'elgato', driverLabel: 'Elgato', name: 'Key Light Left', model: 'Elgato Key Light', online: true, needsPairing: false, kind: 'light', caps: { power: true, brightness: true, color: false, white: { min: 2900, max: 7000 }, scenes: [], effects: [] } },
+                    { id: 'hue:001788fffe123456/2f1c', driver: 'hue', driverLabel: 'Philips Hue', name: 'Desk lamp', model: 'Hue color lamp', online: true, needsPairing: false, kind: 'light', caps: { power: true, brightness: true, color: true, white: { min: 2000, max: 6500 }, scenes: ['Concentrate', 'Maple sunset', 'Relax'], effects: [] } },
+                    { id: 'hue:001788fffe123456/group/9a0d', driver: 'hue', driverLabel: 'Philips Hue', name: 'Studio room', model: null, online: true, needsPairing: false, kind: 'group', caps: { power: true, brightness: true, color: true, white: { min: 2000, max: 6500 }, scenes: ['Maple sunset'], effects: [] } },
+                    { id: 'govee:1F80C5323236724E', driver: 'govee', driverLabel: 'Govee (on your network)', name: 'Shelf strip', model: 'H6199', online: true, needsPairing: false, kind: 'light', caps: { power: true, brightness: true, color: true, white: { min: 2000, max: 9000 }, scenes: [], effects: [] } },
+                    { id: 'nanoleaf:a1b2c3d4e5f6', driver: 'nanoleaf', driverLabel: 'Nanoleaf', name: 'Hexagons', model: 'Shapes', online: true, needsPairing: true, kind: 'light', caps: { power: true, brightness: true, color: true, white: null, scenes: [], effects: [] } },
+                    { id: 'litra:5f3a91c2', driver: 'litra', driverLabel: 'Logitech Litra', name: 'Litra Glow', model: 'Litra Glow', online: true, needsPairing: false, kind: 'light', caps: { power: true, brightness: true, color: false, white: { min: 2700, max: 6500 }, scenes: [], effects: [] } },
+                ],
+                cloud: [
+                    { provider: 'govee', label: 'Govee', connected: true, keyHint: '7c1e', status: 'ok', lastError: null, devices: [{ id: 'govee-cloud:H6076:AA:BB:CC:DD:EE:FF:00:11', name: 'Floor lamp', model: 'H6076' }], checkedAt: iso(2026, 11, 19, 17, 55) },
+                    { provider: 'lifx', label: 'LIFX', connected: false, keyHint: null, status: null, lastError: null, devices: [], checkedAt: null },
+                ],
+                presets: [
+                    { id: 'p_6d2a9f0c1b3e', name: 'Live', lights: [{ device: 'elgato:BW33K1A01234', power: 'on', kelvin: 5600, brightness: 60 }, { device: 'govee:1F80C5323236724E', power: 'on', color: '#b4e04f', brightness: 80 }] },
+                    { id: 'p_0e4c7b19a2d5', name: 'Be right back', lights: [{ device: 'elgato:BW33K1A01234', power: 'off' }, { device: 'hue:001788fffe123456/group/9a0d', power: 'on', scene: 'Maple sunset', brightness: 40 }] },
+                ],
+                voicemeeter: { enabled: true, installed: true, running: true, type: 'banana', version: '2.1.1.9', strips: [{ index: 0, label: 'Mic' }, { index: 1, label: 'Game' }, { index: 2, label: '' }, { index: 3, label: 'Discord' }, { index: 4, label: 'Music' }], buses: [{ index: 0, label: 'Headphones' }, { index: 3, label: 'Stream' }], profiles: ['Streaming.xml', 'Just Chatting.xml'], macroButtons: true },
+                streamdeck: { enabled: true, clients: 1 },
+            } } },
     };
 }

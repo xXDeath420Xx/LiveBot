@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import TMDbAPIService from '../../../utils/services/tmdb-api.js';
+import { withAchievement } from '../../../core/achievement-hooks.js';
 import { themeColor } from '../../../core/guild-theme.js';
 
 const tmdbAPI = new TMDbAPIService();
@@ -40,7 +41,7 @@ export async function execute(interaction) {
             });
           });
 
-          return interaction.editReply({ embeds: [embed] });
+          return withAchievement(interaction, 'movie_buff', await interaction.editReply({ embeds: [embed] }));
 
         } catch (error) {
           console.error('[Movie Command - Search Error]', error);
@@ -84,7 +85,7 @@ export async function execute(interaction) {
             embed.addFields({ name: '🎥 Trailer', value: formatted.trailerUrl });
           }
 
-          return interaction.editReply({ embeds: [embed] });
+          return withAchievement(interaction, 'movie_buff', await interaction.editReply({ embeds: [embed] }));
 
         } catch (error) {
           console.error('[Movie Command - Info Error]', error);
@@ -123,7 +124,7 @@ export async function execute(interaction) {
             });
           });
 
-          return interaction.editReply({ embeds: [embed] });
+          return withAchievement(interaction, 'movie_buff', await interaction.editReply({ embeds: [embed] }));
 
         } catch (error) {
           console.error('[Movie Command - TV Search Error]', error);
@@ -168,7 +169,7 @@ export async function execute(interaction) {
             embed.addFields({ name: '🎥 Trailer', value: formatted.trailerUrl });
           }
 
-          return interaction.editReply({ embeds: [embed] });
+          return withAchievement(interaction, 'movie_buff', await interaction.editReply({ embeds: [embed] }));
 
         } catch (error) {
           console.error('[Movie Command - TV Info Error]', error);

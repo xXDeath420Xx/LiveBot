@@ -1,4 +1,4 @@
-<%- include('_head', { pageTitle: 'Features', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Features', csrfToken, kickUser: user, kickTab: 'features', isManager: typeof isManager !== 'undefined' && isManager, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
 <%
   var groups = [
     { title: 'Protection', desc: 'On as soon as you connect your channel.', items: [
@@ -34,7 +34,6 @@
       <p class="sub">Protection is on as soon as you connect. Everything else is opt-in.</p>
     </div>
   </div>
-  <%- include('_tabs', { active: 'features', isManager: typeof isManager !== 'undefined' && isManager, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
 
   <% if (!hasChannels) { %>
     <div class="cf-notice is-accent">

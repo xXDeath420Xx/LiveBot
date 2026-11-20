@@ -157,7 +157,7 @@ export const FEATURES = [
     ['Digimon', GAMES, T('digimon_settings', 'enabled = 1'), T('digimon_settings'), [['user_digimon', 'obtained_at'], ['digimon_quiz_results', 'created_at']]],
     ['Economy', GAMES, T('economy_config', 'enabled = 1'), T('economy_config'), [['economy_transactions', 'created_at']]],
     ['Word Games', GAMES, T('word_game_channels', 'enabled = 1'), T('word_game_channels'), [['word_game_sessions', 'created_at']]],
-    ['OwO pets & battles', GAMES, T('owo_config', 'enabled = 1'), T('owo_config'), [['owo_points_guild', 'updated_at']]],
+    ['Critters (/owo game)', GAMES, T('critter_config', 'enabled = 1'), T('critter_config'), [['critter_catch_hours', 'hour_at'], ['critter_points_guild', 'updated_at']]],
     ['Monthly XP reset', GAMES, T('level_config', 'monthly_reset_enabled = 1'), null, [['level_config', 'last_reset_at']]],
     ['D&D campaigns', GAMES, T('dnd_campaigns'), T('dnd_campaigns'), [['dnd_dice_rolls', 'created_at']]],
     ['Gambling', GAMES, T('gambling_config', 'enabled = 1'), T('gambling_config'), [['gambling_history', 'created_at']]],

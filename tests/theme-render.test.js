@@ -34,7 +34,7 @@ function walk(dir, out = []) {
 }
 
 // Fixed looks by design: OBS overlays (transparent, stream-facing) and the public Steam embed (?theme=light).
-const FIXED_LOOK = new Set(['fourtwenty-overlay.ejs', 'fourtwenty-obs-builder.ejs', 'twitch-analytics-obs.ejs', 'steam-library-public.ejs']);
+const FIXED_LOOK = new Set(['fourtwenty-overlay.ejs', 'twitch-analytics-obs.ejs', 'steam-library-public.ejs']);
 
 // ── first paint ─────────────────────────────────────────────────────────────────────────────
 
@@ -207,6 +207,8 @@ const SAMPLE = [
     'manage-security', 'manage-counting', 'manage-classic-overview',
     'servers', 'settings', 'profile', 'vault', 'cards-create', 'cah-lobby', 'kick-panel', 'twitch-analytics', 'my-schedules',
     'error', 'greenhouse',
+    // pages built as strings through the shared frame (views/site-frame.ejs)
+    'sprites-login', 'sprites-account', 'scams', 'countdown', 'transcript', 'fourtwenty-obs-builder',
 ];
 
 test('representative pages in Dark, Light and Sand: no contrast violation, no wrong-family box, no flash', { skip: process.env.THEME_RENDER_SKIP === '1', timeout: 900000 }, async () => {

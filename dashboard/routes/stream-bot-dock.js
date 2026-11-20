@@ -6,7 +6,7 @@
  *
  *   GET  /stream/bot/dock/activity        live events (chat left out)            ?key=  &theme=light|sand
  *   GET  /stream/bot/dock/controls        enabled automations with Run, channel counters
- *   GET  /stream/bot/dock/chat            Twitch and Kick chat, read-only
+ *   GET  /stream/bot/dock/chat            Twitch and Kick chat (and YouTube once it is set up, §13.10), read-only
  *   GET  /stream/bot/dock/api/feed        SSE (?key=, because EventSource cannot send headers) &kind=activity|chat
  *   GET  /stream/bot/dock/api/state       automations and counters (X-Dock-Key)
  *   POST /stream/bot/dock/api/run         { automationId } (X-Dock-Key); CSRF-exempt in server.js: no session, no cookie
@@ -22,6 +22,7 @@ import { createDockKeys, isDockKey, trackDockStream } from '../../core/stream-bo
 import { eventType, describeEvent } from '../../core/stream-bot/events.js';
 import { hashSecret } from '../../core/stream-bot/pairing.js';
 import { PLATFORM_LABEL } from '../services/stream-bot-view.js';
+import { youtubeBotConfig } from '../../core/stream-bot/youtube/config.js';
 
 const LOG = '[StreamBotDock]';
 const clientIp = (req) => req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -83,7 +84,7 @@ export function createDockRouter({ getSb = getStreamBot, limits = { page: 60, ru
             if (kind === 'activity') {
                 data = { events: (await store.listEvents(r.profile.id, { limit: 80 })).filter((e) => e.type !== 'chat').slice(0, 50).map(eventItem) };
             } else if (kind === 'chat') {
-                data = { events: (await store.listEvents(r.profile.id, { type: 'chat', limit: 50 })).map(eventItem), storeChat: !!r.profile.storeChat };
+                data = { events: (await store.listEvents(r.profile.id, { type: 'chat', limit: 50 })).map(eventItem), storeChat: !!r.profile.storeChat, youtube: youtubeBotConfig().enabled };
             } else {
                 data = await controlsData(store, r.profile.id);
             }

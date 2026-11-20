@@ -8,11 +8,12 @@ import { CONDITION_TYPES, MATCH_MODES, BITS_KINDS, METADATA_OPS } from '../../co
 import { ACTION_TYPES, TARGET_LABEL, IF_CHECKS, actionType, isClientAction, childLists } from '../../core/stream-bot/actions.js';
 import { STREAM_VARS } from '../../core/stream-bot/render.js';
 import { STREAM_BOT_SCOPES, TWITCH_FEATURES } from '../../core/stream-bot/scopes.js';
+import { DISABLED_TEXT as YOUTUBE_OFF_TEXT } from '../../core/stream-bot/youtube/config.js';
 
 const SNOWFLAKE = /^\d{17,20}$/;
 
 export const PLATFORM_LABEL = Object.freeze({
-    twitch: 'Twitch', kick: 'Kick', streamelements: 'StreamElements', streamlabs: 'Streamlabs', kofi: 'Ko-fi',
+    twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', streamelements: 'StreamElements', streamlabs: 'Streamlabs', kofi: 'Ko-fi',
     bmac: 'Buy Me a Coffee', throne: 'Throne', fourthwall: 'Fourthwall', studio: 'CertiFried Studio', bot: 'Stream bot', test: 'Test',
 });
 
@@ -157,6 +158,7 @@ export const CONNECTION_MESSAGES = Object.freeze({
         twitch_grant_removed: 'The Stream bot grant was removed and revoked at Twitch. Your linked channels stay linked.',
         linked_twitch: 'Your Twitch channel is linked.',
         linked_kick: 'Your Kick channel is linked.',
+        linked_youtube: 'Your YouTube channel is linked. CertiFried looks for a live broadcast every 10 minutes, and at once when you go live on Twitch or Kick or start streaming from CertiFried Studio.',
         unlinked: 'The channel was unlinked.',
         tip_added: 'The tip source was added.',
     },
@@ -170,11 +172,20 @@ export const CONNECTION_MESSAGES = Object.freeze({
         twitch_failed: 'Twitch could not be connected. Try again in a minute.',
         unknown_platform: 'That platform cannot be linked here.',
         platform_coming_soon: 'That platform cannot be linked yet.',
+        youtube_off: 'YouTube cannot be linked yet: CertiFried is waiting for its Google sign-in to be approved.',
         oauth_denied: 'The sign-in was cancelled.',
         oauth_state: 'The sign-in expired or was opened in another tab. Start again.',
         no_channel_id: 'That sign-in did not return a channel to link.',
         channel_taken: 'That channel is linked to another CertiFried account.',
         connect_failed: 'The channel could not be linked. Try again in a minute.',
+        // /tokes-bot/auth/kick/callback (the Kick channel bot sign-in) when it started on this page
+        invalid_state: 'The Kick sign-in took too long or was opened in another tab. Start again.',
+        kick_auth_denied: 'The Kick sign-in was cancelled. The Kick channel bot was not changed.',
+        no_code: 'Kick did not send a sign-in code back. Start again.',
+        missing_pkce: 'The Kick sign-in session expired. Start again.',
+        token_failed: 'Kick did not accept the sign-in. Start again.',
+        user_fetch_failed: 'Kick did not return your account details. Try again in a minute.',
+        auth_error: 'Something went wrong while signing in to Kick. Try again in a minute.',
     },
 });
 
@@ -186,6 +197,14 @@ export function connectionNotice(query) {
     return null;
 }
 
+/** The Connections page's YouTube panel (H-741): off with the reason, or the service's per-channel state and today's quota. */
+export function youtubePanel(yt, profileId) {
+    const cfg = yt?.config || { enabled: false, reason: 'no_client' };
+    if (!cfg.enabled || !yt?.service) return { enabled: false, text: YOUTUBE_OFF_TEXT[cfg.reason] || YOUTUBE_OFF_TEXT.no_client };
+    const st = yt.service.status(profileId);
+    return { enabled: true, channels: st.channels, quota: st.quota };
+}
+
 /** Scopes the stream actions use (2026-11-19), with what they do. */
 export const ACTION_SCOPES = Object.freeze({
     'channel:manage:broadcast': 'Change the stream title and category',
@@ -195,6 +214,7 @@ export const ACTION_SCOPES = Object.freeze({
     'moderator:manage:announcements': 'Chat announcements',
     'moderator:manage:chat_messages': 'Clear chat and delete messages',
     'moderator:manage:shoutouts': 'Shoutouts',
+    'moderator:manage:blocked_terms': 'Add your imported banned words to Twitch blocked terms (only when you press the button on Import)',
 });
 
 /** Scopes nothing uses yet, with what they will do. */

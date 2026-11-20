@@ -214,7 +214,7 @@
                             <% allCategories.forEach(cat => { %>
                             <label class="cf-choice">
                                 <input type="checkbox" name="private_categories" value="<%= cat %>" <%= privateList.includes(cat) ? 'checked' : '' %>>
-                                <span><%= cat === 'owo' ? 'OwO' : cat.charAt(0).toUpperCase() + cat.slice(1) %></span>
+                                <span><%= cat === 'owo' ? 'Critters (owo)' : cat.charAt(0).toUpperCase() + cat.slice(1) %></span>
                             </label>
                             <% }); %>
                         </div>

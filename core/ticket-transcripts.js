@@ -5,7 +5,8 @@
  * Access via GET /transcripts/:guildId/:kind/:id (mod perm required) → decrypt + render.
  *
  * saveTranscript() is called from the ticket-close / modmail-close flows.
- * getTranscriptHtml() renders a self-contained HTML page from the decrypted JSON.
+ * transcriptPage() builds the dashboard viewer (in the shared site frame) from the decrypted JSON;
+ * renderTranscriptHtml() is the same markup as a self-contained document.
  */
 import crypto from 'node:crypto';
 import pool from '../utils/db.js';
@@ -89,42 +90,73 @@ export async function loadTranscript(guildId, kind, sourceId) {
     }
 }
 
-/** Render the transcript as a self-contained HTML page (viewer served by the dashboard). */
-export function renderTranscriptHtml(transcript, { guildName = '', title = '' } = {}) {
-    const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-    const header = `<header><h1>${escape(title || 'Transcript')}</h1>
-        <p><strong>Server:</strong> ${escape(guildName)} ·
-           <strong>Opened by:</strong> &lt;@${escape(transcript._meta?.userId || '')}&gt; ·
-           <strong>Messages:</strong> ${transcript._meta?.msgCount ?? '?'}</p></header>`;
-    const messages = (transcript.messages || []).map(m => {
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/**
+ * The viewer page's site-frame locals (dashboard/views/site-frame.ejs, sent with
+ * dashboard/services/site-frame.js sendFramed). Pure, so scripts/theme-audit renders it too.
+ * Message kinds are told apart by a coloured left rule: staff (success), member (info),
+ * bot/system (warning), all theme tokens (css/cf-public-pages.css .tr-*).
+ * `stylesheet` is the <link> for /css/cf-public-pages.css (the dashboard passes a versioned one).
+ */
+export function transcriptPage(transcript, { guildName = '', title = '', guildId = '', kind = 'ticket', stylesheet = '<link rel="stylesheet" href="/css/cf-public-pages.css">' } = {}) {
+    const heading = title || 'Transcript';
+    const msgs = Array.isArray(transcript?.messages) ? transcript.messages : [];
+    const items = msgs.map(m => {
         const author = m.author_tag || m.author_id || 'Unknown';
         const type = m.author_type || 'user';
         const typeCls = type === 'staff' ? 'staff' : (type === 'system' ? 'system' : 'user');
-        const ts = m.timestamp ? new Date(m.timestamp).toISOString() : '';
-        const body = escape(m.content || m.message_content || '');
-        const atts = (m.attachments || []).map(a => `<div class="att">${escape(a)}</div>`).join('');
-        return `<article class="msg ${typeCls}">
-            <div class="meta"><strong>${escape(author)}</strong> <span class="type">${escape(type)}</span> <time>${escape(ts)}</time></div>
-            <div class="body">${body.replace(/\n/g, '<br>')}</div>
+        const typeLabel = typeCls === 'staff' ? 'Staff' : (typeCls === 'system' ? 'Bot' : 'Member');
+        const ts = m.timestamp ? new Date(m.timestamp) : null;
+        const tsIso = ts && !Number.isNaN(ts.getTime()) ? ts.toISOString() : '';
+        const tsText = tsIso ? tsIso.replace('T', ' ').slice(0, 16) + ' UTC' : '';
+        const body = escapeHtml(m.content || m.message_content || '');
+        const atts = (m.attachments || []).map(a => `<div class="tr-att">${escapeHtml(a)}</div>`).join('');
+        return `<article class="tr-msg ${typeCls}">
+            <div class="tr-meta"><strong>${escapeHtml(author)}</strong><span>${typeLabel}</span>${tsIso ? `<time datetime="${tsIso}">${tsText}</time>` : ''}</div>
+            <div class="tr-body">${body.replace(/\n/g, '<br>')}</div>
             ${atts}
         </article>`;
     }).join('');
-    const notice = transcript.truncated_notice ? `<p class="notice">${escape(transcript.truncated_notice)}</p>` : '';
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title || 'Transcript')}</title>
-<style>
-body{font-family:system-ui,-apple-system,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;background:#1e2124;color:#dcddde;}
-header h1{color:#fff;margin-bottom:.25rem;}
-header p{color:#b9bbbe;margin-top:0;}
-.msg{background:#2f3136;border-radius:6px;padding:.75rem 1rem;margin:.5rem 0;border-left:3px solid #4f545c;}
-.msg.staff{border-left-color:#43b581;}
-.msg.user{border-left-color:#5865f2;}
-.msg.system{border-left-color:#faa61a;color:#b9bbbe;font-style:italic;}
-.meta{font-size:.85rem;color:#b9bbbe;margin-bottom:.25rem;}
-.meta strong{color:#fff;}
-.meta .type{opacity:.5;margin:0 .5rem;}
-.body{white-space:pre-wrap;word-break:break-word;}
-.att{font-size:.85rem;color:#00b0f4;margin-top:.25rem;}
-.notice{color:#faa61a;padding:.5rem 1rem;background:#2f3136;border-radius:6px;}
-</style></head><body>${header}${notice}<section>${messages}</section></body></html>`;
+    const notice = transcript?.truncated_notice ? `<p class="cfs-note cfs-note--warn">${escapeHtml(transcript.truncated_notice)}</p>` : '';
+    const back = /^\d{15,22}$/.test(String(guildId))
+        ? `<a class="cf-back" href="/manage/${guildId}/tickets">Back to tickets</a>` : '';
+    const kindLabel = kind === 'modmail' ? 'Modmail transcript' : 'Ticket transcript';
+    const bodyHtml = `
+<main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+  ${back}
+  <div class="cfs-pagehead">
+    <span class="cfs-eyebrow">${kindLabel}</span>
+    <h1>${escapeHtml(heading)}</h1>
+    <ul class="tr-head-meta">
+      <li><strong>Server</strong> ${escapeHtml(guildName)}</li>
+      <li><strong>Opened by</strong> &lt;@${escapeHtml(transcript?._meta?.userId || '')}&gt;</li>
+      <li><strong>Messages</strong> ${escapeHtml(transcript?._meta?.msgCount ?? '?')}</li>
+    </ul>
+  </div>
+  ${notice}
+  <div class="tr-legend" aria-hidden="true"><span class="staff"><i></i>Staff</span><span class="user"><i></i>Member</span><span class="system"><i></i>Bot</span></div>
+  <section class="tr-list" aria-label="Messages">${items || '<div class="cfs-empty cfs-panel"><p>This transcript has no messages.</p></div>'}</section>
+</main>`;
+    return {
+        title: `${heading} · ${kindLabel} · CertiFried`,
+        description: `${kindLabel} from ${guildName || 'a Discord server'}.`,
+        noindex: true,
+        headHtml: stylesheet,
+        bodyHtml,
+        scriptsHtml: '',
+    };
+}
+
+/**
+ * The transcript as a self-contained HTML document (the same markup as the viewer, without the
+ * site header and footer). The dashboard viewer uses transcriptPage() in the site frame instead.
+ */
+export function renderTranscriptHtml(transcript, { guildName = '', title = '' } = {}) {
+    const page = transcriptPage(transcript, { guildName, title });
+    return `<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(page.title)}</title><meta name="robots" content="noindex">
+<link rel="stylesheet" href="/css/cf-ui.css"><link rel="stylesheet" href="/css/cf-site.css">${page.headHtml}</head>
+<body class="cfs-body">${page.bodyHtml}</body></html>`;
 }

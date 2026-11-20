@@ -83,8 +83,9 @@
         <nav class="gd-crumbs" aria-label="Breadcrumb"><a href="/docs">Docs</a><span aria-hidden="true">/</span><span aria-current="page">Guides</span></nav>
         <div class="cfs-pagehead">
             <h1>Guides</h1>
-            <p class="cfs-lede">Step-by-step guides for the things most servers set up first. Each one shows the result in Discord, then the exact command or dashboard setting for every step.</p>
+            <p class="cfs-lede">Step-by-step guides for each part of the bot. Each one shows the result in Discord, then the exact command or dashboard setting for every step.</p>
         </div>
+        <%- include('partials/docs-search-box', {}) %>
         <% _areas.forEach(function (area) { const list = _guides.filter((x) => x.area === area.id); if (!list.length) return; %>
         <section class="gd-area" aria-labelledby="area-<%= area.id %>">
             <h2 id="area-<%= area.id %>"><%= area.title %></h2>
@@ -151,7 +152,7 @@
             </ul>
             <% } %>
         </div>
-        <p class="gd-foot"><a href="/docs/guides">All guides</a> · <a href="/commands">Command list</a> · <a href="/discord" rel="noopener">Ask in the support server</a> · <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a></p>
+        <p class="gd-foot"><a href="/docs/guides">All guides</a> · <a href="/docs/search">Search the docs</a> · <a href="/commands">Command list</a> · <a href="/discord" rel="noopener">Ask in the support server</a> · <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a></p>
     </main>
 <% } %>
 <%- include('partials/site-footer') %>

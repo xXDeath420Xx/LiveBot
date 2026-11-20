@@ -38,7 +38,7 @@ export async function start(env = process.env) {
     const server = http.createServer(app);
     const ws = createWsHub({
         server, auth, hints, logger,
-        origins: allowedOrigins({ publicOrigin: config.publicOrigin, twitchExtClientId: config.twitchExt.clientId })
+        origins: allowedOrigins({ publicOrigin: config.publicOrigin, twitchExtClientId: config.twitchExt.clientId, activityAppId: config.activity?.appId })
     });
     server.headersTimeout = 15_000;
     server.requestTimeout = 20_000;

@@ -165,11 +165,11 @@ test('every log call in a multi-action category names a known action; every acti
             assert.ok(/^\(\)\s*=>/.test(args[2]), `${file}: logFeatureEvent details must be () => ({ … }) (${keys[0]})`);
         }
     }
-    // OwO rare catch: `owoRareCatch.${result.rank}` for each auditable rank.
-    const ranks = read('commands/fun/owo.js').match(/AUDITABLE_RANKS = new Set\(\[([^\]]+)\]/)[1].match(/'([^']+)'/g).map(s => s.slice(1, -1));
+    // Critters rare catch: `owoRareCatch.${tier}` for each auditable tier (handlers/critters-actions.js).
+    const ranks = read('handlers/critters-actions.js').match(/AUDITABLE_RANKS = new Set\(\[([^\]]+)\]/)[1].match(/'([^']+)'/g).map(s => s.slice(1, -1));
     for (const rank of ranks) { assert.ok(la.isLogAction(`owoRareCatch.${rank}`), `rank ${rank}`); used.add(`owoRareCatch.${rank}`); }
-    // OwO admin API: every auditLog(req, …) call passes an owoAdminAction.* action.
-    const owoApi = read('dashboard/routes/api/features/owo.js');
+    // Critters admin API: every auditLog(req, …) call passes an owoAdminAction.* action.
+    const owoApi = read('dashboard/routes/api/features/critters.js');
     for (const args of callArgs(owoApi, 'auditLog')) {
         assert.ok(args[2], 'auditLog call passes its action');
         for (const key of args[2].match(/'([^']+)'/g).map(s => s.slice(1, -1))) { assert.ok(la.isLogAction(key), key); used.add(key); }

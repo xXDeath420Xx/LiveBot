@@ -15,6 +15,7 @@ import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import { resolveChannel } from '../services/certifried-bot/defender/channel-tokens.js';
+import { kickBotProblem, kickBotRejectedMessage } from '../core/stream-bot/kick-scopes.js';
 
 const KICK_API_BASE = 'https://api.kick.com/public/v1';
 let task = null;
@@ -28,7 +29,10 @@ export async function sendChannelMessage(channelId, content, deps = {}) {
     const resolve = deps.resolveChannel || resolveChannel;
     const fetchImpl = deps.fetchImpl || fetch;
     const ch = await resolve(channelId);
-    if (!ch || !ch.token || !ch.broadcasterId) return false;
+    // Same words as Stream bot > Connections ("Send chat messages and timers: needs permission") with the sign-in link.
+    const problem = kickBotProblem(ch, 'chat:write');
+    if (problem) { logger.warn('[KickTimers] Kick chat not sent', { channelId: String(channelId), problem: problem.message }); return false; }
+    if (!ch.broadcasterId) return false;
     const res = await fetchImpl(`${KICK_API_BASE}/chat`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${ch.token}`, 'Content-Type': 'application/json' },
@@ -38,6 +42,7 @@ export async function sendChannelMessage(channelId, content, deps = {}) {
             type: 'bot'
         })
     });
+    if (res?.status === 401) logger.warn('[KickTimers] Kick chat not sent', { channelId: String(channelId), problem: kickBotRejectedMessage() });
     return !!res?.ok;
 }
 

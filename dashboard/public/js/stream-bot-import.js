@@ -103,7 +103,7 @@
         vRow.hidden = !vSrc.length;
         if (vSrc.length) {
             $('sbi-viewers-desc').textContent = vSrc.map(function (k) { return SRC[k] + ': ' + plural(p.viewers[k].count, 'viewer'); }).join('. ')
-                + '. Off unless you tick it in the table. When ticked, each viewer\'s watch time and message count are saved as values only your automations read ({db:get:watch_minutes}, {db:get:chat_messages}). Viewers can see and delete them through /privacy.';
+                + '. Off unless you tick it in the table. When ticked, they go to the Viewers tab: watch time, chat messages and points from Firebot, names and last-seen dates from Streamer.bot. Importing again does not count anything twice. Viewers can see and delete their records through /privacy.';
         }
 
         [['as_is', 'Imported as they are'], ['changed', 'Imported with changes'], ['skipped', 'Not imported']].forEach(function (g) {
@@ -264,6 +264,27 @@
                 setStatus(status, r.data.added ? plural(r.data.added, 'word') + ' added to ' + name + "'s Kick automod." : 'They were already in ' + name + "'s Kick automod.", 'ok');
                 var done = el('span', { className: 'cf-pill is-ok', text: 'In ' + name + "'s Kick automod" });
                 b.replaceWith(done);
+            });
+        });
+    });
+
+    // ── saved banned words → Twitch blocked terms (H-763): only when the owner presses the button and confirms ──
+    Array.prototype.forEach.call(document.querySelectorAll('[data-twitch-terms]'), function (b) {
+        b.addEventListener('click', function () {
+            var count = Number(b.getAttribute('data-count')) || 0;
+            if (!window.confirm('Add ' + plural(count, 'banned word') + " to your Twitch channel's blocked terms? Twitch starts holding back messages with these words straight away. Words already there are skipped; nothing is removed. You can remove terms on Twitch (Creator Dashboard, Settings, Moderation, Blocked terms).")) return;
+            b.disabled = true;
+            var status = $('sbi-words-status');
+            setStatus(status, 'Sending to Twitch…', 'busy');
+            send('POST', '/stream/bot/api/import/words/' + encodeURIComponent(b.getAttribute('data-twitch-terms')) + '/twitch', '{}', 'application/json').then(function (r) {
+                if (!r.ok) { b.disabled = false; setStatus(status, errorText(r, 'Twitch did not add the words.'), 'bad'); return; }
+                var d = r.data || {};
+                var parts = [plural(d.added || 0, 'word') + ' added to Twitch blocked terms'];
+                if (d.skipped) parts.push(plural(d.skipped, 'word') + ' already there');
+                if (d.invalid) parts.push(plural(d.invalid, 'word') + ' too short or too long for Twitch');
+                if (d.failed) parts.push(plural(d.failed, 'word') + ' not added' + (d.failures && d.failures[0] ? ' (' + d.failures[0] + ')' : ''));
+                setStatus(status, parts.join(', ') + '.', d.failed ? 'bad' : 'ok');
+                b.disabled = !!(!d.failed);
             });
         });
     });

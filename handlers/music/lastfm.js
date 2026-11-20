@@ -1,8 +1,42 @@
-import { EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import LastFMAPIService from '../../utils/services/lastfm-api.js';
 import pool from '../../utils/db.js';
+import logger from '../../utils/logger.js';
+import { awardAchievement } from '../../core/achievement-hooks.js';
+import { createLastfmAuth, sameLastfmName } from '../../utils/services/lastfm-auth.js';
 
 const lastfmAPI = new LastFMAPIService();
+const lastfmAuth = createLastfmAuth();
+
+/*
+ * Ownership (fix wave 7, the H-817 caveat): a link is saved as typed and works for every lookup at once, but it counts
+ * for Dedicated Scrobbler only once verified with Last.fm's web auth (utils/services/lastfm-auth.js): the link reply
+ * offers "Open Last.fm" (the member allows CertiFried there) and "Verify" (lastfm_verify:<discord id>:<token>, routed in
+ * interactions/handlerRegistry.js), which asks Last.fm which account approved. Stored: verified_username and
+ * verified_at (migration 473), never the session key. Until migration 473 runs every link reads as unverified.
+ */
+export const VERIFY_PREFIX = 'lastfm_verify:';
+
+/** The member's linked Last.fm name when the link is verified, else null (no link, unverified, or migration 473 not applied). */
+export async function verifiedLastfmName(db, discordId) {
+  try {
+    const [rows] = await db.execute('SELECT lastfm_username, verified_username FROM lastfm_accounts WHERE discord_id = ?', [discordId]);
+    const r = rows[0];
+    return r && sameLastfmName(r.lastfm_username, r.verified_username) ? r.lastfm_username : null;
+  } catch (error) {
+    if (error?.code === 'ER_BAD_FIELD_ERROR') return null;
+    throw error;
+  }
+}
+
+function verifyRow(auth, discordId, token) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Open Last.fm').setURL(auth.approveUrl(token)),
+    new ButtonBuilder().setStyle(ButtonStyle.Primary).setLabel('Verify').setCustomId(`${VERIFY_PREFIX}${discordId}:${token}`),
+  );
+}
+
+const playcountOf = async (name) => Number((await lastfmAPI.getUserInfo(name))?.playcount) || 0;
 
 export async function handleLink(interaction) {
   const username = interaction.options.getString('username');
@@ -11,7 +45,7 @@ export async function handleLink(interaction) {
 
   try {
     // Verify the Last.fm username exists
-    await lastfmAPI.getUserInfo(username);
+    const info = await lastfmAPI.getUserInfo(username);
 
     // Store in database
     await pool.execute(
@@ -20,9 +54,24 @@ export async function handleLink(interaction) {
        ON DUPLICATE KEY UPDATE lastfm_username = ?`,
       [interaction.user.id, username, username]
     );
+    awardAchievement(interaction, 'music_lover');
+    const linked = `✅ Successfully linked your Last.fm account: **${username}**\n\nYou can now use Last.fm commands without specifying your username!`;
 
+    // Dedicated Scrobbler counts only a link verified on Last.fm (the same name verified before stays verified).
+    if (await verifiedLastfmName(pool, interaction.user.id).catch(() => null)) {
+      awardAchievement(interaction, 'scrobbler', { total: Number(info?.playcount) || 0 });
+      return interaction.editReply({ content: `${linked}\n\nThis account is verified as yours, so its scrobbles count toward **Dedicated Scrobbler**.` });
+    }
+    let token = null;
+    if (lastfmAuth.configured()) {
+      try { token = await lastfmAuth.getToken(); } catch (error) { logger.warn('[Last.fm] Verification token unavailable', { error: error.message }); }
+    }
+    if (!token) {
+      return interaction.editReply({ content: `${linked}\n\n**Dedicated Scrobbler** counts only Last.fm accounts verified as yours, and verifying is not available right now. Run \`/music lastfm link\` again later to verify.` });
+    }
     return interaction.editReply({
-      content: `✅ Successfully linked your Last.fm account: **${username}**\n\nYou can now use Last.fm commands without specifying your username!`
+      content: `${linked}\n\n**Dedicated Scrobbler** counts only Last.fm accounts verified as yours. To verify: press **Open Last.fm**, sign in as **${username}** and allow CertiFried, then press **Verify** (within an hour). CertiFried only learns the account name; it cannot scrobble or change anything on your account.`,
+      components: [verifyRow(lastfmAuth, interaction.user.id, token)],
     });
 
   } catch (error) {
@@ -31,6 +80,62 @@ export async function handleLink(interaction) {
       content: '❌ Failed to link Last.fm account. Please check the username and try again.'
     });
   }
+}
+
+/**
+ * The Verify button (lastfm_verify:<discord id>:<token>). Asks Last.fm which account approved the token; that account is
+ * the member's, so the link is set to it and marked verified. deps are for tests.
+ */
+export async function handleVerifyButton(interaction, { auth = lastfmAuth, db = pool, award = awardAchievement, playcount = playcountOf } = {}) {
+  const [ownerId, token] = interaction.customId.slice(VERIFY_PREFIX.length).split(':');
+  if (ownerId !== interaction.user.id) {
+    return interaction.reply({ content: 'This button is for the member who ran `/music lastfm link`.', ephemeral: true });
+  }
+  await interaction.deferUpdate();
+  let name;
+  try {
+    name = await auth.getSession(token);
+  } catch (error) {
+    const reason = error?.reason;
+    const content = reason === 'not_approved'
+      ? 'Last.fm has not been told yet that this account is yours. Press **Open Last.fm**, allow CertiFried, then press **Verify** again.'
+      : reason === 'expired' ? 'This verification has expired. Run `/music lastfm link` again.'
+        : reason === 'unconfigured' ? 'Verifying Last.fm accounts is not available right now.'
+          : 'Last.fm could not be reached. Press **Verify** again in a moment.';
+    if (reason !== 'not_approved' && reason !== 'expired' && reason !== 'unconfigured') logger.warn('[Last.fm] Verification failed', { error: error?.message });
+    return interaction.editReply(reason === 'expired' || reason === 'unconfigured' ? { content, components: [] } : { content });
+  }
+
+  let before = null;
+  try {
+    const [rows] = await db.execute('SELECT lastfm_username FROM lastfm_accounts WHERE discord_id = ?', [interaction.user.id]);
+    before = rows[0]?.lastfm_username ?? null;
+    await db.execute(
+      `INSERT INTO lastfm_accounts (discord_id, lastfm_username, verified_username, verified_at)
+       VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE lastfm_username = VALUES(lastfm_username), verified_username = VALUES(verified_username), verified_at = NOW()`,
+      [interaction.user.id, name, name]
+    );
+  } catch (error) {
+    if (error?.code !== 'ER_BAD_FIELD_ERROR') {
+      logger.error('[Last.fm] Saving the verified link failed', { error: error.message });
+      return interaction.editReply({ content: '❌ Could not save the verified link. Press **Verify** again in a moment.' });
+    }
+    // Migration 473 not applied yet: the link follows the verified account; the mark is not stored, so a later
+    // /music lastfm profile does not count it until the migration runs. This verification still counts now.
+    logger.warn('[Last.fm] lastfm_accounts has no verified_username column yet (migration 473)');
+    await db.execute(
+      `INSERT INTO lastfm_accounts (discord_id, lastfm_username) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE lastfm_username = VALUES(lastfm_username)`,
+      [interaction.user.id, name]
+    );
+  }
+  award(interaction, 'scrobbler', { total: () => playcount(name) });
+  const moved = before && !sameLastfmName(before, name) ? ` Your link now points to it instead of **${before}**.` : '';
+  return interaction.editReply({
+    content: `✅ Verified: **${name}** is your Last.fm account.${moved} Its scrobbles now count toward **Dedicated Scrobbler**.`,
+    components: [],
+  });
 }
 
 export async function handleUnlink(interaction) {
@@ -381,6 +486,10 @@ export async function handleProfile(interaction) {
   try {
     const userInfo = await lastfmAPI.getUserInfo(lastfmUsername);
     const formatted = lastfmAPI.formatUserData(userInfo);
+    // Dedicated Scrobbler: only your own profile, and only a link verified on Last.fm (fix wave 7).
+    if (targetUser.id === interaction.user.id && sameLastfmName(await verifiedLastfmName(pool, targetUser.id).catch(() => null), lastfmUsername)) {
+      awardAchievement(interaction, 'scrobbler', { total: Number(userInfo?.playcount) || 0 });
+    }
 
     const embed = new EmbedBuilder()
       .setColor('#D51007')

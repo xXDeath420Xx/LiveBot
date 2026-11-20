@@ -1,7 +1,8 @@
 <%#
   GET /stream/bot/import (dashboard/routes/stream-bot-import.js). Locals: channels, history [{ id, sources, fileNames, summary,
   createdAt }], rewards [{ id, title, kind, cost, costUnit, prompt, enabled, createdBy, recreated, source }], categories, canRecreate,
-  words [{ id, source, words, wasOn, channels: [{ id, channelId, name, pending, applied }] }] (saved banned word lists, H-742),
+  words [{ id, source, words, wasOn, channels: [{ id, channelId, name, pending, applied }], twitch: { at, added, skipped, failed } | null }]
+  (saved banned word lists, H-742), twitchTerms { connected, scopeOk } (the Stream bot grant for "Add to Twitch blocked terms", H-763),
   uploadMb, importData (page JSON: { preview, categories }). The preview, the import and the reward buttons run in
   /js/stream-bot-import.js, which builds every element with createElement and textContent.
 %>
@@ -21,6 +22,12 @@
 <%- include('_tabs', { active: 'import' }) %>
 
 <div class="cf-notice" id="sbi-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbi-msg-text"></div></div>
+
+<section class="cf-section" aria-labelledby="sbi-switch-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-switch-title">Switch over from Firebot or Streamer.bot</h2>
+        <p class="cf-section-desc">When your import looks right: one click turns on what you imported, swaps your OBS overlays for the CertiFried ones and can close the old apps. It shows everything first, and Undo puts it all back.</p></div>
+        <div class="cf-section-actions"><a class="btn btn-primary btn-sm" href="/stream/bot/import/switchover">Review the switchover</a></div></header>
+</section>
 
 <section class="cf-section" aria-labelledby="sbi-files-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-files-title">Which file to upload</h2>
@@ -148,10 +155,11 @@
 </section>
 
 <% const _words = (typeof words !== 'undefined' && Array.isArray(words)) ? words : []; %>
+<% const _tt = (typeof twitchTerms !== 'undefined' && twitchTerms) ? twitchTerms : { connected: false, scopeOk: false }; %>
 <% if (_words.length) { %>
 <section class="cf-section" aria-labelledby="sbi-words-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-words-title">Saved banned words</h2>
-        <p class="cf-section-desc">Imported banned words are saved here and not applied anywhere yet. Kick automod switches its word rule on as soon as it has words, so they are added only when you press Apply on a channel. Twitch blocked terms are not changed: they work as soon as they are added, so add them yourself on Twitch (Creator Dashboard, Settings, Moderation, Blocked terms) when you switch over.</p></div>
+        <p class="cf-section-desc">Imported banned words are saved here and not applied anywhere yet. Kick automod switches its word rule on as soon as it has words, so they are added only when you press Apply on a channel. Twitch blocked terms also work as soon as they are added, so they are sent to Twitch only when you press Add to Twitch blocked terms; words Twitch already has are skipped and nothing is removed. You can remove them on Twitch (Creator Dashboard, Settings, Moderation, Blocked terms).</p></div>
         <div class="cf-section-actions"><span class="cf-status-line" id="sbi-words-status" role="status" aria-live="polite"></span></div></header>
     <div class="cf-rows">
         <div class="cf-list">
@@ -164,8 +172,15 @@
                     <% if (!w.channels.length) { %>
                     <p class="cf-list-body">To apply them on Kick, add your Kick channel to the channel bot first.</p>
                     <% } %>
+                    <% if (w.twitch) { %><p class="cf-list-meta"><span>Sent to Twitch blocked terms <time datetime="<%= w.twitch.at %>"><%= _when(w.twitch.at) %></time></span><span><%= w.twitch.added %> added, <%= w.twitch.skipped %> already there<%= w.twitch.failed ? ', ' + w.twitch.failed + ' not added' : '' %></span></p><% } %>
+                    <% if (_tt.connected && !_tt.scopeOk) { %>
+                    <p class="cf-list-body">To add them to Twitch blocked terms, <a href="/stream/bot/connections">re-approve the Stream bot grant on Connections</a> first.</p>
+                    <% } %>
                 </div>
                 <div class="cf-list-actions">
+                    <% if (_tt.connected) { %>
+                    <button type="button" class="btn btn-secondary btn-sm" data-twitch-terms="<%= w.id %>" data-count="<%= w.words.length %>"<% if (!_tt.scopeOk) { %> disabled<% } %>>Add to Twitch blocked terms</button>
+                    <% } %>
                     <% w.channels.forEach((c) => { %>
                     <% if (c.pending) { %>
                     <button type="button" class="btn btn-secondary btn-sm" data-apply-words="<%= w.id %>" data-channel-bot="<%= c.id %>" data-name="<%= c.name || c.channelId %>" data-count="<%= c.pending %>">Apply to Kick automod<% if (w.channels.length > 1) { %> (<%= c.name || c.channelId %>)<% } %></button>

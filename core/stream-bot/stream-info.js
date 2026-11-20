@@ -62,10 +62,10 @@ export function createStreamInfo({ fetchers = {}, now = () => Date.now(), ttlMs 
     return { get, forget(platform, channelId) { cache.delete(`${platform}:${channelId}`); }, _cache: cache };
 }
 
-/** The channel {stream.*} describes for an event: the event's own Twitch/Kick channel, else the first linked Twitch, else Kick. */
+/** The channel {stream.*} describes for an event: the event's own Twitch/Kick/YouTube channel, else the first linked Twitch, else Kick, else YouTube. */
 export function pickInfoChannel(ev, channels = []) {
-    if ((ev?.platform === 'twitch' || ev?.platform === 'kick') && ev.channelId != null) return { platform: ev.platform, channelId: String(ev.channelId) };
-    const c = channels.find((x) => x.platform === 'twitch') || channels.find((x) => x.platform === 'kick');
+    if (['twitch', 'kick', 'youtube'].includes(ev?.platform) && ev.channelId != null) return { platform: ev.platform, channelId: String(ev.channelId) };
+    const c = channels.find((x) => x.platform === 'twitch') || channels.find((x) => x.platform === 'kick') || channels.find((x) => x.platform === 'youtube');
     return c ? { platform: c.platform, channelId: String(c.platform_user_id) } : null;
 }
 

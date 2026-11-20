@@ -15,7 +15,7 @@ import { authRouter } from './routes/auth.js';
 import { gameRouter } from './routes/game.js';
 import { metaRouter } from './routes/meta.js';
 import { errorHandler, notFound, requireIdempotencyKey, handler } from './middleware.js';
-import { allowedOrigins, corsMiddleware, helmetMiddleware, stripPublicPrefix, clientIp, createLimiters, rateLimit } from './security.js';
+import { allowedOrigins, corsMiddleware, helmetMiddleware, stripPublicPrefix, clientIp, createLimiters, rateLimit, createActivityMatcher } from './security.js';
 import { createGame, catalogView } from '../store/game.js';
 import { createTwitchExtVerifier } from '../integrations/twitch-ext.js';
 import { createDiscordVerifier } from '../integrations/discord.js';
@@ -75,8 +75,12 @@ export function createApp({
         res.set('Cache-Control', 'no-store');
         next();
     });
-    app.use(corsMiddleware(allowedOrigins({ publicOrigin: cfg.publicOrigin, twitchExtClientId: cfg.twitchExt?.clientId })));
-    app.use(limit('ip', req => `ip:${clientIp(req)}`));
+    // Activity host mode (docs/activities.md): the Discord Activity's frame is an allowed origin, and its requests (all
+    // through Discord's proxy addresses) use their own per-address buckets.
+    const fromActivity = createActivityMatcher({ appId: cfg.activity?.appId, publicKey: cfg.activity?.publicKey });
+    app.use(corsMiddleware(allowedOrigins({ publicOrigin: cfg.publicOrigin, twitchExtClientId: cfg.twitchExt?.clientId, activityAppId: cfg.activity?.appId })));
+    app.use(limit('ip', req => (fromActivity(req) ? null : `ip:${clientIp(req)}`)));
+    app.use(limit('activityIp', req => (fromActivity(req) ? `aip:${clientIp(req)}` : null)));
     app.use(express.json({ limit: '8kb', strict: true }));
 
     const api = express.Router();
@@ -87,7 +91,8 @@ export function createApp({
     });
     // Is the Twitch review save open? (phase 4; the panel asks before showing its button)
     api.get('/review', handler(async (req, res) => res.json({ review: { enabled: await store.review.enabled() } })));
-    api.use('/auth', limit('auth', req => `auth:${clientIp(req)}`));
+    api.use('/auth', limit('auth', req => (fromActivity(req) ? null : `auth:${clientIp(req)}`)));
+    api.use('/auth', limit('activityAuth', req => (fromActivity(req) ? `aauth:${clientIp(req)}` : null)));
     api.use(authRouter({
         store, auth, oauth: o, verifyTwitchExt: extVerify, verifyDiscord: discordVerify, config: cfg,
         allowDevPlatform: !!cfg.allowDevPlatform, logger

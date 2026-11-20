@@ -30,9 +30,12 @@ __pycache__/
 /data/*.heartbeat
 /data/audits/
 /data/evidence-cache/
+/data/backup-restore-runs/
 /data/pak-scan.json
 /dashboard/data/
 /dashboard/public/api/guild-ids.json
+# Member-uploaded rank-card backgrounds (per guild/member; not ours to license)
+/data/rank-backgrounds/*/
 
 # One-off audit outputs and per-community setup state (IDs, transfer maps, message dumps)
 /rules-*.json
@@ -53,6 +56,7 @@ __pycache__/
 # Public documentation is re-included explicitly.
 /docs/*
 !/docs/publishing.md
+!/docs/backups.md
 
 # Build artifacts and archives (downloads are served by the site, not from git)
 *.zip
@@ -69,3 +73,6 @@ __pycache__/
 # Assets CertiFried has no right to redistribute (see THIRD_PARTY_NOTICES.md)
 /data/digimon-images/
 /dashboard/public/sprites/img/
+
+# Service-key .env backups hold live secrets (utils/env-file.js) — never publish
+/backups/env/

@@ -26,7 +26,7 @@
  *
  * Tested in tests/stream-bot-engine.test.js (throwaway tables, fake io).
  */
-import { triggerMatches, checkConditions, createLimiter } from './conditions.js';
+import { triggerMatches, checkConditions, createLimiter, loadConditionData } from './conditions.js';
 import { actionType, isClientAction, isStreamAction, clientParams, LIMITS as ACTION_LIMITS, TARGET_LABEL } from './actions.js';
 import { runContext } from './counters.js';
 import { publicEvent } from './events.js';
@@ -75,6 +75,9 @@ export function createEngine({
             const r = await io.dispatch({ profileId: ctx.profile.id, runId: ctx.runId, target: def.target, capability: def.capability || null,
                 actionType: step.type, params, queueSeconds: step.queueSeconds ?? ACTION_LIMITS.queueDefault });
             if (r.status === 'sent') return { status: 'sent', detail: `sent to ${r.devices || 1} device${r.devices === 1 ? '' : 's'}`, dispatchId: r.id };
+            // Phase 5: a cloud light is carried out on the server at once (core/stream-bot/devices/service.js).
+            if (r.status === 'done') return { status: 'ok', detail: r.detail || 'done', ...(r.id ? { dispatchId: r.id } : {}) };
+            if (r.status === 'failed') return { status: 'failed', detail: r.detail || 'failed', ...(r.id ? { dispatchId: r.id } : {}) };
             if (r.status === 'queued') return { status: 'queued', detail: `${TARGET_LABEL[def.target]}: queued for ${step.queueSeconds ?? ACTION_LIMITS.queueDefault} s`, dispatchId: r.id };
             return { status: 'skipped', detail: `${TARGET_LABEL[def.target]}: nothing connected`, dispatchId: r.id || null };
         }
@@ -99,7 +102,7 @@ export function createEngine({
                 if (!text) return { status: 'skipped', detail: 'the message came out empty' };
                 const channels = await io.channelsFor(ctx.profile.id);
                 let targets;
-                if (step.platform === 'all') targets = channels.filter((c) => c.platform === 'twitch' || c.platform === 'kick');
+                if (step.platform === 'all') targets = channels.filter((c) => c.platform === 'twitch' || c.platform === 'kick' || c.platform === 'youtube');
                 else {
                     const p = step.platform === 'event' || !step.platform ? ctx.ev.platform : step.platform;
                     const own = p === ctx.ev.platform && ctx.ev.channelId ? channels.filter((c) => c.platform === p && String(c.platform_user_id) === String(ctx.ev.channelId)) : [];
@@ -108,11 +111,15 @@ export function createEngine({
                 if (!targets.length) return { status: 'skipped', detail: step.platform === 'event' ? `no chat for ${ctx.ev.platform} events (use Twitch, Kick or All)` : 'no linked channel on that platform' };
                 if (ctx.dryRun) return { status: 'dry', detail: `would say in ${targets.map((c) => `${c.platform}/${c.login}`).join(', ')}: ${text.slice(0, 300)}` };
                 const results = [];
+                let sent = 0;
                 for (const c of targets) {
                     const r = await io.sendChat({ profileId: ctx.profile.id, platform: c.platform, channelId: c.platform_user_id, login: c.login, text });
                     results.push(`${c.platform}/${c.login}: ${r.ok ? 'sent' : r.error || 'failed'}`);
-                    if (!r.ok) return { status: 'failed', detail: results.join('; ') };
+                    if (r.ok) sent++;
+                    // "All": a YouTube channel that is not live has no chat to post in, which is not a failure (H-741).
+                    else if (!(step.platform === 'all' && r.notLive)) return { status: 'failed', detail: results.join('; ') };
                 }
+                if (!sent) return { status: 'skipped', detail: results.join('; ') };
                 return { status: 'ok', detail: `${results.join('; ')}: ${text.slice(0, 300)}` };
             }
             case 'discord.post': {
@@ -230,7 +237,9 @@ export function createEngine({
         }
         let runId = null;
         try {
-            const check = manual ? { ok: true, results: [] } : checkConditions(automation.conditions, ev, { limiter, automationId: automation.id, test });
+            // Registered conditions (viewer points, watch time, messages) read their data first (conditions.js loadConditionData).
+            const loaded = manual ? {} : await loadConditionData(automation.conditions, ev, { profileId: profile.id });
+            const check = manual ? { ok: true, results: [] } : checkConditions(automation.conditions, ev, { limiter, automationId: automation.id, test, loaded });
             if (!check.ok) {
                 runId = await store.createRun(profile.id, { ...base, status: 'skipped', skipReason: `${check.failed.type}: ${check.failed.detail}`, checks: check.results });
                 await store.finishRun(runId, { status: 'skipped', steps: [], checks: check.results });

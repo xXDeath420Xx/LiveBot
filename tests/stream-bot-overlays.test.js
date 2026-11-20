@@ -13,7 +13,7 @@ import {
 import { createOverlayStore } from '../core/stream-bot/overlays/store.js';
 import { createMediaLibrary, sniffMedia } from '../core/stream-bot/overlays/media.js';
 import { createOverlayService } from '../core/stream-bot/overlays/service.js';
-import { twitchChat, kickChat, visibleFor } from '../core/stream-bot/overlays/chat.js';
+import { twitchChat, kickChat, youtubeChat, visibleFor } from '../core/stream-bot/overlays/chat.js';
 import { createImageProxy } from '../core/stream-bot/overlays/images.js';
 import { newOverlayKey, isOverlayKeyShape, keyHash, openSse } from '../core/stream-bot/overlays/http.js';
 import { overlayActionDefs, registerOverlayActions } from '../core/stream-bot/overlays/actions.js';
@@ -60,7 +60,7 @@ test.after(async () => {
 // ── settings ───────────────────────────────────────────────────────────────────────────────
 
 test('every overlay type has defaults that validate, an OBS source name, and the alert box covers every requested event', () => {
-    assert.deepEqual(OVERLAY_TYPES.map((t) => t.type), ['alerts', 'chat', 'events', 'goal', 'counter', 'nowplaying', 'canvas']);
+    assert.deepEqual(OVERLAY_TYPES.map((t) => t.type), ['alerts', 'chat', 'events', 'goal', 'counter', 'nowplaying', 'canvas', 'scene']);
     for (const t of OVERLAY_TYPES) {
         assert.match(t.sourceName, /^CertiFried /);
         const v = validateConfig(t.type, defaultConfig(t.type));
@@ -68,7 +68,8 @@ test('every overlay type has defaults that validate, an OBS source name, and the
         assert.deepEqual(v.value, defaultConfig(t.type), `${t.type} defaults round-trip`);
     }
     assert.equal(OVERLAY_TYPES.find((t) => t.type === 'alerts').sourceName, 'CertiFried Alerts');
-    assert.deepEqual(ALERT_KEYS, ['follow', 'sub', 'resub', 'gift_sub', 'cheer', 'raid', 'redemption', 'powerup', 'tip', 'hype_train', 'kick_follow', 'kick_sub', 'kick_gift']);
+    assert.deepEqual(ALERT_KEYS, ['follow', 'sub', 'resub', 'gift_sub', 'cheer', 'raid', 'redemption', 'powerup', 'tip', 'hype_train', 'kick_follow', 'kick_sub', 'kick_gift',
+        'yt_superchat', 'yt_member', 'yt_milestone', 'yt_gift']);
     assert.deepEqual(typesFor('alert'), ['alerts']);
     assert.ok(typesFor('show').includes('canvas') && typesFor('show').includes('chat'));
 });
@@ -95,6 +96,36 @@ test('validation replaces bad values, names the problems, and drops media or sou
     assert.equal(validateConfig('goal', { target: 0 }).ok, false);
     assert.equal(validateConfig('nope', {}).ok, false);
     assert.equal(withDefaults('chat', { hideUsers: '@StreamElements, nightbot <x>' }).hideUsers, 'streamelements, nightbot');
+});
+
+test('scene screens, text over the image and the now-playing look: values clamped, glows from the form, media that is gone named', () => {
+    const errors = [];
+    const v = withDefaults('scene', {
+        title: 'x'.repeat(120), titleSize: 9999, titleStyle: 'rainbow', glowColor: 'red', titleY: 140, background: '0123456789abcdef', kenBurnsScale: 500,
+        glows: { 0: { on: true, x: 51.14, y: 26.2, size: 3.4, color: '#FF281E', style: 'flicker' }, 1: { on: false, x: 1 }, 2: { x: 27.3, y: 73, size: 99, color: 'nope', style: 'disco' } },
+        window: { enabled: 'on', x: -5, y: 42.3, w: 6.2, h: 15.5, feather: 40 }, countdown: { enabled: true, minutes: 0, label: 'Back in' }, embers: 9999, rain: -3, grain: 80,
+    }, { mediaIds: new Set() }, errors);
+    assert.equal(v.title.length, 80);
+    assert.equal(v.titleSize, 200);
+    assert.equal(v.titleStyle, 'glow', 'unknown look falls back');
+    assert.equal(v.glowColor, defaultConfig('scene').glowColor);
+    assert.equal(v.titleY, 100);
+    assert.equal(v.background, '');
+    assert.deepEqual(errors, ['Scene screen: the background is no longer in your media.']);
+    assert.equal(v.kenBurnsScale, 130);
+    assert.deepEqual(v.glows, [{ x: 51.1, y: 26.2, size: 3.4, color: '#ff281e', style: 'flicker' }, { x: 27.3, y: 73, size: 30, color: '#ffb256', style: 'pulse' }], 'switched-off glows dropped, the rest clamped');
+    assert.deepEqual(v.window, { enabled: true, x: 0, y: 42.3, w: 6.2, h: 15.5, feather: 10 });
+    assert.deepEqual([v.countdown.minutes, v.countdown.label, v.embers, v.rain, v.grain], [1, 'Back in', 150, 0, 30]);
+    const many = withDefaults('scene', { glows: Array.from({ length: 9 }, () => ({ x: 1, y: 1 })) }, {}, errors);
+    assert.equal(many.glows.length, 6);
+    assert.ok(errors.includes('Scene screen: at most 6 glows.'));
+    const a = withDefaults('alerts', { alerts: { follow: { layout: 'over', mediaScale: 50, textDelayMs: 1000 }, sub: { mediaScale: 5000, textDelayMs: -1 } } });
+    assert.deepEqual([a.alerts.follow.layout, a.alerts.follow.mediaScale, a.alerts.follow.textDelayMs], ['over', 50, 1000]);
+    assert.deepEqual([a.alerts.sub.mediaScale, a.alerts.sub.textDelayMs], [200, 0]);
+    assert.equal(a.alerts.raid.mediaScale, 100, 'old alerts keep the layout limits');
+    const np = withDefaults('nowplaying', { width: 450, titleSize: 19, background: 'cover', barColor: '#FFFFFF', showTimes: 'on' });
+    assert.deepEqual([np.width, np.titleSize, np.background, np.barColor, np.showTimes], [450, 19, 'cover', '#ffffff', true]);
+    assert.equal(withDefaults('nowplaying', {}).background, 'panel', 'an existing card keeps its look');
 });
 
 test('which alert an event shows, the amount its variations compare, and the variation picked', () => {
@@ -260,6 +291,8 @@ test('alert box: an event becomes one alert with rendered text, the variation, i
     await svc.onEvent(profile.id, { ...ev({ platform: 'twitch', type: 'cheer', amount: 50 }), test: true });
     assert.equal(p.all('alert').length, 2, 'automation test events do not pop alerts');
 
+    assert.deepEqual([a.mediaScale, a.textDelayMs], [100, 0], 'image size and text delay travel with the alert');
+
     const t = await svc.testAlert(profile.id, overlay.id, 'raid', 250);
     assert.equal(t.sent, 1);
     assert.equal(p.last('alert').test, true);
@@ -269,6 +302,28 @@ test('alert box: an event becomes one alert with rendered text, the variation, i
     assert.equal(svc.isConnected(profile.id), false);
     svc.close();
     await ostore.remove(profile.id, overlay.id);
+});
+
+test('a scene screen says in its hello what kind each of its pictures is; Studio lists it as CertiFried Scene', async () => {
+    const { svc, media } = makeService();
+    const art = (await media.add(profile.id, { name: 'scene art', buffer: PNG })).media;
+    const cfg = withDefaults('scene', { title: 'Be right back', background: art.id, inset: { media: 'ffffffffffffffff', x: 1, y: 1, w: 1, h: 1 } });
+    const { overlay } = await ostore.create(profile.id, { type: 'scene', name: 'BRB', config: cfg });
+    const p = page();
+    const detach = await svc.attach(await ostore.get(profile.id, overlay.id), p);
+    const hello = p.last('hello');
+    assert.equal(hello.type, 'scene');
+    assert.equal(hello.config.title, 'Be right back');
+    assert.match(hello.config.fontCss, /Georgia/);
+    assert.deepEqual(hello.state.media, { [art.id]: 'image' }, 'a picture that is not in the library is left out');
+    const list = await svc.onStudioRequest({ profileId: profile.id }, 'overlays.list');
+    const mine = list.overlays.find((o) => o.id === overlay.id);
+    assert.equal(mine.sourceName, 'CertiFried Scene');
+    assert.match(mine.url, /\/stream\/bot\/overlay\/scene\/sbo_[A-Za-z0-9_-]{32}$/);
+    detach();
+    svc.close();
+    await ostore.remove(profile.id, overlay.id);
+    await media.remove(profile.id, art.id);
 });
 
 test('overlay actions go to the chosen overlay, wait in the queue while none is open, and the page acknowledges them', async () => {
@@ -559,4 +614,57 @@ test('/privacy: overlays are exported without their keys and deleted with their 
     assert.equal(del.deleted[`${T.prefix}overlay_media`], 1);
     assert.equal(fs.existsSync(path.join(mediaDir, String(p2.id))), false, 'the files went too');
     assert.deepEqual(await overlaysDelete(pool, p2.id, T.prefix), {});
+});
+
+// Last in the file: it links a YouTube channel to the shared profile.
+test('chat overlay, YouTube (§13.10): lines and Super Chats, removed when deleted or the viewer is banned; only where YouTube is ticked; attachOverlays takes the raw messages', async () => {
+    const YT = 'UCmApLeHoLLoW00000000001';
+    const FAN = 'UCfAn0000000000000000001';
+    await store.linkChannel(profile.id, { platform: 'youtube', platformUserId: YT, login: 'maplehollow', displayName: 'Maple Hollow', verifiedVia: 'stream_platform_accounts' });
+    const author = { channelId: FAN, displayName: '@MapleFan', isChatSponsor: true };
+    const item = (id, type, details) => ({ id, snippet: { type, publishedAt: new Date(now()).toISOString(), ...details }, authorDetails: author });
+    const { svc } = makeService();
+    const all = (await ostore.create(profile.id, { type: 'chat', name: 'Every platform', config: {} })).overlay;
+    const notYt = (await ostore.create(profile.id, { type: 'chat', name: 'Twitch and Kick', config: { platforms: ['twitch', 'kick'] } })).overlay;
+    const p = page();
+    const q = page();
+    const off = await svc.attach(all, p);
+    const off2 = await svc.attach(notYt, q);
+    try {
+        await svc.onChat('youtube', youtubeChat(item('LCC.a1', 'textMessageEvent', { textMessageDetails: { messageText: 'hello from YouTube' } }), YT));
+        await svc.onChat('youtube', youtubeChat(item('LCC.a2', 'superChatEvent', { superChatDetails: { amountDisplayString: '$5.00', userComment: 'gg' } }), YT));
+        await svc.onChat('youtube', youtubeChat(item('LCC.a3', 'textMessageEvent', { textMessageDetails: { messageText: 'someone else\'s stream' } }), 'UCzZzZzZzZzZzZzZzZzZzZzZ'));
+        assert.deepEqual(p.all('chat').map((m) => [m.id, m.platform, m.name, m.action, m.badges.map((b) => b.role)]),
+            [['yt:LCC.a1', 'youtube', 'MapleFan', null, ['subscriber']], ['yt:LCC.a2', 'youtube', 'MapleFan', 'highlight', ['subscriber']]]);
+        assert.deepEqual(q.all('chat'), [], 'a Chat overlay without YouTube ticked');
+        await svc.onChat('youtube', youtubeChat(item('LCC.d', 'messageDeletedEvent', { messageDeletedDetails: { deletedMessageId: 'LCC.a1' } }), YT));
+        await svc.onChat('youtube', youtubeChat(item('LCC.b', 'userBannedEvent', { userBannedDetails: { bannedUserDetails: { channelId: FAN } } }), YT));
+        assert.deepEqual(p.all('chat_remove'), [{ id: 'yt:LCC.a1' }, { platform: 'youtube', userId: FAN }]);
+        const again = page();
+        const off3 = await svc.attach(all, again);
+        assert.deepEqual(again.last('hello').state.messages, [], 'deleted and banned lines are gone for a reconnect too');
+        off3();
+    } finally {
+        off(); off2();
+        svc.close();
+        await ostore.remove(profile.id, all.id);
+        await ostore.remove(profile.id, notYt.id);
+    }
+
+    // The wrapper: every raw message goes to the Chat overlay first, then to whatever was there before.
+    const seen = [];
+    const ingest = { twitch: async () => 1, kick: async () => 1, youtubeRaw: (it, ch) => { seen.push([it?.id ?? null, ch]); return 'prior'; } };
+    const box = { store, hub: { dispatch: async () => ({}), hasDevice: () => false, use() { return this; } }, feed: createFeed(), ingest, logger: null, pool, sounds: null, render: createRenderer({ variableStore: store.variableStore }) };
+    const ov = await attachOverlays(box);
+    try {
+        assert.equal(ingest.youtubeRaw(item('LCC.w1', 'textMessageEvent', { textMessageDetails: { messageText: 'x' } }), YT), 'prior');
+        assert.equal(ingest.youtubeRaw(null, YT), 'prior', 'junk never throws');
+        assert.deepEqual(seen, [['LCC.w1', YT], [null, YT]]);
+        const bare = { twitch: async () => 1, kick: async () => 1 };
+        const ov2 = await attachOverlays({ ...box, ingest: bare, hub: { dispatch: async () => ({}), hasDevice: () => false, use() { return this; } }, feed: createFeed() });
+        assert.equal(bare.youtubeRaw(item('LCC.w2', 'textMessageEvent', {}), YT), undefined, 'nothing before it: fine');
+        ov2.service.close();
+    } finally {
+        ov.service.close();
+    }
 });

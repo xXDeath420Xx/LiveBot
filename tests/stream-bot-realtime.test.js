@@ -237,6 +237,55 @@ test('offline: queued, delivered in order at the next hello; capabilities respec
     offset = 0;
 });
 
+test('onAck (H-758): called once with the final answer, after it is written; off() stops it; queued rows that expire count', async () => {
+    await until(() => hub.connected(profile.id).length === 0);
+    const d = await device();
+    const c = client({ token: d.token });
+    await c.next('welcome');
+    const watch = (id) => new Promise((resolve) => {
+        hub.onAck(id, async (a) => resolve({ a, row: await store.getDispatch(id) }));
+    });
+
+    const r = await hub.dispatch({ profileId: profile.id, target: 'studio', capability: 'obs', actionType: 'music.prepare', params: {}, queueSeconds: 0 });
+    const got = await watch(r.id);
+    assert.deepEqual([got.a.id, got.a.status, got.a.result, got.a.error], [r.id, 'acked', { done: 'music.prepare' }, null]);
+    assert.equal(got.row.status, 'acked', 'the row already says so when the watcher runs');
+
+    c.ackOk = false;
+    const r2 = await hub.dispatch({ profileId: profile.id, target: 'studio', capability: 'obs', actionType: 'music.prepare', params: {}, queueSeconds: 0 });
+    const got2 = await watch(r2.id);
+    assert.deepEqual([got2.a.status, got2.a.error], ['failed', 'scene_not_found']);
+
+    c.autoAck = false;
+    const r3 = await hub.dispatch({ profileId: profile.id, target: 'studio', capability: 'obs', actionType: 'music.prepare', params: {}, queueSeconds: 60 });
+    let calls = 0;
+    const off = hub.onAck(r3.id, () => { calls++; });
+    const got3 = await watch(r3.id);
+    assert.deepEqual([got3.a.status, got3.a.error], ['failed', 'no answer after 3 tries']);
+    assert.equal(calls, 1, 'every watcher of the id is told once');
+    off();
+
+    const r4 = await hub.dispatch({ profileId: profile.id, target: 'studio', capability: 'obs', actionType: 'music.prepare', params: {}, queueSeconds: 60 });
+    let offCalls = 0;
+    hub.onAck(r4.id, () => { offCalls++; })();
+    await until(async () => (await store.getDispatch(r4.id)).status === 'failed', 3000);
+    await sleep(20);
+    assert.equal(offCalls, 0, 'off() before the answer: never called');
+    c.ws.close();
+    await c.closed;
+    await until(() => hub.connected(profile.id).length === 0);
+
+    const q = await hub.dispatch({ profileId: profile.id, target: 'studio', capability: 'obs', actionType: 'obs.scene', params: { scene: 'Later' }, queueSeconds: 30 });
+    assert.equal(q.status, 'queued');
+    const expired = watch(q.id);
+    offset += 31_000;
+    await hub.sweep();
+    offset = 0;
+    const got4 = await expired;
+    assert.equal(got4.a.status, 'expired');
+    assert.equal(hub._state.ackWatchers.size, 0, 'nothing left waiting');
+});
+
 test('events are pushed to subscribers only; too many messages closes the socket', async () => {
     const d = await device('overlay', 'Alert box');
     const sub = client({ token: d.token, caps: [] });

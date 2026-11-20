@@ -1643,10 +1643,23 @@ router.get('/api/super-admin/global-ban/appeals', requireSuperAdmin, async (req,
 router.put('/api/super-admin/global-ban/appeals/:id', requireSuperAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, response } = req.body;
+        const { status } = req.body;
+        // The page sends reviewer_response; older callers sent response (both were read as null before H-802).
+        const response = String(req.body.reviewer_response ?? req.body.response ?? '').trim().slice(0, 2000) || null;
 
         if (!['approved', 'denied'].includes(status)) {
             return res.status(400).json({ error: 'Status must be approved or denied' });
+        }
+
+        // One path for every review (H-802): requireSuperAdmin checked isSuperAdmin(req.user.id) (this route
+        // has no :guildId, so req.isSuperAdmin is never set here); the manager checks it again, closes only
+        // pending appeals, drops the ban from its cache and tells the person.
+        const manager = req.app.locals.client?.globalBanManager || global.botManager?.getDefaultClient?.()?.globalBanManager;
+        if (manager) {
+            const result = await manager.reviewAppeal(req.user.id, Number(id), status === 'approved', response || (status === 'approved' ? 'Appeal approved by the CertiFried team.' : 'Appeal denied by the CertiFried team.'));
+            if (!result.success) return res.status(result.scope === 'refuse' ? 403 : 404).json({ error: result.message });
+            logger.info(`[Super Admin] Appeal #${id} ${status} for every server by ${req.user.username}`);
+            return res.json({ success: true, scope: result.scope });
         }
 
         const [[appeal]] = await pool.execute('SELECT * FROM global_ban_appeals WHERE id = ?', [id]);

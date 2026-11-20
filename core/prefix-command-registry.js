@@ -1348,11 +1348,11 @@ register('quickembed', {
 });
 
 // ═══════════════════════════════════════════════════════════
-// OwO — hunt & zoo mini-game (CC-BY-NC-SA module, see /LICENSE-OWO-NOTICE.md)
+// Critters — the /owo hunting, collecting and battling game (handlers/critters-prefix.js, core/critters)
 // ═══════════════════════════════════════════════════════════
 
 register('owo', {
-    description: 'OwO hunt & zoo mini-game. Try `owo hunt`, `owo zoo`, `owo daily`.',
+    description: 'The critters game. Try `owo hunt`, `owo zoo`, `owo daily`.',
     category: 'owo',
     args: [
         { name: 'subcommand', type: 'string', required: false },
@@ -1361,31 +1361,31 @@ register('owo', {
         { name: 'amount',     type: 'string', required: false },
         { name: 'text',       type: 'string', required: false, rest: true },
     ],
-    handler: { file: '../handlers/owo-prefix.js', method: 'handleOwoRouter' },
+    handler: { file: '../handlers/critters-prefix.js', method: 'handleOwoRouter' },
     aliases: [],
 });
 
 register('hunt', {
-    description: 'Hunt for an animal (OwO).',
+    description: 'Go looking for critters (the /owo game).',
     category: 'owo',
     args: [],
-    handler: { file: '../handlers/owo-prefix.js', method: 'handleHunt' },
+    handler: { file: '../handlers/critters-prefix.js', method: 'handleHunt' },
     aliases: ['catch', 'h'],
 });
 
 register('zoo', {
-    description: 'View your zoo (OwO).',
+    description: 'See your critters (the /owo game).',
     category: 'owo',
     args: [{ name: 'user', type: 'user', required: false }],
-    handler: { file: '../handlers/owo-prefix.js', method: 'handleZoo' },
+    handler: { file: '../handlers/critters-prefix.js', method: 'handleZoo' },
     aliases: [],
 });
 
 register('owoify', {
-    description: 'OwOify some text.',
+    description: 'Say it, but owo.',
     category: 'owo',
     args: [{ name: 'text', type: 'string', required: true, rest: true }],
-    handler: { file: '../handlers/owo-prefix.js', method: 'handleOwoify' },
+    handler: { file: '../handlers/critters-prefix.js', method: 'handleOwoify' },
     aliases: ['uwuify'],
 });
 

@@ -1,10 +1,13 @@
 <%#
   GET /stream/bot/connections. Locals: notice ({ tone, text } | null, from the ?ok= / ?warn= / ?error= codes the OAuth flows send),
-  channels [{ id, platform, platformLabel, login, displayName, verifiedVia, linkedAt, health }], linkable [{ platform, platformLabel,
+  channels [{ id, platform, platformLabel, login, displayName, verifiedVia, linkedAt, health }] (Kick health.kickBot: the Kick channel
+  bot sign-in, core/stream-bot/kick-scopes.js kickBotStatus), linkable [{ platform, platformLabel,
   id, login, label }], grant ({ login, status, grantedAt, scopes[] } | null), scopes [{ scope, enables, later }], reapprove (labels of what
   re-approving the grant turns on, empty when nothing is missing),
   tipSources [{ id, source, label, refLabel, enabled, status, lastError, lastEventAt }], tipOptions { kofi[], fourthwall[], throne, bmac },
-  botSettings { storeChat, webhookAllowHosts[] }, csrfToken.
+  botSettings { storeChat, webhookAllowHosts[] }, youtube ({ enabled: false, text } | { enabled: true, channels[], quota }: YouTube Live,
+  H-741; channels[].channelId matches a linked channel's channelId; health.youtube.signIn ok | missing | other_channel | needs_reconnect),
+  csrfToken.
 %>
 <%- include('_head', { pageTitle: 'Connections', active: 'connections' }) %>
 <%
@@ -14,6 +17,10 @@
   const _tipStatus = { new: ['', 'Waiting for the first event'], ok: ['is-ok', 'Working'], listening: ['is-ok', 'Connected'], reconnecting: ['is-warn', 'Reconnecting'], error: ['is-bad', 'Error'], token_rejected: ['is-bad', 'Token refused: add it again'] };
   const _hasTwitch = channels.some((c) => c.platform === 'twitch');
   const _hasKick = channels.some((c) => c.platform === 'kick');
+  const _hasYouTube = channels.some((c) => c.platform === 'youtube');
+  const _yt = locals.youtube || { enabled: false, text: '' };
+  const _ytSignIn = { ok: 'Working', missing: 'Missing: link YouTube again', other_channel: 'For another channel: link YouTube again', needs_reconnect: 'Google no longer accepts it: link YouTube again' };
+  const _ytChat = { stream: 'Reading as messages arrive', poll: 'Reading every few seconds', paused: 'Paused until the allowance resets' };
 %>
 <div class="cf-page-head">
     <div>
@@ -65,9 +72,43 @@
                 <div><dt>Chat messages</dt><dd><%= h.webhook && h.webhook.known ? (h.webhook.chat ? 'Subscribed' : 'Not subscribed') : 'Could not check' %></dd></div>
                 <div><dt>Last chat received</dt><dd><% if (h.lastChatAt) { %><time datetime="<%= h.lastChatAt %>"><%= _when(h.lastChatAt) %></time><% } else { %>None since the last restart<% } %></dd></div>
                 <div><dt>Sending chat</dt><dd><%= h.chatSend ? 'Ready (Kick Defender is on)' : 'Turn on Kick Defender for this channel' %></dd></div>
+                <div><dt>Kick channel bot</dt><dd><% if (h.kickBot) { %><span class="cf-pill <%= h.kickBot.tone %>"><%= h.kickBot.label %></span><% } else { %>Could not check<% } %></dd></div>
             </dl>
             <% if (h.webhook && h.webhook.known && h.webhook.missing && h.webhook.missing.length) { %><p class="sb-channel-note">Unlink and link the channel again to subscribe the missing events.</p><% } %>
-            <% if (!h.chatSend) { %><p class="sb-channel-note">The chat message action on Kick uses Kick Defender. <a href="/kick">Set it up on the Kick Defender page</a>.</p><% } %>
+            <% if (h.kickBot) { const kb = h.kickBot; %>
+            <div class="sb-coverage">
+                <p class="sb-coverage-label">Kick channel bot</p>
+                <p class="sb-channel-note">Chat messages, timers, title and category changes and message deletes on Kick use the Kick channel bot sign-in. It is separate from the Kick sign-in that linked this channel, which only proves the channel is yours.</p>
+                <% if (kb.missing.length) { %>
+                <ul class="cf-chips" aria-label="Kick permissions the stream bot is missing">
+                    <% kb.missing.forEach((m) => { %><li class="cf-chip"><span><%= m.text %></span></li><% }) %>
+                </ul>
+                <% } %>
+                <% if (kb.actionLabel) { %><div class="cf-inline sb-kickbot-action"><a class="btn btn-primary btn-sm" href="<%= kb.signInHref %>"><%= kb.actionLabel %></a></div><% } %>
+                <% if (kb.defenderOff) { %><p class="sb-channel-note">Kick Defender is off for this channel, so the bot cannot use the sign-in. <a href="/kick">Turn it on on the Kick Defender page</a>.</p><% } %>
+            </div>
+            <% } else if (!h.chatSend) { %><p class="sb-channel-note">The chat message action on Kick uses Kick Defender. <a href="/kick">Set it up on the Kick Defender page</a>.</p><% } %>
+            <% } else if (c.platform === 'youtube') { const y = _yt.enabled ? (_yt.channels || []).find((x) => x.channelId === c.channelId) : null; const _si = h && h.youtube ? h.youtube.signIn : null; %>
+            <dl class="sb-facts">
+                <div><dt>YouTube sign-in</dt><dd><%= _ytSignIn[_si] || 'Could not check' %></dd></div>
+                <div><dt>Live now</dt><dd><%= !_yt.enabled ? 'Not checked' : (y && y.live ? 'Yes' : 'No') %></dd></div>
+                <div><dt>Chat</dt><dd><%= !_yt.enabled ? 'Off' : (y && y.live ? (_ytChat[y.transport] || 'Starting') : 'Read while you are live') %></dd></div>
+                <div><dt>Last checked</dt><dd><% if (y && y.lastCheckAt) { %><time datetime="<%= y.lastCheckAt %>"><%= _when(y.lastCheckAt) %></time><% } else { %>Not yet<% } %></dd></div>
+                <div><dt>Last chat received</dt><dd><% if (y && y.lastMessageAt) { %><time datetime="<%= y.lastMessageAt %>"><%= _when(y.lastMessageAt) %></time><% } else { %>None since the last restart<% } %></dd></div>
+            </dl>
+            <% if (y && y.live && y.title) { %><p class="sb-channel-note">On air: <%= y.title %></p><% } %>
+            <% if (!_yt.enabled) { %><p class="sb-channel-note"><%= _yt.text %></p><% } %>
+            <% if (y && y.error) { %><p class="sb-channel-note"><%= y.error %></p><% } %>
+            <% if (_yt.enabled && _yt.quota) { const q = _yt.quota; %>
+            <div class="sb-coverage">
+                <p class="sb-coverage-label">YouTube allowance today</p>
+                <p class="sb-channel-note"><%= Math.round(q.share * 100) %>% of the <%= q.limit.toLocaleString('en-US') %> units Google gives CertiFried each day is used<% if (q.profileUnits != null) { %>, <%= q.profileUnits.toLocaleString('en-US') %> of them by your channel<% } %>. <%= q.explanation %> It resets at midnight Pacific time (<time datetime="<%= q.resetAt %>"><%= _when(q.resetAt) %></time>).</p>
+            </div>
+            <% } %>
+            <% if ((_yt.enabled && _si && _si !== 'ok') || (_yt.enabled && y && !y.live)) { %><div class="cf-inline sb-kickbot-action">
+                <% if (_si && _si !== 'ok') { %><a class="btn btn-primary btn-sm" href="/stream/connect/youtube?for=bot">Link YouTube again</a><% } %>
+                <% if (y && !y.live) { %><button type="button" class="btn btn-secondary btn-sm" data-youtube-check>Look for a live broadcast now</button><% } %>
+            </div><% } %>
             <% } %>
         </div>
         <% }) %>
@@ -76,7 +117,7 @@
 
 <section class="cf-section" aria-labelledby="sb-add-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-add-title">Add a channel</h2>
-        <p class="cf-section-desc">Sign in on Twitch or Kick to prove a channel is yours, then link it. Accounts you have already signed in with elsewhere on CertiFried are listed first.</p></div></header>
+        <p class="cf-section-desc">Sign in on Twitch, Kick or YouTube to prove a channel is yours, then link it. Accounts you have already signed in with elsewhere on CertiFried are listed first.</p></div></header>
     <div class="cf-rows">
         <% if (linkable.length) { %>
         <div class="cf-list">
@@ -98,8 +139,14 @@
         </div>
         <div class="cf-row">
             <div class="cf-row-text"><span class="cf-row-label">Kick</span>
-                <p class="cf-row-desc">Signing in with Kick links your channel and subscribes it to Kick's event webhooks.</p></div>
+                <p class="cf-row-desc">Signing in with Kick links your channel and subscribes it to Kick's event webhooks. It only proves the channel is yours: chat, timers, title and category on Kick use the Kick channel bot sign-in shown on the linked channel above.</p></div>
             <div class="cf-row-control"><div class="cf-inline"><a class="btn btn-primary btn-sm" href="/stream/connect/kick?for=bot"><%= _hasKick ? 'Sign in with another Kick account' : 'Sign in with Kick' %></a></div></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><span class="cf-row-label">YouTube</span>
+                <p class="cf-row-desc">Signing in with Google links your YouTube channel. CertiFried asks for one permission, to manage your YouTube chat, and uses it to find your live broadcast, read its chat, Super Chats, Super Stickers and memberships, and send, delete, time out or ban in your chat when an automation says so. Super Chats are tracked, never processed. A YouTube chat exists only while you are live.</p>
+                <% if (!_yt.enabled) { %><p class="cf-row-desc"><%= _yt.text %></p><% } %></div>
+            <div class="cf-row-control"><div class="cf-inline"><% if (_yt.enabled) { %><a class="btn btn-primary btn-sm" href="/stream/connect/youtube?for=bot"><%= _hasYouTube ? 'Sign in with another YouTube channel' : 'Link YouTube' %></a><% } else { %><span class="cf-pill">Not available yet</span><% } %></div></div>
         </div>
     </div>
 </section>

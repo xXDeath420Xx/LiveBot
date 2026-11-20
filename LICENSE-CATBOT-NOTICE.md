@@ -42,6 +42,6 @@ project's 22 spawn PNGs are **not** used, redistributed, or derived from.
 
 ## Compare
 
-`LICENSE-OWO-NOTICE.md` covers a genuinely *derivative* module (a translated battle
-engine) and carries the upstream CC-BY-NC-SA-4.0 terms accordingly. This module is
-**not** derivative and carries no upstream licence.
+`LICENSE-OWO-NOTICE.md` records the same kind of clean-room rewrite for the `/owo` Critters game
+(2026-11-19), which replaced an earlier module derived from OwO Bot. Neither module carries an
+upstream licence.

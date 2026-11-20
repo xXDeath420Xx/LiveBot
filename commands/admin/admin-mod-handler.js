@@ -607,7 +607,8 @@ export async function handleQuarantine(interaction) {
             return interaction.editReply({ content: 'The configured quarantine role was not found in this server. Please check your dashboard settings.' });
         }
 
-        const auditReason = `${enable ? 'Quarantined' : 'Released from quarantine'} by ${interaction.user.tag}`;
+        const reason = (interaction.options.getString?.('reason') || '').trim().slice(0, 500) || null;
+        const auditReason = `${enable ? 'Quarantined' : 'Released from quarantine'} by ${interaction.user.tag}${reason ? `: ${reason}` : ''}`.slice(0, 512);
 
         if (enable) {
             // Everything except @everyone, managed roles (boosts/integrations — Discord won't let us
@@ -627,9 +628,9 @@ export async function handleQuarantine(interaction) {
 
             await pool.execute(
                 `INSERT INTO quarantined_users (guild_id, user_id, previous_roles, reason, quarantined_by)
-                 VALUES (?, ?, ?, NULL, ?)
-                 ON DUPLICATE KEY UPDATE previous_roles = VALUES(previous_roles), quarantined_by = VALUES(quarantined_by)`,
-                [guildId, user.id, JSON.stringify(previousRoles), interaction.user.id]
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE previous_roles = VALUES(previous_roles), quarantined_by = VALUES(quarantined_by), reason = COALESCE(VALUES(reason), reason)`,
+                [guildId, user.id, JSON.stringify(previousRoles), reason, interaction.user.id]
             );
 
             if (rolesToRemove.size > 0) {

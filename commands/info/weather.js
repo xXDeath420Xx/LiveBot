@@ -157,7 +157,7 @@ async function handleWeatherCheck(interaction, subcommand) {
                 { name: 'Zone ID', value: location.zone_code || 'Unknown', inline: true },
                 { name: 'County ID', value: location.county_id || 'N/A', inline: true }
             )
-            .setFooter({ text: 'You\'ll be mentioned when alerts affect your area' });
+            .setFooter({ text: 'You\'ll get a DM when an alert covers your area' });
 
         return interaction.reply({ embeds: [embed], ephemeral: true });
 
@@ -178,7 +178,7 @@ async function handleWeatherCheck(interaction, subcommand) {
         await weatherManager.configureGuild(interaction.guild.id, enabled);
 
         return interaction.reply({
-            content: `✅ Weather alerts ${enabled ? 'enabled' : 'disabled'} for this server.${enabled ? '\n\nAlerts will be posted in channels named `weather`, `alerts`, `emergency`, or `general`.' : ''}`,
+            content: `✅ Weather alerts ${enabled ? 'enabled' : 'disabled'} for this server.${enabled ? '\n\nMembers who save a location with `/weather check setlocation` get alerts for their area by DM.' : ''}`,
             ephemeral: true
         });
     }

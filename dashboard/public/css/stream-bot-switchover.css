@@ -1,0 +1,23 @@
+/* "Switch over from Firebot or Streamer.bot" (views/stream-bot/switchover.ejs). Colours and spacing come from the site tokens
+   (cf-ui.css), so Dark, Light and Sand all work. */
+.sbs-back { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); }
+.sbs-back a { color: var(--cf-accent-fg); text-decoration: none; }
+.sbs-back a:hover { text-decoration: underline; }
+.sbs-studio { margin: 0; }
+.sbs-group { margin: 0; padding: var(--cf-3) 0; border-top: 1px solid var(--cf-border); }
+.sbs-group:first-child { border-top: 0; }
+.sbs-group-title { margin: 0 0 var(--cf-1); font-weight: 600; color: var(--cf-text); }
+.sbs-group-desc { margin: 0 0 var(--cf-2); color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+.sbs-list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--cf-1); }
+.sbs-list li { color: var(--cf-text); font-size: var(--cf-text-sm); overflow-wrap: anywhere; }
+.sbs-list .sbs-meta { color: var(--cf-text-2); }
+.sbs-attn { display: grid; gap: var(--cf-2); margin: 0; padding: 0; list-style: none; }
+.sbs-attn li { padding: var(--cf-2) var(--cf-3); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2); }
+.sbs-attn label { display: flex; gap: var(--cf-2); align-items: flex-start; font-weight: 600; color: var(--cf-text); }
+.sbs-attn ul { margin: var(--cf-1) 0 0 1.6em; padding: 0; color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+.sbs-obs { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+.sbs-obs th, .sbs-obs td { padding: var(--cf-1) var(--cf-2); text-align: left; border-bottom: 1px solid var(--cf-border); color: var(--cf-text); vertical-align: top; }
+.sbs-obs th { color: var(--cf-text-2); font-weight: 600; }
+.sbs-obs-wrap { overflow-x: auto; }
+.sbs-counts { margin: 0; color: var(--cf-text); }
+.sbs-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

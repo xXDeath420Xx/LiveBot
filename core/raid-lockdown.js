@@ -221,7 +221,7 @@ export async function actOnMember(member, action, { source, reason, timeoutUntil
             case 'quarantine': {
                 const q = await quarantineConfig(guild.id);
                 const role = q?.is_enabled && q.quarantine_role_id ? guild.roles.cache.get(q.quarantine_role_id) : null;
-                if (!role) return { outcome: 'failed', problem: 'Quarantine is not set up (Security page: quarantine role)' };
+                if (!role) return { outcome: 'failed', problem: 'Quarantine is not set up (Quarantine page: quarantine role)' };
                 if ((cannot = whyCannot(guild, 'quarantine', { member, role }))) return manual('quarantine', cannot);
                 // Same record /admin mod quarantine keeps, so the normal release gives nothing back but works.
                 await pool.execute(

@@ -15,7 +15,7 @@
 import pool from '../utils/db.js';
 import { invalidateCommandCache } from './custom-command-handler.js';
 import { validateTemplate, MESSAGE_MAX } from './custom-command-vars.js';
-import { isReservedName } from './universal-commands.js';
+import { isReservedName, resolve as resolveChatPath } from './universal-commands.js';
 import { getCommand } from './prefix-command-registry.js';
 
 export const NAME_MAX = 30;
@@ -37,7 +37,8 @@ export function checkName(name, { currentName = null } = {}) {
     if (!NAME_RE.test(clean)) {
         return { error: `Name must be 1–${NAME_MAX} characters: letters, numbers, - or _ (no prefix symbol).` };
     }
-    if (clean !== currentName && (getCommand(clean) || isReservedName(clean))) {
+    // resolveChatPath: a bare word chat already answers (e.g. "welcome" runs /manage welcome) shadows it too (H-805).
+    if (clean !== currentName && (getCommand(clean) || isReservedName(clean) || resolveChatPath([clean])?.path)) {
         return { error: `"${clean}" is already a built-in command or shortcut — pick another name.` };
     }
     return { name: clean };

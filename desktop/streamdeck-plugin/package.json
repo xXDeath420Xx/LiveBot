@@ -1,0 +1,26 @@
+{
+  "name": "certifried-streamdeck-plugin",
+  "version": "0.2.6",
+  "private": true,
+  "description": "Stream Deck plugin for CertiFried Studio: run automations, switch scenes, toggle sources, mute inputs, counters, sounds and light presets.",
+  "author": "CertiFried",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "test": "node --test --test-force-exit \"test/*.test.js\"",
+    "icons": "python scripts/make-icons.py",
+    "validate": "streamdeck validate com.certifried.studio.sdPlugin --no-update-check",
+    "pack": "npm run build && streamdeck pack com.certifried.studio.sdPlugin --output dist --force --no-update-check"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "3.0.4",
+    "ws": "8.22.1"
+  },
+  "devDependencies": {
+    "@elgato/cli": "1.10.4",
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "rollup": "4.67.5"
+  }
+}

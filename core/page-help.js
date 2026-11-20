@@ -210,7 +210,7 @@ export const PAGE_HELP = Object.freeze({
     games: { help: 'Your own trivia questions and hangman words, mixed in with the built-in ones when members play.' },
     counting: { help: 'Channels where members count up one number at a time, and what happens when someone gets it wrong.' },
     minigames: { help: 'Small games that run in the background: Cat Bot, Grow a Tree and timezone conversion.' },
-    owo: { help: 'An animal-collecting game with hunting, a zoo, teams, weapons and battles.' },
+    owo: { help: 'Critters, the /owo game: catch critters, build teams, forge weapons and battle, for acorns that stay apart from the server economy.' },
     rpg: { help: 'A text adventure with characters, quests and battles that members play in chat.' },
     cah: { help: 'Rules and defaults for Cards Against Humanity games started with /cah start: points to win, rounds, the turn timer, blank cards, and whether NSFW decks are allowed.' },
     emojihunt: { help: 'The bot hides an emoji on recent messages and the first member to react finds it, for points, coins or XP.' },

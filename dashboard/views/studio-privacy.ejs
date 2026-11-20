@@ -4,6 +4,7 @@
   logger.js (redaction, 1 MB x 5), engine-client.js (hello, state, event, request), main.js (fitState, defaultDeviceName,
   syncSounds, openExternal), obs.js (events, replay file name only), voice.js, updater.js, obs-config.js, vod-safe.js,
   package.json (dependencies), renderer/index.html (Content-Security-Policy), and electron-updater 6.8.11 AppUpdater.js
+  (Phase 5, 0.2.6: lights/*.js, voicemeeter.js, bridge-server.js, sandbox.js, main.js devicesReport() and bridgeHandlers()), and
   (x-user-staging-id; from 0.2.5 updater.js blankStagingId() sends the nil UUID and deletes .updaterId, H-767). Server side: migrations 454-457, core/stream-bot/studio.js (settings.studio), privacy.js.
   tests/legal-studio-pages.test.js re-checks the facts that can drift (defaults, log size, dependencies, retention).
 %>
@@ -47,7 +48,8 @@
                     <li>Studio has no analytics, telemetry, crash reporting or advertising code.</li>
                     <li>Your OBS password and your microphone audio never leave your PC.</li>
                     <li>Studio tells CertiFried the names of your OBS scenes, sources, audio sources and filters, and of your sounds, so the dashboard can offer them in the automation editor. It never sends video, audio or the contents of your files.</li>
-                    <li>Studio connects to certifriedmultitool.com, to OBS on your PC, and to web addresses you put in a Play a sound action. Nothing else.</li>
+                    <li>Studio connects to certifriedmultitool.com, to OBS on your PC, and to web addresses you put in a Play a sound action. Only if you turn them on: to lights on your home network and Logitech Litra lights on USB (after you choose Find lights), to Voicemeeter on this PC, and to the CertiFried Stream Deck plugin on this PC. Nothing else.</li>
+                    <li>Light pairing tokens, your lights' network addresses and the Stream Deck token stay on your PC.</li>
                 </ul>
 
                 <h2 id="on-your-pc">Kept on your PC</h2>
@@ -55,8 +57,8 @@
                 <div class="cfs-table-wrap"><table class="cfs-table-stack">
                     <thead><tr><th>What</th><th>Where</th><th>How it is protected</th></tr></thead>
                     <tbody>
-                        <tr><td>Settings: server address, this PC's device name, OBS address and port, output device and volume, hotkeys, voice options and phrases, app options</td><td data-label="Where"><code>settings.json</code></td><td data-label="Protection">Your Windows account's folder permissions</td></tr>
-                        <tr><td>Device token (from pairing) and OBS WebSocket password</td><td data-label="Where"><code>secrets.json</code></td><td data-label="Protection">Encrypted with Windows' own protection for your account (DPAPI). Never stored in plain text. See the note below.</td></tr>
+                        <tr><td>Settings: server address, this PC's device name, OBS address and port, output device and volume, hotkeys, voice options and phrases, app options; the lights Studio found (name, model, network address, what each can do), each Hue bridge's certificate fingerprint, whether Voicemeeter control and the Stream Deck connection are on, and the Stream Deck port</td><td data-label="Where"><code>settings.json</code></td><td data-label="Protection">Your Windows account's folder permissions</td></tr>
+                        <tr><td>Device token (from pairing), OBS WebSocket password, the pairing tokens of your Hue bridges and Nanoleaf panels, and the Stream Deck token</td><td data-label="Where"><code>secrets.json</code></td><td data-label="Protection">Encrypted with Windows' own protection for your account (DPAPI). Never stored in plain text. See the note below.</td></tr>
                         <tr><td>Fallback key</td><td data-label="Where"><code>local-key.bin</code> (only while DPAPI is not working)</td><td data-label="Protection">A random key, readable only by your Windows user. Deleted once DPAPI works again.</td></tr>
                         <tr><td>Log files</td><td data-label="Where"><code>logs\studio.log</code> and up to <%= _f.logKeep %> older files of <%= _f.logMb %> MB each</td><td data-label="Protection">Device tokens, pairing codes, passwords and authorisation headers are removed before anything is written</td></tr>
                         <tr><td>Your own sounds, and copies of the sounds you uploaded to the dashboard</td><td data-label="Where"><code>Sounds</code> and <code>Dashboard sounds</code></td><td data-label="Protection">Folder permissions</td></tr>
@@ -76,11 +78,12 @@
                         <tr><td>The pairing code or sign-in request, a device name (<code><%= _f.deviceName %></code> unless you type another), Studio's version and what it can do (OBS, sound, hotkeys)</td><td data-label="When">Once, when you pair</td><td data-label="Why">Add this PC to your Devices list. The PC name is only used as the default device name.</td></tr>
                         <tr><td>The device token, and a small heartbeat</td><td data-label="When">On connect, then every 20 seconds or so</td><td data-label="Why">Prove the connection is yours and notice when it drops</td></tr>
                         <tr><td>OBS report: whether OBS is connected, its version, studio mode, the scene on air, the names of your scenes, of the sources in each, of your audio and other sources (with their type), of your filters, and the names of your sounds</td><td data-label="When">When it changes</td><td data-label="Why">Suggest these names in the automation editor and show the scene on air on Devices</td></tr>
-                        <tr><td>VOD protection status: on or off, the reason, which tracks are the live and VOD tracks, whether OBS is streaming or recording</td><td data-label="When">When it changes</td><td data-label="Why">Song requests play only while your VOD is protected</td></tr>
+                        <tr><td>VOD protection status: on or off and the reason (including that song requests are off, when Studio leaves OBS alone), which tracks are the live and VOD tracks, whether OBS is streaming or recording</td><td data-label="When">When it changes</td><td data-label="Why">Song requests play only while your VOD is protected</td></tr>
+                        <tr><td>Device report: the name, model and kind of each light Studio found, what it can do (colour, white, brightness) and its scene and effect names; Voicemeeter's type and version, its strip and bus labels, whether Macro Buttons is running and the names of the settings files in Documents\Voicemeeter; whether the Stream Deck connection is on and how many key pads are connected. Each light is named by an id made from its hardware id (its MAC address, serial number or the bridge's id), so automations keep working when its network address changes. Never a network address, a token or a file's contents</td><td data-label="When">When it changes, with the OBS report</td><td data-label="Why">Offer your lights, presets, strips and buses in the automation editor and on the Devices page</td></tr>
                         <tr><td>OBS events: scene changed (with the scene names), streaming, recording, replay buffer and virtual camera started or stopped, and the file name of a saved replay (not its folder)</td><td data-label="When">As they happen</td><td data-label="Why">They can start your automations</td></tr>
                         <tr><td>A recognised voice phrase and how confident the match was</td><td data-label="When">When you say one of your phrases</td><td data-label="Why">Start the automation it belongs to</td></tr>
                         <tr><td>The result of each action: done or failed, with a short reason and small details (the scene switched to, a screenshot's file name)</td><td data-label="When">After each action</td><td data-label="Why">Your Run history</td></tr>
-                        <tr><td>Requests for your automation list, voice phrases, sound list, dock addresses and the music player address; downloads of your dashboard sounds</td><td data-label="When">On connect and when they change</td><td data-label="Why">Hotkeys, voice commands, sounds, docks and song requests</td></tr>
+                        <tr><td>Requests for your automation list (which also says whether song requests are on), voice phrases, sound list, dock addresses, the music player address, your light presets and your channel counters; applying a light preset or changing a counter from a Stream Deck key; downloads of your dashboard sounds</td><td data-label="When">On connect and when they change</td><td data-label="Why">Hotkeys, voice commands, sounds, docks and song requests</td></tr>
                         <tr><td>Update check: a request for <code>latest.yml</code>. No ID that tells your PC apart: from 0.2.5 the installed copy's update component (electron-updater) sends the same all-zero ID from every PC instead of a random one from <code>.updaterId</code> (CertiFried does not use staged roll-outs). Versions before 0.2.5 sent that random ID; CertiFried never read or stored it. The portable copy sends no ID.</td><td data-label="When">Shortly after start, then every <%= _f.updateHours %> hours, unless you turn it off</td><td data-label="Why">Offer new versions</td></tr>
                     </tbody>
                 </table></div>
@@ -88,6 +91,7 @@
 
                 <h2 id="never-leaves">Never leaves your PC</h2>
                 <ul>
+                    <li>The pairing tokens of your Hue bridges and Nanoleaf panels, your lights' network addresses, and the Stream Deck token.</li>
                     <li>Your OBS WebSocket password. Use my OBS settings reads OBS's WebSocket settings file only when you click it, and stores the password like any other secret.</li>
                     <li>Microphone audio. Voice commands are recognised by Windows on your PC; Studio passes the audio straight to the recogniser and records nothing. The microphone is off until you turn it on.</li>
                     <li>Your log files, unless you send them to support yourself (Settings, Open log folder).</li>
@@ -96,7 +100,7 @@
                 </ul>
 
                 <h2 id="no-telemetry">No telemetry</h2>
-                <p>Studio contains no analytics, usage tracking, crash reporting or advertising code. What we checked: its only dependencies are electron-updater (updates), obs-websocket-js (OBS), uiohook-napi (pressing and listening for keys) and ws (the connection to CertiFried); its window is not allowed to load anything from the internet; and the only addresses in its code are certifriedmultitool.com and OBS on your PC. A sound action you write with an https address makes Studio download that address, which the site behind it can see. Errors are written to your local log and nowhere else. The source code is public, so you can check this yourself.</p>
+                <p>Studio contains no analytics, usage tracking, crash reporting or advertising code. What we checked: its only dependencies are electron-updater (updates), obs-websocket-js (OBS), uiohook-napi (pressing and listening for keys), ws (the connection to CertiFried and to the Stream Deck plugin), multicast-dns (finding lights on your network), node-hid (Logitech Litra over USB) and koffi (calling Voicemeeter's own Remote API on your PC); its window is not allowed to load anything from the internet; and the only addresses in its code are certifriedmultitool.com, OBS on your PC, the Stream Deck connection on 127.0.0.1, and, after you choose Find lights, the local network searches the light makers document (Govee's LAN discovery, mDNS for Hue, Nanoleaf and Elgato, LIFX's LAN broadcast) and the lights that answer. A sound action you write with an https address makes Studio download that address, which the site behind it can see. Errors are written to your local log and nowhere else. The source code is public, so you can check this yourself.</p>
 
                 <h2 id="on-the-server">Kept on the server</h2>
                 <div class="cfs-table-wrap"><table class="cfs-table-stack">
@@ -109,6 +113,7 @@
                         <tr><td>Run history</td><td data-label="How long">30 days</td></tr>
                         <tr><td>Pairing codes (as hashes; each works for 10 minutes)</td><td data-label="How long">1 day</td></tr>
                         <tr><td>Sounds you upload to the dashboard</td><td data-label="How long">Until you delete them</td></tr>
+                        <tr><td>The latest device report (lights, Voicemeeter, Stream Deck; replaced by each new one)</td><td data-label="How long">Until you delete your data</td></tr>
                     </tbody>
                 </table></div>
                 <p>The periods come from the retention table the server enforces every night. <a href="/legal/data">Data we collect</a> shows the live values for everything CertiFried keeps.</p>
@@ -123,18 +128,19 @@
 
                 <h2 id="unpair">Unpair, revoke, uninstall</h2>
                 <ul>
-                    <li><strong>Revoke</strong>: on the dashboard, Stream bot, <a href="/stream/bot/devices">Devices</a>, choose Revoke next to the PC. It is disconnected at once and its token stops working. Dock keys are revoked the same way.</li>
+                    <li><strong>Revoke</strong>: on the dashboard, Stream bot, <a href="/stream/bot/devices">Devices</a>, choose Revoke next to the PC. It is disconnected at once and its token stops working; the revoked entry is deleted 30 days later. <strong>Remove</strong> disconnects it and deletes it at once. Dock keys are revoked and removed the same way.</li>
                     <li><strong>Unpair</strong>: in Studio, Settings, Unpair this PC. The token is deleted from your PC. Revoke it on Devices too.</li>
                     <li><strong>Uninstall</strong>: Windows Settings, Apps. Uninstalling leaves your settings so a reinstall keeps them; to remove everything, also delete <code><%= _f.dataDir %></code> and <code><%= _f.screenshotsDir %></code>. Backups Studio made in OBS's folder end in <code>.certifried-backup-&lt;time&gt;</code> and can be deleted.</li>
                 </ul>
 
                 <h2 id="third-parties">Third parties</h2>
-                <p>Studio itself talks to no third-party service, except a web address you put in a Play a sound action. Voice recognition uses Windows' built-in offline recogniser. Our website is served through Cloudflare, so Studio's connections to certifriedmultitool.com pass through Cloudflare. What the CertiFried server shares with Twitch, Kick, tip services and music services is in the <a href="/privacy#information-sharing">Privacy Policy</a>.</p>
+                <p>Studio itself talks to no third-party service, except a web address you put in a Play a sound action. Lights are controlled on your own network and USB, not through the makers' clouds; if you add a Govee or LIFX cloud key on the dashboard, the CertiFried server (not Studio) uses it to change those lights through Govee's or LIFX's service. Voice recognition uses Windows' built-in offline recogniser. Our website is served through Cloudflare, so Studio's connections to certifriedmultitool.com pass through Cloudflare. What the CertiFried server shares with Twitch, Kick, tip services and music services is in the <a href="/privacy#information-sharing">Privacy Policy</a>.</p>
 
                 <h2 id="changes">Changes to this page</h2>
                 <p>When Studio starts sending something new, this page changes before the version that sends it is published.</p>
                 <ul>
                     <li>2026-11-19: First version, for Studio 0.2.4.</li>
+                    <li>2026-11-19: Studio 0.2.6: lights, Voicemeeter and the Stream Deck plugin (what is kept, the device report, the new dependencies), and VOD protection only while song requests are on.</li>
                 </ul>
             </div>
         </div>

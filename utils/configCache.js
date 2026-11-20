@@ -12,7 +12,9 @@ class ConfigCache {
     this.cleanupInterval = options.cleanupInterval || 30000; // Cleanup every 30s
 
     // Start automatic cleanup
+    // unref: housekeeping only; it must not keep a script or test run alive on its own (H-796)
     this.cleanupTimer = setInterval(() => this.cleanup(), this.cleanupInterval);
+    this.cleanupTimer.unref?.();
 
     logger.info('[ConfigCache] Initialized', { ttl: this.ttl, maxSize: this.maxSize });
   }

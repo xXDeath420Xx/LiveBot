@@ -1,79 +1,78 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- Static page on the CertiFried site frame. The header and footer are copies of
+     views/partials/site-header.ejs and site-footer.ejs (signed-out variant); keep them in step. -->
+<html lang="en" data-theme="dark" data-density="comfortable" data-style="cards">
 <head>
+    <script>
+    // Theme before first paint (same as views/partials/site-head.ejs for signed-out visitors): the choice made
+    // with the footer's theme switch, from localStorage; with none, Dark. Static page: no server value.
+    (function () {
+        try {
+            var d = document.documentElement;
+            var t = localStorage.getItem('ui-theme'), n = localStorage.getItem('ui-density');
+            if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t);
+            if (n && /^[a-z]{3,12}$/.test(n)) d.setAttribute('data-density', n);
+        } catch (e) { /* storage disabled: Dark */ }
+    })();
+    </script>
+    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Havendock Mods - Installation Guide</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #0e0e0e; color: #eee; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; line-height: 1.7; }
-
-        a { color: #2980b9; text-decoration: none; }
-        a:hover { color: #3498db; text-decoration: underline; }
-
-        .header { background: linear-gradient(135deg, #141414 0%, #1a2a1a 100%); border-bottom: 1px solid #27ae60; padding: 32px 0; text-align: center; }
-        .header h1 { font-size: 2rem; font-weight: 800; letter-spacing: 2px; }
-        .header h1 span { color: #27ae60; }
-        .header p { color: #888; font-size: 1rem; margin-top: 6px; }
-        .header nav { margin-top: 16px; }
-        .header nav a { color: #27ae60; margin: 0 12px; font-weight: 600; font-size: 0.95rem; }
-        .header nav a:hover { color: #2ecc71; text-decoration: none; }
-
-        .container { max-width: 860px; margin: 0 auto; padding: 40px 20px 60px; }
-
-        h2 { font-size: 1.5rem; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #333; color: #eee; }
-        h2 span { color: #27ae60; }
-        h3 { font-size: 1.15rem; margin: 28px 0 10px; color: #ddd; }
-
-        p { color: #bbb; margin-bottom: 14px; }
-
-        .step-list { counter-reset: step; list-style: none; padding: 0; }
-        .step-list > li { counter-increment: step; position: relative; padding: 18px 20px 18px 70px; background: #1a1a1a; border: 1px solid #252525; border-radius: 10px; margin-bottom: 12px; }
-        .step-list > li::before { content: counter(step); position: absolute; left: 18px; top: 16px; width: 36px; height: 36px; background: #27ae60; color: #fff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-        .step-list > li strong { color: #eee; }
-
-        code { background: #252525; padding: 2px 8px; border-radius: 4px; font-size: 0.9rem; color: #27ae60; font-family: 'Consolas', 'Courier New', monospace; }
-
-        .code-block { background: #141414; border: 1px solid #333; border-radius: 8px; padding: 16px 20px; margin: 12px 0 16px; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; color: #ccc; line-height: 1.6; }
-        .code-block .comment { color: #555; }
-        .code-block .path { color: #27ae60; }
-
-        .callout { background: #1e1e1e; border-left: 4px solid #27ae60; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 16px 0; }
-        .callout.warning { border-left-color: #f39c12; }
-        .callout.info { border-left-color: #2980b9; }
-        .callout strong { color: #eee; }
-
-        .method-card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; margin: 16px 0; }
-        .method-card h3 { margin-top: 0; color: #27ae60; }
-
-        .key-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-        .key-table th { text-align: left; padding: 10px 14px; background: #1a1a1a; color: #888; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; }
-        .key-table td { padding: 10px 14px; border-bottom: 1px solid #1e1e1e; }
-        .key-table td:first-child { color: #eee; font-weight: 600; }
-        .key-table td:nth-child(2) { font-family: 'Consolas', monospace; color: #27ae60; }
-        .key-table td:nth-child(3) { color: #888; font-size: 0.9rem; }
-        .key-table tr:hover { background: #151515; }
-
-        .faq dt { color: #eee; font-weight: 600; font-size: 1.05rem; margin: 20px 0 6px; cursor: default; }
-        .faq dd { color: #999; margin-bottom: 12px; padding-left: 16px; border-left: 2px solid #333; }
-
-        .footer { text-align: center; padding: 24px; color: #555; font-size: 0.85rem; border-top: 1px solid #222; }
-
-        @media (max-width: 600px) { .step-list > li { padding-left: 58px; } .step-list > li::before { left: 12px; width: 30px; height: 30px; font-size: 0.95rem; } }
-    </style>
+    <meta name="darkreader-lock">
+    <title>Installation guide · Havendock mods · CertiFried</title>
+    <meta name="description" content="How to install, use and remove the Havendock mods: the mod manager, manual installs, hotkeys and troubleshooting.">
+    <meta property="og:site_name" content="CertiFried">
+    <meta property="og:title" content="Installation guide · Havendock mods · CertiFried">
+    <meta property="og:description" content="How to install, use and remove the Havendock mods: the mod manager, manual installs, hotkeys and troubleshooting.">
+    <meta property="og:image" content="https://certifriedmultitool.com/images/CertiFried.png">
+    <link rel="canonical" href="https://certifriedmultitool.com/Havendock-Mods/guide.html"><meta property="og:url" content="https://certifriedmultitool.com/Havendock-Mods/guide.html">
+    <meta name="theme-color" content="#0e0f11">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="stylesheet" href="/css/a11y.css">
+    <link rel="stylesheet" href="/css/themes.css">
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <link rel="stylesheet" href="/css/cf-site.css">
+    <link rel="stylesheet" href="/Havendock-Mods/havendock.css">
 </head>
-<body>
-
-<div class="header">
-    <h1>HAVENDOCK <span>MODS</span></h1>
-    <p>Complete Installation &amp; Usage Guide</p>
-    <nav>
-        <a href="./">Downloads</a>
-        <a href="guide.html">Guide</a>
+<body class="cfs-body">
+<a class="skip-to-content" href="#main-content">Skip to main content</a>
+<header class="cfs-header">
+    <div class="cfs-header-inner">
+        <a class="cfs-brand" href="/"><img src="/images/CertiFried.png" alt="" width="28" height="28"><span>CertiFried</span></a>
+        <nav class="cfs-nav" aria-label="Site">
+            <a href="/">Home</a><a href="/docs">Docs</a><a href="/commands">Commands</a><a href="/status">Status</a><a href="/cards">Cards</a><a href="/cah" title="Cards Against Humanity">CAH</a><a href="/donate">Donate</a>
+        </nav>
+        <div class="cfs-actions">
+            
+                <a class="btn btn-secondary btn-sm cfs-hide-sm" href="/invite">Add to Discord</a>
+                <a class="btn btn-primary btn-sm" href="/auth/discord?returnTo=%2FHavendock-Mods%2Fguide.html">Log in</a>
+            
+            <button type="button" class="cfs-menu-btn" id="cfs-menu-btn" aria-controls="cfs-drawer" aria-expanded="false" aria-label="Menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+        </div>
+    </div>
+    <nav class="cfs-drawer" id="cfs-drawer" aria-label="Site" hidden>
+        <a href="/">Home</a><a href="/docs">Docs</a><a href="/commands">Commands</a><a href="/status">Status</a><a href="/cards">Cards</a><a href="/cah">Cards Against Humanity</a><a href="/donate">Donate</a>
+        
+            <hr>
+            <a href="/invite">Add to Discord</a>
+            <a href="/auth/discord?returnTo=%2FHavendock-Mods%2Fguide.html">Log in with Discord</a>
+        
     </nav>
-</div>
+</header>
+<script src="/js/cf-site.js"></script>
+    <main id="main-content" class="cfs-main cfs-main--narrow" tabindex="-1">
+        <div class="cfs-pagehead">
+            <h1>Havendock mods: installation guide</h1>
+            <p class="cfs-lede">Install, use and remove the mods, with every default hotkey and fixes for common problems.</p>
+        </div>
+        <nav class="hm-subnav" aria-label="Havendock mods">
+            <a href="/Havendock-Mods/">Downloads</a>
+            <a href="/Havendock-Mods/guide.html" aria-current="page">Installation guide</a>
+        </nav>
 
-<div class="container">
+        <div class="hm-guide">
 
     <!-- ============================================================ -->
     <h2><span>1.</span> Prerequisites</h2>
@@ -126,7 +125,7 @@
         <h3>Method B: Download Individual Mods (Manual)</h3>
         <p>Download only the mods you want from the <a href="./">downloads page</a>. Requires BepInEx installed manually.</p>
         <div class="callout warning">
-            <strong>BepInEx required first!</strong> Methods B and C require you to install BepInEx yourself before mods will work. Download <a href="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.Mono-win-x64-6.0.0-be.755%2B3fab71a.zip" target="_blank">BepInEx 6.0.0-be.755 (Unity Mono x64)</a> and extract the contents directly into your Havendock game folder (so <code>winhttp.dll</code> sits next to <code>Havendock.exe</code>). Run the game once to generate the <code>BepInEx/plugins/</code> folder.
+            <strong>BepInEx required first!</strong> Methods B and C require you to install BepInEx yourself before mods will work. Download <a href="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.Mono-win-x64-6.0.0-be.755%2B3fab71a.zip" target="_blank" rel="noopener">BepInEx 6.0.0-be.755 (Unity Mono x64)</a> and extract the contents directly into your Havendock game folder (so <code>winhttp.dll</code> sits next to <code>Havendock.exe</code>). Run the game once to generate the <code>BepInEx/plugins/</code> folder.
         </div>
         <ol class="step-list">
             <li><strong>Install BepInEx</strong> into your Havendock game folder (see above).</li>
@@ -151,12 +150,12 @@
         <h3>Method C: All Mods Pack (Manual)</h3>
         <p>Get everything at once. Also requires BepInEx installed manually.</p>
         <div class="callout warning">
-            <strong>BepInEx required first!</strong> Same as Method B — install <a href="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.Mono-win-x64-6.0.0-be.755%2B3fab71a.zip" target="_blank">BepInEx 6.0.0-be.755 (Unity Mono x64)</a> into your game folder before extracting mods.
+            <strong>BepInEx required first!</strong> Same as Method B — install <a href="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.Mono-win-x64-6.0.0-be.755%2B3fab71a.zip" target="_blank" rel="noopener">BepInEx 6.0.0-be.755 (Unity Mono x64)</a> into your game folder before extracting mods.
         </div>
         <ol class="step-list">
             <li><strong>Install BepInEx</strong> into your Havendock game folder.</li>
-            <li><strong>Download "All 31 Mods"</strong> from the <a href="./">downloads page</a>.</li>
-            <li><strong>Extract</strong> into <code>Havendock/BepInEx/plugins/</code>. You should see 31 folders, one per mod.</li>
+            <li><strong>Download "All 33 mods"</strong> from the <a href="./">downloads page</a>.</li>
+            <li><strong>Extract</strong> into <code>Havendock/BepInEx/plugins/</code>. You should see 33 folders, one per mod.</li>
             <li><strong>Launch the game.</strong> All mods load. Disable any you don't want by deleting the folder.</li>
         </ol>
     </div>
@@ -176,7 +175,7 @@
 
     <h3>Settings Editor</h3>
     <p>When you select an installed mod, its BepInEx config file is parsed and displayed as editable controls:</p>
-    <ul style="color: #bbb; padding-left: 24px; margin-bottom: 16px;">
+    <ul class="hm-list">
         <li><strong>Checkboxes</strong> for on/off toggles (e.g., EnableAutoReplant)</li>
         <li><strong>Sliders</strong> for numbers with ranges (e.g., SeagullCap: 1-200)</li>
         <li><strong>Dropdowns</strong> for key bindings and enum values</li>
@@ -196,7 +195,7 @@
 
     <p>All hotkeys are configurable via the mod manager or BepInEx config files. These are the defaults:</p>
 
-    <table class="key-table">
+    <div class="key-scroll"><table class="key-table">
         <thead><tr><th>Mod</th><th>Key</th><th>Action</th></tr></thead>
         <tbody>
             <tr><td>Audio Toggles</td><td>;</td><td>Toggle music on/off</td></tr>
@@ -227,7 +226,7 @@
             <tr><td>Building Skins</td><td>\</td><td>Color picker for hovered building</td></tr>
             <tr><td>Spell Quick Cast</td><td>6 / 7 / 8 / 9</td><td>Cast assigned wizard spells</td></tr>
         </tbody>
-    </table>
+    </table></div>
 
     <div class="callout info">
         <strong>No conflicts:</strong> All default hotkeys were chosen to avoid conflicting with Havendock's built-in controls (WASD, E, R, F, N, Tab, etc. are all avoided).
@@ -247,7 +246,7 @@
 
     <h3>Island Compass</h3>
     <p>Only appears when you're in a boat. Shows two navigation aids (configurable in settings):</p>
-    <ul style="color: #bbb; padding-left: 24px; margin-bottom: 16px;">
+    <ul class="hm-list">
         <li><strong>Compass bar</strong> — Skyrim-style horizontal bar at the top showing island markers with directional positioning</li>
         <li><strong>Minimap</strong> — Circular minimap in the bottom-right showing island positions relative to you</li>
     </ul>
@@ -300,11 +299,107 @@
     <h3>Remove BepInEx entirely</h3>
     <p>Delete the <code>BepInEx/</code> folder, <code>winhttp.dll</code>, <code>doorstop_config.ini</code>, and <code>.doorstop_version</code> from your game folder. Or use Steam's "Verify integrity of game files" to restore the original state.</p>
 
-</div>
-
-<div class="footer">
-    <p>Built by <a href="https://certifriedmultitool.com">CertiFried</a> &mdash; <a href="./">Back to Downloads</a></p>
-</div>
-
+        </div>
+    </main>
+<footer class="cfs-footer">
+    <div class="cfs-footer-inner">
+        <div class="cfs-footer-grid">
+            <div class="cfs-footer-brand">
+                <a class="cfs-brand" href="/"><img src="/images/CertiFried.png" alt="" width="28" height="28"><span>CertiFried</span></a>
+                <p>A Discord bot for moderation, protection, stream alerts, levels, music and games, and a shared ban list for Kick. Free for every server.</p>
+            </div>
+            <div>
+                <h2>Bot</h2>
+                <ul>
+                    <li><a href="/invite">Add to Discord</a></li>
+                    <li><a href="/dashboard">Dashboard</a></li>
+                    <li><a href="/commands">Commands</a></li>
+                    <li><a href="/docs">Documentation</a></li>
+                    <li><a href="/studio">CertiFried Studio</a></li>
+                    <li><a href="/compare">Compare bots</a></li>
+                    <li><a href="/changelog">Changelog</a></li>
+                </ul>
+            </div>
+            <div>
+                <h2>Play and create</h2>
+                <ul>
+                    <li><a href="/greenhouse">Greenhouse Tycoon</a></li>
+                    <li><a href="/docs/rpg">D&amp;D guide</a></li>
+                    <li><a href="/cah">Cards Against Humanity</a></li>
+                    <li><a href="/cards">Group greeting cards</a></li>
+                    <li><a href="/stream-team">Stream team</a></li>
+                    <li><a href="/sprites">Fortnite sprites</a></li>
+                    <li><a href="/kick">Kick defender</a></li>
+                </ul>
+            </div>
+            <div>
+                <h2>Help and safety</h2>
+                <ul>
+                    <li><a href="/discord" rel="noopener">Support server</a></li>
+                    <li><a href="mailto:support@certifriedmultitool.com">Email support</a></li>
+                    <li><a href="/status">Status</a></li>
+                    <li><a href="/report">Report a user</a></li>
+                    <li><a href="/appeal">Appeal a ban</a></li>
+                    <li><a href="/scams">Scam link lookup</a></li>
+                </ul>
+            </div>
+            <div>
+                <h2>About</h2>
+                <ul>
+                    <li><a href="/donate">Donate</a></li>
+                    <li><a href="/legal">Legal and data</a></li>
+                    <li><a href="/terms">Terms of Service</a></li>
+                    <li><a href="/privacy">Privacy Policy</a></li>
+                    <li><a href="/eula">EULA</a></li>
+                    <li><a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">Source code (AGPL)</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="cfs-footer-bottom">
+            <span>&copy; 2026 CertiFried MultiTool</span>
+            <span>Every feature is free. Donations are voluntary. <a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">Source code</a> under the <a href="https://github.com/xXDeath420Xx/LiveBot/blob/dev/LICENSE" rel="noopener">AGPL-3.0-or-later</a>.</span>
+            
+            <label class="cfs-theme"><span>Theme</span>
+                <select id="cfsTheme">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="sand">Sand</option>
+                    <option value="auto">Auto (follow system)</option>
+                </select>
+            </label>
+            <script>
+            // Signed-out visitors: the theme is kept in this browser (localStorage 'ui-theme') and put on
+            // <html> before first paint by the head script (partials/site-head.ejs). Dark is the default.
+            // Signed-in users choose on the Settings page, which saves it to their account.
+            (function () {
+                var s = document.getElementById('cfsTheme'), d = document.documentElement;
+                if (!s) return;
+                var known = { dark: 1, light: 1, sand: 1, auto: 1 };
+                var cur = d.getAttribute('data-theme-mode') === 'auto' ? 'auto' : (d.getAttribute('data-theme') || 'dark');
+                if (!known[cur]) {
+                    var o = document.createElement('option');
+                    o.value = cur; o.textContent = cur.charAt(0).toUpperCase() + cur.slice(1);
+                    s.appendChild(o);
+                }
+                s.value = cur;
+                s.addEventListener('change', function () {
+                    var v = s.value;
+                    try { localStorage.setItem('ui-theme', v); } catch (e) { /* storage off: this page only */ }
+                    // The same choice as a cookie, for the one page the server themes without a template (/greenhouse).
+                    document.cookie = 'ui-theme=' + v + '; path=/; max-age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+                    if (v === 'auto') {
+                        d.setAttribute('data-theme-mode', 'auto');
+                        d.setAttribute('data-theme', window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+                    } else {
+                        d.removeAttribute('data-theme-mode');
+                        d.setAttribute('data-theme', v);
+                    }
+                });
+            })();
+            </script>
+            
+        </div>
+    </div>
+</footer>
 </body>
 </html>

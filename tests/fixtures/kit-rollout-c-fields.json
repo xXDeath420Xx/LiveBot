@@ -510,22 +510,35 @@
     },
     "utilities": {
       "ids": [
+        "arBackfill-desc",
         "arBackfill-label",
         "arBackfill-status",
         "arBackfillStart",
         "arBackfillStop",
         "autoPublisherEnabled",
+        "autoPublisherEnabled-desc",
         "autoroleBotRoles",
+        "autoroleBotRoles-desc",
         "autoroleDelay",
+        "autoroleDelay-desc",
         "autoroleIgnore",
+        "autoroleIgnore-desc",
         "autoroleRequire",
+        "autoroleRequire-desc",
         "autoroleRole",
+        "autoroleRole-desc",
         "autorolesEnabled",
+        "autorolesEnabled-desc",
         "tempChannelCategory",
         "tempChannelCreator",
         "tempChannelName",
+        "tempChannelName-desc",
         "tempChannelsEnabled",
-        "tempChannelsEnabled-desc"
+        "tempChannelsEnabled-desc",
+        "ut-pub-title",
+        "ut-roles-existing-head",
+        "ut-roles-title",
+        "ut-temp-title"
       ],
       "names": [
         "bot_roles",
@@ -537,10 +550,13 @@
         "ignore_roles",
         "is_enabled",
         "naming_template",
+        "original_creator_channel_id",
         "require_roles",
         "roles_to_assign"
       ],
-      "data": [],
+      "data": [
+        "data-kind"
+      ],
       "actions": [
         "/manage/222222222222222222/update-autopublisher",
         "/manage/222222222222222222/update-autoroles",

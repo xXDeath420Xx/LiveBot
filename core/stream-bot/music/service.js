@@ -56,12 +56,33 @@ export function createMusicService({ db, store, mstore, resolver, hub = null, in
         const d = await hub.dispatch({ profileId, runId: null, target: 'studio', capability: 'obs', actionType: 'music.prepare', params: {}, queueSeconds: 0 });
         if (d.status === 'none' || !d.id) return { ok: false, reason: 'CertiFried Studio is not connected.' };
         const until = now() + PREPARE_WAIT_MS;
-        while (now() < until) {
-            const row = await store.getDispatch(d.id).catch(() => null);
-            if (row?.status === 'acked') return row.result?.vodSafe === true ? { ok: true, vodTrack: row.result.vodTrack ?? null } : { ok: false, reason: 'Studio did not confirm VOD protection.' };
-            if (row && ['failed', 'expired'].includes(row.status)) return { ok: false, reason: String(row.error || 'Studio could not confirm VOD protection.').replace(/^vod_unsafe:\s*/, '').slice(0, 200) };
-            await sleep(PREPARE_POLL_MS);
-        }
+        // H-758: wake on the hub's onAck instead of reading the row every 200 ms. The row is still what decides (read
+        // right after registering, then on each wake), so the answers are the same; a hub without onAck polls as before.
+        let wake = null;
+        let fired = false;   // an answer that came while we were reading the row: read again instead of waiting
+        let off = () => {};
+        if (typeof hub.onAck === 'function') off = hub.onAck(d.id, () => { fired = true; const w = wake; wake = null; w?.(); });
+        try {
+            while (now() < until) {
+                fired = false;
+                const row = await store.getDispatch(d.id).catch(() => null);
+                if (row?.status === 'acked') return row.result?.vodSafe === true ? { ok: true, vodTrack: row.result.vodTrack ?? null } : { ok: false, reason: 'Studio did not confirm VOD protection.' };
+                if (row && ['failed', 'expired'].includes(row.status)) return { ok: false, reason: String(row.error || 'Studio could not confirm VOD protection.').replace(/^vod_unsafe:\s*/, '').slice(0, 200) };
+                if (typeof hub.onAck !== 'function') { await sleep(PREPARE_POLL_MS); continue; }
+                if (fired) continue;
+                await new Promise((resolve) => {
+                    const t = setTimeout(() => { wake = null; resolve(); }, Math.max(0, until - now()));
+                    t.unref?.();
+                    wake = () => { clearTimeout(t); resolve(); };
+                });
+                if (now() >= until) {
+                    // One last look, as the last poll did: an answer written right at the deadline still counts.
+                    const last = await store.getDispatch(d.id).catch(() => null);
+                    if (last?.status === 'acked') return last.result?.vodSafe === true ? { ok: true, vodTrack: last.result.vodTrack ?? null } : { ok: false, reason: 'Studio did not confirm VOD protection.' };
+                    if (last && ['failed', 'expired'].includes(last.status)) return { ok: false, reason: String(last.error || 'Studio could not confirm VOD protection.').replace(/^vod_unsafe:\s*/, '').slice(0, 200) };
+                }
+            }
+        } finally { off(); }
         return { ok: false, reason: 'Studio did not answer in time.' };
     }
 

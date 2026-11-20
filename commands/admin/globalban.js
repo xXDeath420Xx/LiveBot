@@ -6,6 +6,7 @@ import configCache from '../../utils/configCache.js';
 import pool from '../../utils/db.js';
 import { normaliseMode, normaliseThreshold, DEFAULT_THRESHOLD } from '../../core/global-ban-confidence.js';
 import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
+import { isSuperAdmin } from '../../utils/constants.js';
 
 export default {
     category: 'admin',
@@ -65,7 +66,7 @@ export default {
         // appeals — requires ModerateMembers
         .addSubcommand(sub =>
             sub.setName('appeals')
-                .setDescription('List or review pending appeals')
+                .setDescription('Review appeals: approve for this server (the CertiFried team decides for all)')
                 .addIntegerOption(opt => opt.setName('appeal_id').setDescription('Appeal ID to review'))
                 .addStringOption(opt => opt.setName('decision').setDescription('Decision on the appeal')
                     .addChoices({ name: 'Approve', value: 'approve' }, { name: 'Deny', value: 'deny' }))
@@ -300,7 +301,7 @@ async function handleAppeal(interaction, manager) {
     const embed = new EmbedBuilder()
         .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Appeal Submitted')
-        .setDescription(`Your appeal (#${result.appealId}) has been submitted and will be reviewed by moderators.`)
+        .setDescription(`Your appeal (#${result.appealId}) has been submitted. The CertiFried team decides for every server; a server's moderators can accept it for their own server.`)
         .addFields(
             { name: 'Reason', value: reason.substring(0, 1024) }
         )
@@ -310,8 +311,10 @@ async function handleAppeal(interaction, manager) {
     await interaction.editReply({ embeds: [embed] });
 }
 
+// H-802: a CertiFried super-admin decides for every server; a server's moderators approve for their server only.
 async function handleAppeals(interaction, manager) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    const team = isSuperAdmin(interaction.user.id);
+    if (!team && !interaction.member?.permissions?.has(PermissionFlagsBits.ModerateMembers)) {
         return interaction.reply({ content: 'You need the Moderate Members permission to review appeals.', ephemeral: true });
     }
 
@@ -328,36 +331,48 @@ async function handleAppeals(interaction, manager) {
             interaction.user.id,
             appealId,
             approved,
-            response || (approved ? 'Appeal approved.' : 'Appeal denied.')
+            response || (approved ? 'Appeal approved.' : 'Appeal denied.'),
+            { guild: interaction.guild }
         );
 
         if (!result.success) {
             return interaction.editReply(result.message);
         }
 
+        const local = result.scope === 'server';
         const embed = new EmbedBuilder()
             .setColor(approved ? 0x2ECC71 : 0xE74C3C)
-            .setTitle(`Appeal #${appealId} ${approved ? 'Approved' : 'Denied'}`)
-            .setDescription(approved
-                ? `The global ban for user <@${result.userId}> has been lifted.`
-                : `The appeal has been denied. The global ban remains active.`
+            .setTitle(`Appeal #${appealId} ${local ? 'approved for this server' : approved ? 'approved for every server' : 'denied for every server'}`)
+            .setDescription(local
+                ? `CertiFried no longer acts on the shared ban for <@${result.userId}> in this server${result.unbanned ? ', and their global-ban ban here was lifted' : ''}. Every other protection (raids, scam links, name filters and the rest) still applies to them. The shared ban stays for every other server, and the CertiFried team still reviews the appeal. Undo it on the dashboard: Protection Settings, "Accepted global ban appeals".`
+                : approved
+                    ? `The shared ban for <@${result.userId}> has been lifted in every server.`
+                    : `The appeal has been denied. The shared ban stays in every server.`
             )
             .setTimestamp();
 
         return interaction.editReply({ embeds: [embed] });
     }
 
-    // List pending appeals
-    const [appeals] = await (await import('../../utils/db.js')).default.execute(
-        `SELECT a.*, e.user_id as banned_user_id, e.severity, e.category
+    // List pending appeals. The team sees every appeal; a server sees only appeals from people tied to it
+    // (a network signal from this server, a member, or banned here): appeal texts are not shared network-wide.
+    const [pending] = await (await import('../../utils/db.js')).default.execute(
+        `SELECT a.*, e.user_id as banned_user_id, e.severity, e.category,
+                EXISTS(SELECT 1 FROM global_ban_action_log l WHERE l.user_id = a.user_id AND l.guild_id = ?) AS here
          FROM global_ban_appeals a
          JOIN global_ban_entries e ON a.global_ban_entry_id = e.id
          WHERE a.status IN ('pending', 'under_review')
-         ORDER BY a.created_at ASC LIMIT 10`
+         ORDER BY a.created_at ASC LIMIT ${team ? 10 : 200}`,
+        [String(interaction.guildId || '')]
     );
+    let appeals = pending;
+    if (!team) {
+        const bans = await interaction.guild?.bans?.fetch().catch(() => null);
+        appeals = pending.filter(a => Number(a.here) || interaction.guild?.members?.cache?.has(String(a.user_id)) || bans?.has?.(String(a.user_id))).slice(0, 10);
+    }
 
     if (appeals.length === 0) {
-        return interaction.editReply('No pending appeals.');
+        return interaction.editReply(team ? 'No pending appeals.' : 'No pending appeals from people connected to this server.');
     }
 
     const embed = new EmbedBuilder()
@@ -369,7 +384,9 @@ async function handleAppeals(interaction, manager) {
                    `Reason: ${a.reason.substring(0, 100)}${a.reason.length > 100 ? '...' : ''}\n` +
                    `Submitted: <t:${ts}:R>`;
         }).join('\n\n'))
-        .setFooter({ text: 'Use /globalban appeals <id> <approve|deny> [response] to review' })
+        .setFooter({ text: team
+            ? 'Your decision applies to every server: /globalban appeals <id> <approve|deny> [response]'
+            : 'Approve applies to this server only: /globalban appeals <id> approve [response]. The CertiFried team decides for every server.' })
         .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

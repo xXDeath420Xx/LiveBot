@@ -20,6 +20,7 @@ export default {
     .addSubcommand((s) => s.setName('skip').setDescription('Skip to the next queued episode (only when a season/queue is playing)'))
     .addSubcommand((s) => s.setName('queue').setDescription('Show queued-up episodes'))
     .addSubcommand((s) => s.setName('status').setDescription('Show what is playing'))
+    .addSubcommand((s) => s.setName('open').setDescription('Open Watch Together (the Discord Activity) in your voice channel'))
     .addSubcommand((s) => s.setName('config').setDescription('Enable Cinema and set the control role (admin)')
       .addBooleanOption((o) => o.setName('enabled').setDescription('Enable in this server').setRequired(true))
       .addRoleOption((o) => o.setName('control_role').setDescription('Role allowed to control playback')))
@@ -68,6 +69,22 @@ export default {
     const config = await getConfig(interaction.guildId);
     if (!config?.enabled) {
       return interaction.reply({ content: 'Cinema is not enabled in this server.', ephemeral: true });
+    }
+
+    // Watch Together (the Discord Activity, docs/activities.md) replaces the Go Live stream in a server whose Cinema
+    // page says so: status/stop/open here, 'play' runs the usual pickers and their Start button launches the Activity.
+    if (config.watch_mode === 'activity') {
+      const { handleMovieActivity } = await import('../../handlers/activities/launch.js');
+      const done = await handleMovieActivity(interaction, sub, config);
+      if (done !== null) return done;
+      const pick = interaction.options.getString('title');
+      if (!jf.isValidItemId(pick)) return interaction.reply({ content: 'Pick a title from the suggestions.', ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+      const { presentSelection: present } = await import('../../handlers/cinema/panel.js');
+      return present(interaction, pick);
+    }
+    if (sub === 'open') {
+      return interaction.reply({ content: 'This server plays films as a Go Live stream. An admin can switch Cinema to Watch Together on the dashboard (Music & voice, then Cinema).', ephemeral: true });
     }
     if (!(await cinema.healthy())) {
       return interaction.reply({ content: 'Cinema is temporarily unavailable.', ephemeral: true });

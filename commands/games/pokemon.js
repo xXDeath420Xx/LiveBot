@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import pool from '../../utils/db.js';
 import { displayNameFor } from '../../utils/display-name.js';
 import { themeColor } from '../../core/guild-theme.js';
+import { awardAchievement } from '../../core/achievement-hooks.js';
 
 const POKEMON_PER_PAGE = 15;
 const SHINY_CHANCE = 4096; // 1 in 4096
@@ -821,6 +822,13 @@ async function handleCatch(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
+    awardPokemonCatch(interaction, userId, guildId);
+}
+
+// Pokémon Trainer on a first catch (a starter is not a catch); Pokémon Master from the Pokédex count (H-817).
+function awardPokemonCatch(interaction, userId, guildId) {
+    awardAchievement(interaction, 'pokemon_trainer');
+    awardAchievement(interaction, 'pokemon_master', { total: () => pool.execute('SELECT COALESCE(SUM(times_caught), 0) AS n FROM user_pokedex WHERE user_id = ? AND guild_id = ?', [userId, guildId]).then(([[r]]) => Number(r.n)) });
 }
 
 // LIST HANDLER
@@ -1307,6 +1315,7 @@ async function handleBattle(interaction) {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [guildId, challenger.id, opponent.id, p1.user_pokemon_id, p2.user_pokemon_id, winnerId, battleLog.join('\n')]
     );
+    awardAchievement(interaction, 'duel_winner', { userId: winnerId });
 
     const embed = new EmbedBuilder()
         .setColor(themeColor(interaction.guildId, 'danger'))
@@ -1861,6 +1870,7 @@ async function handleAdventure(interaction) {
         await awardXP(result.insertId, Math.floor(Math.random() * 50) + 25);
 
         embed.setDescription(`You encountered a wild ${isShiny ? '✨ **SHINY** ' : ''}**${pokemon.name}** (Lv.${level}) and caught it!`);
+        awardPokemonCatch(interaction, userId, guildId);
     } else if (outcome === 'pokeball') {
         const amount = Math.floor(Math.random() * 5) + 3;
         await pool.execute(

@@ -55,7 +55,8 @@ test('Studio facts on the pages match the app', () => {
 
 test('no telemetry: dependencies, source, window policy and the OBS report are what /studio/privacy says', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(studio, 'package.json'), 'utf8'));
-    const allowed = ['electron-updater', 'obs-websocket-js', 'uiohook-napi', 'ws'];
+    // 0.2.6 (Phase 5): multicast-dns (finding lights), node-hid (Logitech Litra over USB), koffi (Voicemeeter's Remote API).
+    const allowed = ['electron-updater', 'obs-websocket-js', 'uiohook-napi', 'ws', 'multicast-dns', 'node-hid', 'koffi'];
     for (const dep of Object.keys(pkg.dependencies || {})) {
         assert.ok(allowed.includes(dep), `new Studio dependency ${dep}: review it and update /studio/privacy ("No telemetry") first`);
     }
@@ -75,6 +76,25 @@ test('no telemetry: dependencies, source, window policy and the OBS report are w
     const musicKeys = (fit.match(/state\.music = \{([^}]*)\}/) || [])[1].split(',').map((s) => s.split(':')[0].trim()).sort();
     assert.deepEqual(musicKeys, ['checkedAt', 'live', 'liveTrack', 'reason', 'sourceReady', 'vodSafe', 'vodTrack'].sort(), 'VOD status fields changed: update /studio/privacy');
     assert.ok(/sounds: sounds\.slice\(0, 500\)/.test(fit), 'only sound names are reported');
+    // Phase 5 device report (main.js devicesReport): exactly the fields /studio/privacy lists, never an address or a token.
+    assert.ok(fit.includes('state.devices = devicesReport();'), 'the device report goes with the OBS report');
+    const dev = main.slice(main.indexOf('function devicesReport('), main.indexOf('function lightsView('));
+    const lightKeys = (dev.match(/map\(\(d\) => \(\{ ([^}]*?),\s*caps:/) || [])[1].split(',').map((x) => x.split(':')[0].trim()).sort();
+    assert.deepEqual(lightKeys, ['driver', 'id', 'kind', 'model', 'name', 'needsPairing', 'online'].sort(), 'light fields changed: update /studio/privacy');
+    assert.ok(!/address|serial|token|secret/i.test(dev.replace(/\/\*\*[^]*?\*\//, '')), 'no address, token or secret in the device report');
+    assert.ok(/voicemeeter: \{ enabled:[^]*?profiles: vmInfo\?\.profiles/.test(dev) && /streamdeck: \{ enabled: [^,]*, clients:/.test(dev), 'Voicemeeter and Stream Deck parts as listed');
+    // The Stream Deck connection listens on this PC only and refuses web pages.
+    const bridge = fs.readFileSync(path.join(studio, 'src/main/bridge-server.js'), 'utf8');
+    assert.ok(bridge.includes("const HOST = '127.0.0.1';") && /origin/i.test(bridge), 'Stream Deck bridge: 127.0.0.1, Origin refused');
+    // Lights are only searched for after Find lights; Voicemeeter and the Stream Deck are off by default.
+    const { DEFAULTS: D } = require(path.join(studio, 'src/main/config.js'));
+    assert.equal(D.lights.enabled, false);
+    assert.equal(D.voicemeeter.enabled, false);
+    assert.equal(D.streamdeck.enabled, false);
+    // VOD-safe music only while song requests are on (H-771): unknown means not enforced; the minute timer waits for it.
+    assert.ok(main.includes("enforced: config.get().music.songRequests === true") && main.includes('if (obs.connected && vodSafe.enforced())'), 'VOD protection waits for song requests');
+    const vodSrc = fs.readFileSync(path.join(studio, 'src/main/vod-safe.js'), 'utf8');
+    assert.ok(vodSrc.includes('if (!enforcing) return inform();') && vodSrc.includes('async removeSource()'), 'off: read only; the source is removed only on a click');
     // Voice: only the phrase and its confidence leave the PC.
     assert.ok(main.includes("sendEvent({ type: 'voice.phrase', metadata: { phrase: text, confidence } })"), 'voice sends the phrase and confidence only');
     const obs = fs.readFileSync(path.join(studio, 'src/main/obs.js'), 'utf8');
@@ -85,7 +105,7 @@ test('no telemetry: dependencies, source, window policy and the OBS report are w
 
 test('stream bot retention on /legal/data equals the migrations, and every table row has a fallback', async () => {
     const rows = new Map();
-    for (const m of ['454_stream_bot.js', '455_stream_bot_imports.js', '457_stream_bot_music.js']) {
+    for (const m of ['454_stream_bot.js', '455_stream_bot_imports.js', '457_stream_bot_music.js', '462_stream_bot_device_retention.js', '464_stream_bot_viewers.js', '470_stream_bot_youtube.js']) {
         for (const [table, , days] of (await import(`../migrations/${m}`)).RETENTION_ROWS) rows.set(table, days);
     }
     let checked = 0;
@@ -100,7 +120,7 @@ test('stream bot retention on /legal/data equals the migrations, and every table
     }
     assert.ok(checked >= 8, `${checked} stream bot rows checked`);
     const privacy = read('dashboard/views/privacy-tailwind.ejs');
-    for (const [label, table] of [['Stream bot event log', 'stream_bot_events'], ['Stream bot run history', 'stream_bot_runs'], ['Stream bot actions sent to CertiFried Studio', 'stream_bot_dispatch_queue'], ['Stream bot pairing codes', 'stream_bot_pairing_codes'], ['Song requests (who asked', 'stream_bot_music_requests'], ['Song likes', 'stream_bot_music_likes'], ['Firebot and Streamer.bot import reports', 'stream_bot_imports']]) {
+    for (const [label, table] of [['Stream bot event log', 'stream_bot_events'], ['Stream bot run history', 'stream_bot_runs'], ['Stream bot actions sent to CertiFried Studio', 'stream_bot_dispatch_queue'], ['Stream bot pairing codes', 'stream_bot_pairing_codes'], ['Song requests (who asked', 'stream_bot_music_requests'], ['Song likes', 'stream_bot_music_likes'], ['Firebot and Streamer.bot import reports', 'stream_bot_imports'], ['Revoked stream bot devices', 'stream_bot_devices'], ['Stream bot viewer records', 'stream_bot_viewers'], ['Stream bot viewer point history', 'stream_bot_viewer_history'], ['Stream bot YouTube quota use', 'stream_bot_youtube_quota']]) {
         const i = privacy.indexOf(label);
         assert.ok(i > 0, `/privacy lists ${label}`);
         const days = rows.get(table);
@@ -161,6 +181,12 @@ test('the pages render with the source code link, AGPL wording and their key sta
     const upd = fs.readFileSync(path.join(root, 'desktop/studio/src/main/updater.js'), 'utf8');
     assert.ok(upd.includes("const NIL_UUID = '00000000-0000-0000-0000-000000000000';") && upd.includes('blankStagingId(au, userData)'), 'the app does what the page says');
     assert.ok(pages.how.includes('id="changes-to-obs"') && pages.how.includes('id="smartscreen"'), 'how it works: OBS changes and SmartScreen');
+    // H-771: the pages say the OBS changes happen only for streamers who use song requests.
+    assert.ok(pages.how.includes('only while a song request command is switched on') && pages.how.includes('Streamers who do not use song requests get no change at all'), 'how it works: song requests only');
+    assert.ok(pages.faq.includes('Only if you use song requests'), 'faq: song requests only');
+    for (const id of ['lights', 'voicemeeter', 'stream-deck']) assert.ok(pages.how.includes(`id="${id}"`), `how it works: #${id}`);
+    assert.ok(pages.privacy.includes('Device report') && pages.privacy.includes('multicast-dns') && pages.privacy.includes('node-hid') && pages.privacy.includes('koffi'), 'privacy: Phase 5 report and dependencies');
+    assert.ok(pages.privacy.includes('Never a network address, a token'), 'privacy: no addresses or tokens in the report');
     assert.ok(pages.faq.includes('id="kick-vods"') && pages.faq.includes('id="clips"') && pages.faq.includes('id="antivirus"'), 'faq: Kick VODs, clips, antivirus');
     for (const c of CATEGORIES) assert.ok(pages.data.includes(`id="${c.id}"`), `data: section ${c.id}`);
     assert.ok(pages.data.includes('No automatic deletion'), 'data: undefined retention is said honestly');
@@ -172,7 +198,7 @@ test('the legal documents cover the stream bot, Studio and song requests, keep t
     const privacy = render('privacy-tailwind', { user: null });
     const eula = render('eula-tailwind', { user: null });
     for (const [name, html] of [['terms', terms], ['privacy', privacy], ['eula', eula]]) {
-        assert.ok(html.includes('Last updated November 19, 2026'), `${name}: last updated`);
+        assert.match(html, /Last updated November (19|20), 2026/, `${name}: last updated`);   // privacy and terms: November 20 (YouTube, H-741)
         assert.ok(html.includes('id="changelog"'), `${name}: changelog`);
         assert.ok(!/\bMIT\b/.test(html), `${name}: no MIT wording`);
     }

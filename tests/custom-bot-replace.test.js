@@ -1,8 +1,12 @@
+import './fixtures/test-log-dir.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import pool from '../utils/db.js';
 import customBotRoutes from '../dashboard/routes/api/features/custom-bot.js';
+
+// H-821: the real pool stays open otherwise and the file never exits.
+test.after(async () => { await pool.end().catch(() => {}); });
 
 // "Replace with a different bot" on the Bot appearance page: a token that fails validation used to
 // be found only after the server's current custom bot had been unassigned, leaving the server on

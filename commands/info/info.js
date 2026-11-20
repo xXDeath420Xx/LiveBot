@@ -5,6 +5,7 @@ import * as githubHandler from './knowledge-github-handler.js';
 import * as recipeHandler from './knowledge-recipe-handler.js';
 import { themeColor } from '../../core/guild-theme.js';
 import { getConfig as getFeatureConfig } from '../../core/feature-config.js';
+import { withAchievement } from '../../core/achievement-hooks.js';
 
 /** Knowledge and lookups page, "Turned-off sections": the /knowledge groups a server can switch off. */
 export const KNOWLEDGE_SECTIONS = ['facts', 'knowledge', 'nasa', 'fortune', 'urban', 'inspire', 'jokes', 'crypto', 'github', 'recipe'];
@@ -1236,14 +1237,15 @@ export default {
 
     try {
       switch (subcommand) {
+        // Fortune Seeker counts every reading (H-817)
         case 'daily':
-          return await this.fortuneDaily(interaction);
+          return withAchievement(interaction, 'fortune_seeker', await this.fortuneDaily(interaction));
         case 'tarot':
-          return await this.fortuneTarot(interaction);
+          return withAchievement(interaction, 'fortune_seeker', await this.fortuneTarot(interaction));
         case 'horoscope':
-          return await this.fortuneHoroscope(interaction);
+          return withAchievement(interaction, 'fortune_seeker', await this.fortuneHoroscope(interaction));
         case 'lucky':
-          return await this.fortuneLucky(interaction);
+          return withAchievement(interaction, 'fortune_seeker', await this.fortuneLucky(interaction));
       }
     } catch (error) {
       console.error('[Fortune Error]', error);

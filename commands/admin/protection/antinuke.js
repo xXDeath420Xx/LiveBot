@@ -25,6 +25,11 @@ export async function execute(interaction) {
                 await handleWhitelist(interaction, guildId);
                 break;
         }
+        // Changes apply at once instead of after the manager's 30 s config / 60 s trusted-list cache (H-803).
+        const anm = interaction.client?.antiNukeManager;
+        anm?.invalidateConfigCache?.(guildId);
+        const wlUser = subcommand === 'whitelist' ? interaction.options.getUser?.('user') : null;
+        if (wlUser) anm?.invalidateWhitelistCache?.(guildId, wlUser.id);
     } catch (error) {
         logger.error('[AntiNuke Command] Error:', { error: error.message, stack: error.stack });
 
@@ -46,7 +51,7 @@ async function handleEnable(interaction, guildId) {
     );
 
     await interaction.reply({
-        content: '🛡️ **Anti-Nuke Protection Enabled**\n\nThe server is now protected against mass deletions, bans, and kicks.\n\nUse `/protection antinuke config` to customize thresholds and actions.',
+        content: '🛡️ **Anti-Nuke Protection Enabled**\n\nThe server is now protected against mass channel deletions, mass role deletions and mass bans (kicks are not counted).\n\nUse `/protection antinuke config` to customize thresholds and actions.',
         ephemeral: true
     });
 
@@ -128,7 +133,7 @@ async function handleConfig(interaction, guildId) {
 
     if (maxChannelDeletes !== null) embed.addFields({ name: 'Max Channel Deletes', value: `${maxChannelDeletes}`, inline: true });
     if (maxRoleDeletes !== null) embed.addFields({ name: 'Max Role Deletes', value: `${maxRoleDeletes}`, inline: true });
-    if (maxBans !== null) embed.addFields({ name: 'Max Bans/Kicks', value: `${maxBans}`, inline: true });
+    if (maxBans !== null) embed.addFields({ name: 'Max Bans', value: `${maxBans}`, inline: true });
     if (action !== null) embed.addFields({ name: 'Action on Trigger', value: action.toUpperCase(), inline: true });
     if (alertChannel !== null) embed.addFields({ name: 'Alert Channel', value: `${alertChannel}`, inline: true });
 
@@ -172,7 +177,7 @@ async function handleStatus(interaction, guildId) {
             { name: '\u200B', value: '\u200B', inline: true },
             { name: 'Max Channel Deletes', value: `${config.max_channel_deletes}`, inline: true },
             { name: 'Max Role Deletes', value: `${config.max_role_deletes}`, inline: true },
-            { name: 'Max Bans/Kicks', value: `${config.max_kick_bans}`, inline: true },
+            { name: 'Max Bans', value: `${config.max_kick_bans}`, inline: true },
             { name: 'Alert Channel', value: typeof alertChannel === 'string' ? alertChannel : alertChannel.toString(), inline: true },
             { name: 'Whitelisted Users', value: `${whitelistRows[0].count}`, inline: true }
         )

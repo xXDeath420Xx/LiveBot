@@ -34,3 +34,11 @@ paths = [
 description = "Public Twitch extension client id (served in every extension URL); env lookups"
 targetRules = ["twitch-api-token", "generic-api-key"]
 paths = ['''(^|/)services/cfx/config/env\.js$''']
+
+[[allowlists]]
+description = "Invented .env values in the utils/env-file.js and service-keys route tests (throwaway temp .env)"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)tests/env-file\.test\.js$''',
+  '''(^|/)tests/service-keys-route\.test\.js$''',
+]

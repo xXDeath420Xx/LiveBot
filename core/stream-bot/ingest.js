@@ -4,12 +4,14 @@
  *
  *   ingest.twitch(subType, event, specKey)   core/twitch-eventsub-manager.js handleNotification()
  *   ingest.kick(eventType, event)            services/certifried-bot/kick-events.js makeHandleKickEvent()
+ *   ingest.youtube(ev)                       a YouTube Live event, already normalised (core/stream-bot/youtube/service.js)
  *   ingest.tip(source, payload, ref)         Ko-fi / Throne / Fourthwall webhooks, Buy Me a Coffee poller
  *   ingest.tipForSource(row, payload)        StreamElements / Streamlabs sockets (core/stream-bot/tip-feeds.js)
  *   ingest.studio(profileId, ev)             an OBS event CertiFried Studio reported (core/stream-bot/studio.js), already normalised
  *   ingest.recordTest(profile, ev)           the Test button's sample event (stored and shown, not run)
  *   ingest.noteSent(platform, channelId, text)  chat the bot sent, so it is not taken as a trigger (echo guard)
- *   ingest.internal(profileId, ev)           an event the stream bot raises itself: studio.connected, variable.changed
+ *   ingest.internal(profileId, ev)           an event the stream bot raises itself: studio.connected, variable.changed, and
+ *                                            viewer.rank_up (ev.internal, on the viewer's Twitch or Kick; core/stream-bot/viewers)
  *   onChatLine(platform, channelId)          option: called for every chat line from a viewer (timers count them)
  *
  * Per event: channel → profile lookup (cached 60 s, misses too), the bot's own chat and echoes dropped,
@@ -106,6 +108,7 @@ export function createIngest({ store, engine, feed, hub = null, logger = null, n
     return {
         twitch: safe('twitch', async (subType, event, specKey) => fanOut('twitch', normaliseTwitch(subType, event, specKey))),
         kick: safe('kick', async (eventType, event) => fanOut('kick', normaliseKick(eventType, event))),
+        youtube: safe('youtube', async (ev) => (ev?.platform === 'youtube' ? fanOut('youtube', ev) : 0)),
         tip: safe('tip', async (source, payload, ref) => {
             const ev = normaliseTip(source, payload);
             if (!ev) return 0;
@@ -129,7 +132,7 @@ export function createIngest({ store, engine, feed, hub = null, logger = null, n
             return 1;
         }),
         internal: safe('internal', async (profileId, ev) => {
-            if (!ev || !['studio', 'bot'].includes(ev.platform)) return 0;
+            if (!ev || !(['studio', 'bot'].includes(ev.platform) || (ev.internal === true && ev.type === 'viewer.rank_up'))) return 0;
             await accept({ profileId: Number(profileId) }, ev);
             return 1;
         }),

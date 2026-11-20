@@ -301,3 +301,44 @@ test('readUpload: profile zips, setup files and import strings; executables and 
     await assert.rejects(readUpload({ name: 'x.zip', buffer: makeZip([['readme.json', '{}']]) }), (e) => e.code === 'unknown_zip');
     await assert.rejects(readUpload({ name: 'e', buffer: Buffer.alloc(0) }), (e) => e.code === 'empty');
 });
+
+// ── Phase 5: lights (core/stream-bot/import/lights.js) ──────────────────────────────────────
+test('Firebot Hue and Elgato effects and Streamer.bot Lumia sub-actions become light steps on All lights, with a note to pick the light', async () => {
+    const { convertEffects } = await import('../core/stream-bot/import/firebot.js');
+    const { convertSubActions } = await import('../core/stream-bot/import/streamerbot.js');
+    const { validateActions } = await import('../core/stream-bot/actions.js');
+    const fb = convertEffects([
+        { type: 'hue:control-light', lightId: '3', updateActivated: true, activationAction: 'on', updateBrightness: true, brightnessPercentage: '40%', updateColor: true, color: '#FF8800',
+            triggerAlert: true, alertType: 'short', triggerEffectAnimation: true, effectAnimationType: 'colorloop', transitionType: 'slow' },
+        { type: 'hue:control-light', lightId: '4', updateActivated: true, activationAction: 'off' },
+        { type: 'hue:scenes', sceneId: 'Ab3xYz' },
+        { type: 'elgato:key-lights', selectedLights: { 'Key Light Left': { light: { name: 'Key Light Left' }, options: { toggleType: 'enable', brightness: '30', temperature: '5600' } },
+            'Key Light Right': { light: { name: 'Key Light Right' }, options: { toggleType: 'disable' } } } },
+        { type: 'elgato:light-strips', selectedLights: { Strip: { light: { name: 'Strip' }, options: { color: 'rgb(0, 128, 255)', brightness: '80' } } } },
+    ], {});
+    assert.deepEqual(fb.actions.map((a) => a.type), ['light.set', 'light.flash', 'light.power', 'light.white', 'light.power', 'light.set']);
+    assert.deepEqual(fb.actions[0], { type: 'light.set', device: '', color: '#ff8800', brightness: 40, durationMs: 0, queueSeconds: 120 });
+    assert.deepEqual(fb.actions[1], { type: 'light.flash', device: '', color: '#ff8800', brightness: 40, times: 1, periodMs: 1000, mode: 'pulse', queueSeconds: 120 });
+    assert.deepEqual(fb.actions[3], { type: 'light.white', device: '', kelvin: 5600, brightness: 30, durationMs: 0, queueSeconds: 120 });
+    assert.equal(fb.actions[5].color, '#0080ff');
+    assert.ok(fb.notes.some((n) => /Hue light 3/.test(n)) && fb.notes.some((n) => /Key Light Left/.test(n)), 'notes name the source lights');
+    assert.deepEqual(fb.gaps.map((g) => g.gap).sort(), ['light.effect', 'light.hue_scene']);
+    const v = validateActions(fb.actions);
+    assert.equal(v.ok, true, v.errors.join('; '));
+
+    const sb = convertSubActions([
+        { type: 6002, index: 0, color: '#FF00FF00', brightness: 70, duration: 5 },
+        { type: 6003, index: 1, brightness: 25 },
+        { type: 6004, index: 2 },
+        { type: 6001, index: 3, command: 'party mode' },
+        { type: 6002, index: 4, color: 'not a colour' },
+    ]);
+    assert.deepEqual(sb.actions, [
+        { type: 'light.set', device: '', color: '#00ff00', brightness: 70, durationMs: 5000, queueSeconds: 120 },
+        { type: 'light.brightness', device: '', brightness: 25, durationMs: 0, queueSeconds: 120 },
+    ]);
+    assert.deepEqual(sb.gaps.map((g) => g.gap), ['lumia.default', 'lumia.command', 'lumia.command']);
+    assert.ok(sb.gaps.every((g) => /Streamer\.bot sub-action LumiaStream/.test(g.detail)));
+    assert.equal(validateActions(sb.actions).ok, true);
+    for (const k of ['light.effect', 'light.hue_scene', 'lumia.command', 'lumia.default']) assert.ok(GAPS[k], k);
+});

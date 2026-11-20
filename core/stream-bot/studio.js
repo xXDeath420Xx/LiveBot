@@ -6,6 +6,8 @@
  *     .onState(conn, state)              keep it on the connection; persist to settings.studio (throttled)
  *     .onEvent(conn, event)              an OBS event → normalised, stored, live feed, automations
  *     .onRequest(conn, method, params)   'automations.list' | 'automations.run' | 'sounds.list' | 'docks.key' | 'voice.phrases'
+ *       automations.list  also says `songRequests`: whether an enabled automation runs a song request command (Studio 0.2.6
+ *                         keeps OBS VOD-safe for music only then)
  *                                        → result (throws RequestError)
  *       docks.key       a new OBS dock key for this Studio (core/stream-bot/dock.js); the previous one is revoked. 5 per 10 min.
  *       voice.phrases   the phrases of enabled 'voice.phrase' automations: [{ text, automationId, automationName }]
@@ -21,6 +23,7 @@
 import { normaliseStudio } from './events.js';
 import { createDockKeys } from './dock.js';
 import { normalisePhrase } from './conditions.js';
+import { sanitiseDevices } from './devices/state.js';
 
 export const STATE_LIMITS = Object.freeze({ scenes: 200, perScene: 200, inputs: 500, filterSources: 100, perSource: 50, sounds: 500, name: 200, bytes: 60 * 1024 });
 export const STUDIO_LIMITS = Object.freeze({ eventsPerMinute: 30, runsPer10s: 10, stateWriteMs: 30_000, runWaitMs: 10_000, dockKeysPer10min: 5, voicePhrases: 500 });
@@ -98,10 +101,13 @@ export function sanitiseState(raw) {
         },
         sounds: names(raw.sounds, STATE_LIMITS.sounds),
         music: sanitiseMusic(raw.music),
+        // Phase 5: lights, Voicemeeter and the Stream Deck bridge on the PC (no network addresses; core/stream-bot/devices/state.js).
+        devices: sanitiseDevices(raw.devices),
     };
     // A last guard on size: give up the least useful parts first until it fits.
     const cuts = [
         () => { state.obs.filters = {}; },
+        () => { for (const l of state.devices?.lights || []) { l.caps.scenes = []; l.caps.effects = []; } },
         () => { state.obs.sources = {}; },
         () => { state.sounds = state.sounds.slice(0, 100); },
         () => { state.obs.inputs = state.obs.inputs.slice(0, 100); },
@@ -117,6 +123,13 @@ export function sanitiseState(raw) {
 
 const sameState = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Whether a step list (nested random / if branches included) has a step of this type. */
+export function usesStep(list, type, depth = 0) {
+    if (!Array.isArray(list) || depth > 5) return false;
+    return list.some((s) => s?.type === type || usesStep(s?.then, type, depth + 1) || usesStep(s?.else, type, depth + 1)
+        || (Array.isArray(s?.branches) && s.branches.some((b) => usesStep(b?.actions, type, depth + 1))));
+}
+
 export function createStudioServices({ store, engine, ingest, sounds = null, logger = null, now = () => Date.now(), limits = {}, dockKeys = null } = {}) {
     const docks = dockKeys || createDockKeys({ store });
     const L = { ...STUDIO_LIMITS, ...limits };
@@ -126,13 +139,13 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
     function persist(profileId, record) {
         const w = written.get(profileId) || { at: 0, json: null, timer: null };
         written.set(profileId, w);
-        const body = JSON.stringify({ obs: record.obs, sounds: record.sounds, music: record.music, deviceId: record.deviceId });
+        const body = JSON.stringify({ obs: record.obs, sounds: record.sounds, music: record.music, devices: record.devices, deviceId: record.deviceId });
         w.pending = record;
         if (!w.timer && body === w.json) return;
         const write = () => {
             w.timer = null;
             w.at = now();
-            w.json = JSON.stringify({ obs: w.pending.obs, sounds: w.pending.sounds, music: w.pending.music, deviceId: w.pending.deviceId });
+            w.json = JSON.stringify({ obs: w.pending.obs, sounds: w.pending.sounds, music: w.pending.music, devices: w.pending.devices, deviceId: w.pending.deviceId });
             const rec = w.pending;
             store.setSettingsKey(profileId, 'studio', rec).catch((e) => log('warn', 'state write failed', { error: e.message }));
         };
@@ -194,7 +207,8 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
             switch (method) {
                 case 'automations.list': {
                     const list = await store.listAutomations(conn.profileId);
-                    return { automations: list.map((a) => ({ id: a.id, name: a.name, enabled: a.enabled, trigger_type: a.trigger_type })) };
+                    // songRequests (0.2.6): Studio keeps OBS VOD-safe for music only while an enabled automation runs a song request command.
+                    return { automations: list.map((a) => ({ id: a.id, name: a.name, enabled: a.enabled, trigger_type: a.trigger_type })), songRequests: list.some((a) => a.enabled && usesStep(a.actions, 'music.command')) };
                 }
                 case 'automations.run': {
                     const id = Number(params?.automationId);
@@ -247,4 +261,4 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
     };
 }
 
-export default { createStudioServices, sanitiseState, sanitiseMusic, studioMusicStatus, RequestError, STATE_LIMITS, STUDIO_LIMITS };
+export default { createStudioServices, sanitiseState, sanitiseMusic, studioMusicStatus, usesStep, RequestError, STATE_LIMITS, STUDIO_LIMITS };

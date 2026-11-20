@@ -48,7 +48,7 @@ const tcOn = !!(tc && tc.creator_channel_id);
                 <div class="cf-row cf-row--switch">
                     <div class="cf-row-text">
                         <label class="cf-row-label" for="autoPublisherEnabled">Publish announcements automatically</label>
-                        <p class="cf-row-desc" id="autoPublisherEnabled-desc"><%= apOn ? 'On: new posts in announcement channels are published.' : 'Every message in an announcement channel is cross-posted.' %></p>
+                        <p class="cf-row-desc" id="autoPublisherEnabled-desc"><%= apOn ? 'On: members\' new posts in announcement channels are published. Bot posts, system messages and polls are not.' : 'Off. When on, members\' new posts in announcement channels are published (not bot posts, system messages or polls).' %></p>
                     </div>
                     <div class="cf-row-control">
                         <input class="cf-switch" type="checkbox" role="switch" id="autoPublisherEnabled" name="is_enabled" aria-describedby="autoPublisherEnabled-desc" <%= apOn ? 'checked' : '' %>>
@@ -241,6 +241,10 @@ const tcOn = !!(tc && tc.creator_channel_id);
             <div class="cf-rows">
                 <form action="/manage/<%= guild.id %>/update-tempchannels" method="POST">
                 <input type="hidden" name="enabled_sent" value="1">
+                <input type="hidden" name="original_creator_channel_id" value="<%= tc && tc.creator_channel_id ? tc.creator_channel_id : '' %>">
+                <% if (tc && tc.extra_creators > 0) { %>
+                <p class="cf-row-desc">This server has <%= tc.extra_creators %> more creator channel<%= tc.extra_creators === 1 ? '' : 's' %>, set with <code>/admin temp-channel</code>. Saving here changes only the one shown below; turning the switch off removes them all.</p>
+                <% } %>
                 <div class="cf-row cf-row--switch">
                     <div class="cf-row-text">
                         <label class="cf-row-label" for="tempChannelsEnabled">Temporary voice channels</label>

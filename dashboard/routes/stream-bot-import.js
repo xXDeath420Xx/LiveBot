@@ -12,11 +12,13 @@
  *         POST /stream/bot/api/import/rewards/:id/recreate     the owner's explicit "Recreate under CertiFried" for one saved reward
  *         POST /stream/bot/api/import/words/:id/apply          { channelBotId } the owner's explicit "Apply to Kick automod" for a
  *                                                              saved banned word list (imports only save it: H-742)
+ *         POST /stream/bot/api/import/words/:id/twitch         the owner's explicit "Add to Twitch blocked terms" for a saved
+ *                                                              banned word list (H-763; Stream bot grant, moderator:manage:blocked_terms)
  *
  * Uploads: 20 MB, 20 a minute per user; ZIPs are read in memory; programs and scripts are refused or skipped unread;
  * credentials are stripped and the result scanned before it is kept. Nothing here sends chat, touches OBS or writes
- * to Twitch except the recreate route, and only when the owner presses it; Kick automod words change only through the
- * apply route. Literal paths come before /:param paths.
+ * to Twitch except the recreate and blocked-terms routes, and only when the owner presses them; Kick automod words
+ * change only through the apply route. Literal paths come before /:param paths.
  */
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -28,6 +30,7 @@ import { createImportStore, recreateReward, pendingWordsView, applyPendingWords 
 import { clearKickAutomodCache } from '../../services/certifried-bot/kick-automod.js';
 import { CATEGORIES } from '../../core/stream-bot/import/catalog.js';
 import { pageJson } from '../../core/stream-bot/import/report.js';
+import { addBlockedTerms, BLOCKED_TERMS_SCOPE } from '../../core/stream-bot/twitch-blocked-terms.js';
 
 const router = express.Router();
 const LOG = '[StreamBotImport]';
@@ -97,7 +100,8 @@ async function wordLists(importStore, svc, profileId) {
     const { channelBots } = await svc.context(profileId);
     const automods = new Map();
     for (const c of channelBots) if (c.platform === 'kick') automods.set(c.id, (await importStore.channelAutomod(c.id))?.features || {});
-    return items.map((it) => pendingWordsView(it, channelBots, automods));
+    // H-763: when the list last went to Twitch blocked terms (kept on the item next to the Kick record).
+    return items.map((it) => ({ ...pendingWordsView(it, channelBots, automods), twitch: it.data?.twitch || null }));
 }
 
 // ── page ────────────────────────────────────────────────────────────────────────────────────
@@ -112,6 +116,8 @@ router.get('/stream/bot/import', needPage, pageRoute(async (req, res) => {
         user: req.user, active: 'import', pageTitle: 'Import', profile, channels,
         history, rewards: rewardItems.map(rewardView), categories: CATEGORIES, words,
         canRecreate: !!grant && (grant.scopes || []).includes('channel:manage:redemptions'),
+        // H-763: "Add to Twitch blocked terms" needs the Stream bot grant with moderator:manage:blocked_terms (re-approve adds it).
+        twitchTerms: { connected: !!grant && grant.status === 'active', scopeOk: !!grant && (grant.scopes || []).includes(BLOCKED_TERMS_SCOPE) },
         uploadMb: UPLOAD_MAX_BYTES / 1048576,
         importData: pageJson({ preview, categories: CATEGORIES }),
     });
@@ -199,6 +205,29 @@ router.post('/stream/bot/api/import/words/:id/apply', needApi, apiRoute(async (r
     clearKickAutomodCache(channelBot.id); // the Kick bot reads automod settings through this cache (60 s)
     logger.info(`${LOG} banned words applied to Kick automod`, { profileId: profile.id, itemId: id, channelBotId: channelBot.id, added: r.added });
     res.json({ ok: true, added: r.added, total: r.total, channelHref: `/kick/channel/${encodeURIComponent(channelBot.channelId)}` });
+}));
+
+const blockedTermsLimiter = rateLimit({
+    windowMs: 60 * 1000, max: 3, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: (req) => `sbimp-bt:${req.user?.id || req.ip}`,
+    handler: (req, res) => res.status(429).json({ ok: false, error: 'Wait a minute before sending words to Twitch again.' }),
+});
+
+// H-763: the owner's explicit "Add to Twitch blocked terms". Adds the saved words Twitch does not have yet; never removes one.
+router.post('/stream/bot/api/import/words/:id/twitch', needApi, blockedTermsLimiter, apiRoute(async (req, res) => {
+    const { sb, profile, importStore } = await load(req);
+    const id = idOf(req.params.id);
+    const item = id ? await importStore.getItemById(profile.id, id) : null;
+    if (!item || item.target_kind !== 'pending_words' || !Array.isArray(item.data?.words)) return res.status(404).json({ ok: false, error: 'That saved word list does not exist.' });
+    if (!sb.helix) return res.status(503).json({ ok: false, error: 'Twitch actions are not available right now. Try again in a minute.' });
+    const r = await addBlockedTerms({ helix: sb.helix, profileId: profile.id, words: item.data.words });
+    if (!r.ok) return res.status(r.status || 400).json({ ok: false, error: r.error, reapprove: !!r.reapprove, href: r.href || null });
+    if (r.added || r.skipped) {
+        const fresh = await importStore.getItemById(profile.id, id);
+        await importStore.setItemData(profile.id, id, { ...(fresh?.data || item.data), twitch: { at: new Date().toISOString(), added: r.added, skipped: r.skipped, failed: r.failed } });
+    }
+    logger.info(`${LOG} banned words sent to Twitch blocked terms`, { profileId: profile.id, itemId: id, added: r.added, skipped: r.skipped, failed: r.failed, invalid: r.invalid });
+    res.json({ ok: true, added: r.added, skipped: r.skipped, failed: r.failed, invalid: r.invalid, failures: r.failures.map((f) => f.error) });
 }));
 
 export default router;

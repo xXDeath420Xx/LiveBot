@@ -24,6 +24,8 @@ router.get('/:guildId/auto-track/configs', ensureAuth, ensureGuildPerms, async (
 router.post('/:guildId/auto-track/configs', ensureAuth, ensureGuildPerms, async (req, res) => {
     try {
         const { role_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end } = req.body;
+        // Level members must reach before they are auto-tracked (0 = none). H-810: enforced, never settable.
+        const minLevel = Math.min(Math.max(Number.parseInt(req.body.min_level, 10) || 0, 0), 500);
 
         if (!announcement_channel_id) {
             return res.status(400).json({ error: 'announcement_channel_id is required' });
@@ -42,8 +44,8 @@ router.post('/:guildId/auto-track/configs', ensureAuth, ensureGuildPerms, async 
             );
             if (existing.length > 0) {
                 await pool.execute(
-                    'UPDATE guild_streamer_auto_track SET announcement_channel_id = ?, live_role_id = ?, delete_on_end = ?, edit_on_end = ?, enabled = 1 WHERE guild_id = ? AND role_id IS NULL',
-                    [announcement_channel_id, liveRoleId, deleteOnEnd, editOnEnd, req.guildId]
+                    'UPDATE guild_streamer_auto_track SET announcement_channel_id = ?, live_role_id = ?, delete_on_end = ?, edit_on_end = ?, min_level = ?, enabled = 1 WHERE guild_id = ? AND role_id IS NULL',
+                    [announcement_channel_id, liveRoleId, deleteOnEnd, editOnEnd, minLevel, req.guildId]
                 );
                 invalidateAutoTrackConfig(req.guildId);
                 return res.json({ success: true, message: 'Updated existing "any member" mapping' });
@@ -51,12 +53,12 @@ router.post('/:guildId/auto-track/configs', ensureAuth, ensureGuildPerms, async 
         }
 
         await pool.execute(`
-            INSERT INTO guild_streamer_auto_track (guild_id, role_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end, enabled)
-            VALUES (?, ?, ?, ?, ?, ?, 1)
+            INSERT INTO guild_streamer_auto_track (guild_id, role_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end, min_level, enabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
             ON DUPLICATE KEY UPDATE
                 announcement_channel_id = VALUES(announcement_channel_id), live_role_id = VALUES(live_role_id),
-                delete_on_end = VALUES(delete_on_end), edit_on_end = VALUES(edit_on_end), enabled = 1
-        `, [req.guildId, roleId, announcement_channel_id, liveRoleId, deleteOnEnd, editOnEnd]);
+                delete_on_end = VALUES(delete_on_end), edit_on_end = VALUES(edit_on_end), min_level = VALUES(min_level), enabled = 1
+        `, [req.guildId, roleId, announcement_channel_id, liveRoleId, deleteOnEnd, editOnEnd, minLevel]);
 
         invalidateAutoTrackConfig(req.guildId);
 
@@ -101,6 +103,10 @@ router.patch('/:guildId/auto-track/configs/:autoId', ensureAuth, ensureGuildPerm
         if (edit_on_end !== undefined) {
             updates.push('edit_on_end = ?');
             params.push(edit_on_end ? 1 : 0);
+        }
+        if (req.body.min_level !== undefined) {
+            updates.push('min_level = ?');
+            params.push(Math.min(Math.max(Number.parseInt(req.body.min_level, 10) || 0, 0), 500));
         }
 
         if (updates.length === 0) {

@@ -365,7 +365,7 @@ const STEPS = {
   timezone: { label: 'Timezones', describe: () => 'Enable /timezone (react 🕰️ to convert times)' },
   catbot: { label: 'Cat Bot', describe: s => `Spawn cats in #${s.channelName}` },
   growtree: { label: 'Grow a Tree', describe: () => 'Enable /tree (a tree is planted on first use)' },
-  owo: { label: 'OwO', describe: () => 'Enable OwO commands and the `owo` chat prefix' },
+  owo: { label: 'Critters (/owo)', describe: () => 'Switch on the critters game: /owo and the `owo` chat prefix' },
   birthday: {
     label: 'Birthdays',
     describe: s => `Announce in #${s.channelName}, granting **${s.roleName}** for the day`,
@@ -1147,9 +1147,9 @@ export async function plan(guild, opts = {}) {
     });
   }
 
-  // ── OwO ──
+  // ── OwO -> our critters game (/owo) ──
   if (byFeature.has('owo')) {
-    const [[owo]] = await pool.execute('SELECT enabled FROM owo_config WHERE guild_id = ?', [guildId]);
+    const [[owo]] = await pool.execute('SELECT enabled FROM critter_config WHERE guild_id = ?', [guildId]).catch(() => [[null]]);
     push('owo', {
       label: STEPS.owo.label, done: !!owo?.enabled,
       // Not blocked — everything works. It is SEQUENCED: enabling ours while the real OwO is still
@@ -1158,10 +1158,9 @@ export async function plan(guild, opts = {}) {
       // Progress does NOT come across on its own: OwO keeps every balance in its own database. What
       // makes it recoverable at all is that OwO *prints* it — an `owo balance` reply sitting in the
       // history is the only export that exists, so the scan is where a member's numbers come from.
-      note: 'parity: hunt, gems, lootboxes, crates, battle, pets and the guild boss are all built. '
-        + 'Balances and levels are not transferred automatically — anything OwO posted in this server '
-        + '(an `owo balance` or `owo profile` reply) can be read back out of the scan and seeded by hand. '
-        + 'Anyone without one starts fresh.',
+      note: 'our critters game covers hunting, gems, lootboxes, crates, battles, teams and the guild boss under the same '
+        + '/owo commands. Balances in the real OwO are not transferred automatically; every member starts our game '
+        + 'with 15,000 acorns.',
       replaces: byFeature.get('owo').name,
     });
   }
@@ -2069,11 +2068,12 @@ async function runStep(guild, step) {
       return;
     }
 
-    case 'owo':
-      await pool.execute(
-        `INSERT INTO owo_config (guild_id, enabled) VALUES (?, 1)
-         ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
+    case 'owo': {
+      // The critters game (/owo); setEnabled also clears its config cache.
+      const { setEnabled } = await import('./critters/config.js');
+      await setEnabled(g, true);
       return;
+    }
 
     case 'birthday':
       // The row already carries the incumbent's own wording, recovered from its posts — leave

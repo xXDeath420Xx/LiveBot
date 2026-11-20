@@ -215,6 +215,42 @@ export async function buildPages({ root }) {
     { const p = await importDemo.importPage(demo, { root }); add(importDemo.IMPORT_PAGE_ID, 'sub', p.template, p.locals); }
     { const p = importDemo.channelCommandsPage(); add(importDemo.CHANNEL_COMMANDS_PAGE_ID, 'sub', p.template, p.locals); }
 
+    // ── pages built as strings and rendered through the shared frame (views/site-frame.ejs) ──
+    // The Sprite Tracker (its frame, section bar and the sign-in / account pages live in
+    // dashboard/services/sprites-pages.js; the collection pages need a synced Epic account) and the
+    // small public pages: scam lookup, status page, holiday countdown, Linked Roles, showcase,
+    // transcript viewer, schedule share page.
+    const spPages = await imp('dashboard/services/sprites-pages.js');
+    const spReq = { baseUrl: '/sprites', path: '/' };
+    const spFrame = (page, p = '/') => spPages.framedOptions({ baseUrl: '/sprites', path: p }, page[spPages.FRAMED_PAGE]);
+    add('sprites-login', 'sub', 'site-frame', () => spPages.framedOptions(spReq, spPages.renderLogin()[spPages.FRAMED_PAGE]), pub);
+    add('sprites-login-error', 'sub', 'site-frame', () => spFrame(spPages.renderLogin({ error: 'Username or password is incorrect.' })), pub);
+    add('sprites-account', 'sub', 'site-frame', () => spFrame(spPages.renderAccount({ displayName: 'JuniperVale', currentUsername: 'juniper', hasPassword: true, passwordSetAt: D(2026, 10, 2), success: 'Credentials saved.' }), '/account'), pub);
+    const sfScams = await imp('dashboard/routes/public/scams.js');
+    const sfStatus = await imp('dashboard/routes/public/status.js');
+    const sfCd = await imp('dashboard/routes/public/countdown.js');
+    const sfLr = await imp('dashboard/services/linked-role-pages.js');
+    const sfSc = await imp('dashboard/routes/showcase.js');
+    const sfTt = await imp('core/ticket-transcripts.js');
+    const sfSs = await imp('dashboard/services/schedule-share-page.js');
+    const cdInfo = { slug: 'christmas', label: 'Christmas', emoji: '', daysRemaining: 36, isToday: false, nextDate: new Date('2026-12-25T00:00:00Z') };
+    add('scams', 'public', 'site-frame', () => sfScams.scamsPage(), pub);
+    add('status-public-page', 'public', 'site-frame', () => sfStatus.publicStatusPage(), pub);
+    add('countdown', 'public', 'site-frame', () => sfCd.countdownPage(cdInfo, { host: 'certifriedmultitool.com', slug: 'christmas' }), pub);
+    add('countdown-unknown', 'error', 'site-frame', () => sfCd.unknownHolidayPage('not-a-holiday'), pub);
+    add('linked-role', 'sub', 'site-frame', () => sfLr.linkedRolePage({ fieldCount: 4 }));
+    add('linked-role-error', 'error', 'site-frame', () => sfLr.linkedRoleErrorPage('This sign-in link was already used or has expired. Start again from your server.'));
+    add('showcase-upload', 'sub', 'site-frame', () => sfSc.showcaseUploadPage(), pub);
+    add('showcase-player', 'sub', 'site-frame', () => sfSc.showcasePlayerPage({ rawTitle: 'Night drive', src: JSON.stringify('/showcase/0123456789abcdef/playlist.m3u8?t=x') }), pub);
+    add('showcase-message', 'error', 'site-frame', () => sfSc.showcaseMessagePage('This upload link has expired', 'Upload links work for a short time only.'), pub);
+    add('transcript', 'sub', 'site-frame', () => sfTt.transcriptPage({ title: 'Ticket #128', _meta: { userId: '100000000000000001', msgCount: 3 }, messages: [
+        { author_tag: 'juniper.vale', author_type: 'user', timestamp: '2026-11-18T12:00:00Z', content: 'Hi, the welcome message posts twice.' },
+        { author_tag: 'rowan', author_type: 'staff', timestamp: '2026-11-18T12:03:00Z', content: 'Checking now.', attachments: ['shot.png'] },
+        { author_tag: 'CertiFried', author_type: 'system', timestamp: '2026-11-18T12:10:00Z', content: 'Ticket closed.' }] }, { guildName: guild.name, guildId: guild.id, kind: 'ticket', title: 'Ticket #128' }));
+    add('schedule-share', 'public', 'site-frame', () => sfSs.scheduleSharePage('rowanpike_plays'), pub);
+    // The OBS builder page for the 4:20 clock (the /420 overlay itself is a fixed-look OBS source).
+    add('fourtwenty-obs-builder', 'public', 'fourtwenty-obs-builder', {}, pub);
+
     // ── error pages ──
     add('error', 'error', 'error-tailwind', { error: 'That page does not exist.' }, pub);
     add('error-signed-in', 'error', 'error-tailwind', { error: 'You do not have permission to manage this server.' });

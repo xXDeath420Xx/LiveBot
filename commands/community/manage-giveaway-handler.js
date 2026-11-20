@@ -119,6 +119,10 @@ export async function handleReroll(interaction) {
             return await interaction.editReply('❌ This giveaway is not in this server.');
         }
 
+        // A reroll picks new winners for an ended giveaway; on a running one it used to end it (H-807).
+        if (giveaway.is_active === 1) {
+            return await interaction.editReply('❌ This giveaway is still running. End it first (or let it end), then reroll.');
+        }
         await mgr.endGiveaway(giveaway, true, interaction.user);
         await interaction.editReply('✅ Giveaway rerolled!');
     } catch (error) {

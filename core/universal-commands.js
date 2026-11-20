@@ -235,6 +235,22 @@ const looksLikeUser = s => /^<@!?\d+>$/.test(s);
 const looksLikeChannel = s => /^<#\d+>$/.test(s);
 const looksLikeRole = s => /^<@&\d+>$/.test(s);
 
+/** Whether a typed word clearly belongs to this option rather than to free text before it. */
+function fitsOption(def, word) {
+  const w = String(word ?? '');
+  if (Array.isArray(def.choices) && def.choices.length) {
+    return def.choices.some(c => String(c.value).toLowerCase() === w.toLowerCase() || String(c.name).toLowerCase() === w.toLowerCase());
+  }
+  if (def.type === BOOLEAN) return TRUE.has(w.toLowerCase()) || FALSE.has(w.toLowerCase());
+  if (def.type === INTEGER) return /^-?\d+$/.test(w);
+  if (def.type === NUMBER) return /^-?\d+(\.\d+)?$/.test(w);
+  if (def.type === USER) return looksLikeUser(w);
+  if (def.type === CHANNEL) return looksLikeChannel(w);
+  if (def.type === ROLE) return looksLikeRole(w);
+  if (def.type === MENTIONABLE) return looksLikeUser(w) || looksLikeRole(w);
+  return false;
+}
+
 /**
  * Fill an option schema from positional tokens, `name:value` pairs and `--name value`.
  * The final STRING option greedily absorbs the remaining words, so
@@ -294,6 +310,21 @@ export function parseOptions(optionDefs, tokens, message = null) {
     }
 
     if (def.type === STRING && isLast) { args[def.name] = positional.join(' '); positional.length = 0; continue; }
+    // The last REQUIRED text option takes the rest of the words too (H-809): `/notes remind me 2h Stretch
+    // your legs` used to put "Stretch" in message, "your" in dm and "legs" in repeat. Trailing words that
+    // clearly fit a later optional option (a yes/no, a number, a mention, one of its choices) still go there.
+    if (def.type === STRING && def.required && ordered.slice(i + 1).every(o => !o.required) && positional.length > 1) {
+      const later = ordered.slice(i + 1);
+      const reserved = new Map();
+      let end = positional.length;
+      for (let k = later.length - 1; k >= 0 && end > 1; k--) {
+        if (fitsOption(later[k], positional[end - 1])) { reserved.set(later[k].name, positional[end - 1]); end--; }
+      }
+      args[def.name] = positional.slice(0, end).join(' ');
+      for (const [name, value] of reserved) args[name] = value;
+      positional.length = 0;
+      continue;
+    }
     args[def.name] = positional.shift();
   }
 

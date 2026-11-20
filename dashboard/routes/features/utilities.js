@@ -18,38 +18,14 @@ router.post('/:guildId/update-tempchannels', ensureAuth, ensureGuildPerms, async
       });
     }
 
-    // Check if config exists
-    const [existing] = await pool.execute(
-      'SELECT * FROM temp_channel_config WHERE guild_id = ?',
-      [req.guildId]
+    // One row per creator channel (PK guild_id + creator_channel_id): add or update this one only. It used to
+    // set every row of the server to this creator channel (H-810).
+    await pool.execute(
+      `INSERT INTO temp_channel_config (guild_id, creator_channel_id, category_id, naming_template)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE category_id = VALUES(category_id), naming_template = VALUES(naming_template)`,
+      [req.guildId, creator_channel_id, category_id, naming_template || "{user}'s Channel"]
     );
-
-    if (existing.length === 0) {
-      // Insert new config
-      await pool.execute(
-        `INSERT INTO temp_channel_config (guild_id, creator_channel_id, category_id, naming_template)
-         VALUES (?, ?, ?, ?)`,
-        [
-          req.guildId,
-          creator_channel_id,
-          category_id,
-          naming_template || "{user}'s Channel"
-        ]
-      );
-    } else {
-      // Update existing config
-      await pool.execute(
-        `UPDATE temp_channel_config
-         SET creator_channel_id = ?, category_id = ?, naming_template = ?
-         WHERE guild_id = ?`,
-        [
-          creator_channel_id,
-          category_id,
-          naming_template || "{user}'s Channel",
-          req.guildId
-        ]
-      );
-    }
 
     // Redirect back to manage page
     res.redirect(`/manage/${req.guildId}?tab=utilities&success=true`);

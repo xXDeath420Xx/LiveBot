@@ -7,6 +7,10 @@ const ACTION_LABELS = Object.freeze({
     'obs.stream': 'Streaming', 'obs.record': 'Recording', 'obs.replay': 'Replay buffer', 'obs.virtualcam': 'Virtual camera',
     'obs.screenshot': 'Screenshot', 'obs.text': 'Set text', 'obs.browser_url': 'Set browser source URL', 'obs.browser_refresh': 'Refresh browser source',
     'obs.hotkey': 'OBS hotkey', 'sound.play': 'Play sound', 'sound.stop': 'Stop all sounds', 'studio.hotkey': 'Press keys', 'light.set': 'Set a light',
+    'light.color': 'Set a light colour', 'light.white': 'Set a light to white', 'light.brightness': 'Light brightness', 'light.power': 'Light on or off',
+    'light.scene': 'Light scene', 'light.flash': 'Flash a light', 'light.preset': 'Light preset', 'voicemeeter.mute': 'Voicemeeter mute',
+    'voicemeeter.gain': 'Voicemeeter gain', 'voicemeeter.profile': 'Voicemeeter settings file', 'voicemeeter.macro': 'Voicemeeter macro button',
+    'music.prepare': 'Check VOD-safe music', 'devices.check': 'Look for lights and Voicemeeter',
 });
 
 const EVENT_LABELS = Object.freeze({
@@ -41,6 +45,16 @@ function summarise(action, p = {}) {
         case 'obs.hotkey': return pick('name');
         case 'sound.play': return pick('sound');
         case 'studio.hotkey': return pick('keys');
+        case 'light.set': case 'light.color': case 'light.flash': return [p.device || 'all lights', p.color].filter(Boolean).join(' · ');
+        case 'light.white': return `${p.device || 'all lights'} · ${p.kelvin} K`;
+        case 'light.brightness': return `${p.device || 'all lights'} · ${p.brightness}%`;
+        case 'light.power': return `${p.device || 'all lights'} · ${p.state}`;
+        case 'light.scene': return pick('device', 'scene');
+        case 'light.preset': return pick('preset');
+        case 'voicemeeter.mute': return pick('target', 'state');
+        case 'voicemeeter.gain': return `${p.target} · ${p.mode === 'adjust' ? (p.gain > 0 ? '+' : '') : ''}${p.gain} dB`;
+        case 'voicemeeter.profile': return pick('profile');
+        case 'voicemeeter.macro': return `button ${p.button} · ${p.state}`;
         default: return '';
     }
 }

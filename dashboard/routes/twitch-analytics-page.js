@@ -30,6 +30,7 @@ import * as vodTranscripts from '../../core/twitch-vod-transcripts.js';
 import * as twitchVision from '../../core/twitch-vision.js';
 import { buildIntegrityReport, buildKnownBotList, renderIntegrityFiles, alertChatMessages, clearIntegrityCache, THRESHOLDS as INTEGRITY_THRESHOLDS } from '../../core/twitch-integrity-report.js';
 import { getBrowser, closeBrowser } from '../../utils/browserManager.js';
+import { followsOf } from '../../core/twitch-follows-archive.js';
 
 // Self-boot the analytics cron (nightly backfill + weekly digest + milestones) when this
 // route module is first imported — same pattern other core managers follow.
@@ -948,6 +949,8 @@ async function renderAnalytics(req, res, opts = {}) {
             churnBreakdown: churnBreakdownRows,
             churnEvents: churnEventsRows,
             clipDelta: clipDeltaRows,
+            // H-762: historical (2026-10-28), no longer collected; never on public share links.
+            followedChannels: opts.shareMode ? [] : await followsOf(pool, bid, { limit: 100 }).catch(() => []),
         };
 
         // backfillStatus comes from the POST /backfill route redirecting back with ?backfill=ok|fail

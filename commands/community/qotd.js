@@ -418,8 +418,9 @@ export default {
                         .addChannelTypes(ChannelType.GuildText)
                         .setRequired(true)
                 )
-        )
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        ),
+        // No default member permission: Discord hid all of /qotd from members, /qotd suggest included (H-807).
+        // execute() requires Manage Server for everything except suggest.
 
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused(true);
@@ -435,6 +436,10 @@ export default {
     async execute(interaction) {
         const subcommandGroup = interaction.options.getSubcommandGroup();
         const subcommand = interaction.options.getSubcommand();
+        const isSuggest = !subcommandGroup && subcommand === 'suggest';
+        if (!isSuggest && !interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)) {
+            return interaction.reply({ content: 'You need the Manage Server permission for that. Members can use `/qotd suggest`.', ephemeral: true });
+        }
 
         try {
             if (subcommandGroup === 'setup') {

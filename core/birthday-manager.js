@@ -7,6 +7,7 @@ import {
   validateBirthday, computeAge, dateIn, isoDate, birthdaysOn, nextBirthdayDate, BIRTHDAY_ZONE,
 } from './birthday-helpers.js';
 import { themeColor } from './guild-theme.js';
+import { awardAchievement } from './achievement-hooks.js';
 
 /**
  * Birthday Manager - Handles birthday tracking and announcements
@@ -241,6 +242,8 @@ class BirthdayManager {
       );
 
       logger.info(`[BirthdayManager] Announced birthday for ${member.user.tag} in ${guild.name}`);
+      // Birthday Star, once per server (H-817); after the day is marked, so a restart cannot post it twice
+      awardAchievement(null, 'birthday_celebration', { userId, guildId, client: guildClient, eventData: { value: 1 } });
 
       // Post the birthday card if one exists
       await this.postBirthdayCard(userId, guildId, channel, guildClient);

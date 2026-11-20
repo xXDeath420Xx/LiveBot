@@ -1,0 +1,80 @@
+<%#
+  /docs/search?q=: search across the guides, the docs pages and the command list, answered on the server so it
+  works without JavaScript (dashboard/services/docs-search.js; route in dashboard/server.js). The same box on
+  /docs and /docs/guides lists matches as you type and opens this page on Enter.
+  Locals: q (the query, '' for none), results ({ query, total, groups: [{ id, title, total, results }] } or null),
+  unavailable (true when the index could not be built), user, clientId.
+%>
+<%
+  const _q = typeof locals.q === 'string' ? locals.q : '';
+  const _r = locals.results || null;
+  const _desc = 'Search the CertiFried guides, documentation and command list.';
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Search the docs · CertiFried', description: _desc, path: '/docs/search', noindex: true }) %>
+    <style>
+        .ds-crumbs { margin: 0 0 var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+        .ds-crumbs a { color: var(--cf-text-2); text-decoration: none; }
+        .ds-summary { margin: 0 0 var(--cf-6); color: var(--cf-text-2); }
+        .ds-group { margin: 0 0 var(--cf-8); }
+        .ds-group h2 { margin: 0 0 var(--cf-3); font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); }
+        .ds-group h2 span { font-weight: 400; color: var(--cf-text-3); font-size: var(--cf-text-sm); margin-left: 6px; }
+        .ds-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--cf-2); }
+        .ds-list li { margin: 0; }
+        .ds-hit { display: block; padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); text-decoration: none; color: inherit; }
+        .ds-hit:hover { border-color: var(--cf-border-strong); }
+        .ds-hit:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+        .ds-hit-t { display: block; font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+        .ds-hit-p { display: block; margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .ds-hit-s { display: block; margin-top: 4px; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+        .ds-more { margin: var(--cf-3) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+        .ds-tips { margin: 0; padding-left: 1.2em; color: var(--cf-text-2); }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: 'docs', user: locals.user || null, returnTo: '/docs/search' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <nav class="ds-crumbs" aria-label="Breadcrumb"><a href="/docs">Docs</a><span aria-hidden="true"> / </span><span aria-current="page">Search</span></nav>
+        <div class="cfs-pagehead">
+            <h1>Search the docs</h1>
+            <p class="cfs-lede">Guides, the documentation pages and every command, in one search.</p>
+        </div>
+        <%- include('partials/docs-search-box', { q: _q, autofocus: !_q }) %>
+
+        <% if (locals.unavailable) { %>
+        <div class="cfs-empty"><h2>Search is not available right now</h2><p>Try again in a minute, or browse the <a href="/docs/guides">guides</a> and the <a href="/commands">command list</a>.</p></div>
+        <% } else if (_q && _r && _r.total) { %>
+        <p class="ds-summary" role="status"><%= _r.total %> result<%= _r.total === 1 ? '' : 's' %> for <strong><%= _q %></strong></p>
+        <% _r.groups.forEach(function (g) { %>
+        <section class="ds-group" aria-labelledby="ds-<%= g.id %>">
+            <h2 id="ds-<%= g.id %>"><%= g.title %><span><%= g.total %></span></h2>
+            <ul class="ds-list">
+                <% g.results.forEach(function (r) { %>
+                <li><a class="ds-hit" href="<%= r.u %>">
+                    <span class="ds-hit-t"><%= r.t %></span>
+                    <% if (r.p) { %><span class="ds-hit-p"><%= r.label %> · <%= r.p %></span><% } else { %><span class="ds-hit-p"><%= r.label %></span><% } %>
+                    <% if (r.s) { %><span class="ds-hit-s"><%= r.s %></span><% } %>
+                </a></li>
+                <% }); %>
+            </ul>
+            <% if (g.total > g.results.length) { %><p class="ds-more"><%= g.total - g.results.length %> more <%= g.id === 'commands' ? 'commands match' : 'results match' %>. Add another word to narrow it down<% if (g.id === 'commands') { %>, or open the <a href="/commands">command list</a><% } %>.</p><% } %>
+        </section>
+        <% }); %>
+        <% } else if (_q) { %>
+        <div class="cfs-empty">
+            <h2>Nothing matches "<%= _q %>"</h2>
+            <p>Try fewer words, another word for the same thing (for example "alerts" instead of "notifications"), or a command name such as <code>/level</code>.</p>
+        </div>
+        <% } else { %>
+        <ul class="ds-tips">
+            <li>Search for a feature ("welcome card", "raid", "tickets"), a setting ("log channel") or a command ("/music play").</li>
+            <li>Every word has to match, so add a word to narrow the results down.</li>
+            <li>Or browse: <a href="/docs/guides">all guides</a>, the <a href="/docs">documentation overview</a>, the <a href="/commands">command list</a>.</li>
+        </ul>
+        <% } %>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

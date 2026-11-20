@@ -21,7 +21,7 @@
         .status-line.err { color: var(--cf-danger); }
     </style>
     <link rel="stylesheet" href="/css/dropdowns.css">
-<%- include('partials/site-head', { title: 'Edit: ' + (card.card_name || 'Card') + ' | CertiFried' }) %>
+<%- include('partials/site-head', { title: 'Edit ' + (card.card_name || 'card') + ' · CertiFried' }) %>
 </head>
 <body>
     <% const cardLink = card.slug || card.share_token; %>

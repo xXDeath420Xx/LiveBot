@@ -1,8 +1,11 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
 import { themeColor } from '../../core/guild-theme.js';
+import { isRestoreDisabled, RESTORE_UNAVAILABLE_MESSAGE } from '../../utils/backup-restore-guard.js';
+import { createSnapshot } from '../../utils/backup-utils.js';
+import { loadBackupRow, previewRestore, startRestore, activeRun, normalizeSnapshot } from '../../core/backup-restore.js';
 
 export async function handleCreate(interaction) {
     await interaction.deferReply({ ephemeral: true });
@@ -12,126 +15,15 @@ export async function handleCreate(interaction) {
     const name = interaction.options.getString('name');
     const guild = interaction.guild;
 
-    const snapshot = {
-        version: '2.0',
-        guildName: guild.name,
-        guildIcon: guild.iconURL({ size: 1024 }),
-        guildBanner: guild.bannerURL({ size: 1024 }),
-        createdAt: new Date().toISOString(),
-        channels: [],
-        roles: [],
-        categories: [],
-        emoji: [],
-        stickers: [],
-        webhooks: [],
-        memberRoles: []
-    };
-
-    // Backup roles (excluding @everyone and bot roles)
-    const roles = Array.from(guild.roles.cache.values())
-        .filter(role => !role.managed && role.id !== guild.id)
-        .sort((a, b) => b.position - a.position);
-
-    for (const role of roles) {
-        snapshot.roles.push({
-            name: role.name,
-            color: role.color,
-            hoist: role.hoist,
-            permissions: role.permissions.bitfield.toString(),
-            mentionable: role.mentionable,
-            position: role.position
-        });
-    }
-
-    // Backup categories
-    const categories = guild.channels.cache.filter(ch => ch.type === 4);
-    for (const [id, category] of categories) {
-        snapshot.categories.push({
-            name: category.name,
-            position: category.position,
-            channels: []
-        });
-    }
-
-    // Backup channels
-    const channels = guild.channels.cache.filter(ch => ch.type !== 4);
-    for (const [id, channel] of channels) {
-        const channelData = {
-            name: channel.name,
-            type: channel.type,
-            position: channel.position,
-            topic: channel.topic || null,
-            nsfw: channel.nsfw || false,
-            rateLimitPerUser: channel.rateLimitPerUser || 0,
-            bitrate: channel.bitrate || null,
-            userLimit: channel.userLimit || null,
-            parentName: channel.parent?.name || null
-        };
-
-        if (channel.parent) {
-            const catIndex = snapshot.categories.findIndex(c => c.name === channel.parent.name);
-            if (catIndex !== -1) {
-                snapshot.categories[catIndex].channels.push(channelData);
-            }
-        } else {
-            snapshot.channels.push(channelData);
-        }
-    }
-
-    // Backup emoji
-    for (const [id, emoji] of guild.emojis.cache) {
-        snapshot.emoji.push({
-            name: emoji.name,
-            url: emoji.url,
-            animated: emoji.animated,
-            requireColons: emoji.requireColons
-        });
-    }
-
-    // Backup stickers
-    for (const [id, sticker] of guild.stickers.cache) {
-        snapshot.stickers.push({
-            name: sticker.name,
-            description: sticker.description,
-            tags: sticker.tags,
-            url: sticker.url
-        });
-    }
-
-    // Backup webhooks
-    const webhooks = await guild.fetchWebhooks().catch(() => new Map());
-    for (const [id, webhook] of webhooks) {
-        snapshot.webhooks.push({
-            name: webhook.name,
-            channelName: webhook.channel?.name,
-            avatar: webhook.avatarURL(),
-            url: webhook.url
-        });
-    }
-
-    // Backup member roles (limit to 500 members)
-    const members = await guild.members.fetch({ limit: 500 }).catch(() => new Map());
-    for (const [id, member] of members) {
-        if (!member.user.bot) {
-            const memberRoles = Array.from(member.roles.cache.values())
-                .filter(role => role.id !== guild.id)
-                .map(role => role.name);
-
-            if (memberRoles.length > 0) {
-                snapshot.memberRoles.push({
-                    userId: member.id,
-                    username: member.user.tag,
-                    roles: memberRoles
-                });
-            }
-        }
-    }
-
-    const snapshotJson = JSON.stringify(snapshot);
+    // Same v5 snapshot as the dashboard and the weekly backup (utils/backup-utils.js), so every backup
+    // restores the same way (H-801). Until 2026-11-20 this wrote its own older format.
+    const snapshot = await createSnapshot(guild);
     const [result] = await pool.execute(
         `INSERT INTO server_backups (guild_id, snapshot_name, snapshot_json, created_by_id) VALUES (?, ?, ?, ?)`,
-        [guildId, name, snapshotJson, userId]
+        [guildId, name, JSON.stringify(snapshot), userId]
     );
+    const m = snapshot.meta;
+    const d = snapshot.discord;
 
     const embed = new EmbedBuilder()
         .setColor(themeColor(interaction.guildId, 'success'))
@@ -139,16 +31,16 @@ export async function handleCreate(interaction) {
         .setDescription(`Server backup **${name}** has been created successfully!`)
         .addFields(
             { name: 'Backup ID', value: `${result.insertId}`, inline: true },
-            { name: 'Roles', value: `${snapshot.roles.length}`, inline: true },
-            { name: 'Channels', value: `${channels.size}`, inline: true },
-            { name: 'Categories', value: `${snapshot.categories.length}`, inline: true },
-            { name: 'Emoji', value: `${snapshot.emoji.length}`, inline: true },
-            { name: 'Stickers', value: `${snapshot.stickers.length}`, inline: true },
-            { name: 'Webhooks', value: `${snapshot.webhooks.length}`, inline: true },
-            { name: 'Member Roles', value: `${snapshot.memberRoles.length}`, inline: true },
-            { name: '\u200B', value: '\u200B', inline: true }
+            { name: 'Roles', value: `${d.roles.length}`, inline: true },
+            { name: 'Categories', value: `${d.categories.length}`, inline: true },
+            { name: 'Channels', value: `${d.channels.length}`, inline: true },
+            { name: 'Emoji', value: `${m.emojiCount}`, inline: true },
+            { name: 'Stickers', value: `${m.stickerCount}`, inline: true },
+            { name: 'Members', value: `${d.members.length}`, inline: true },
+            { name: 'Bans', value: `${m.banCount}`, inline: true },
+            { name: 'Bot settings', value: `${m.configTablesCount} tables`, inline: true }
         )
-        .setFooter({ text: `Use /admin backup restore ${result.insertId} to restore this backup` })
+        .setFooter({ text: `Use /admin backup restore ${result.insertId} to see what a restore would change` })
         .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
@@ -167,11 +59,11 @@ export async function handleCreate(interaction) {
             ['Name', name],
             ['Backup ID', String(result.insertId)],
             ['By', userLabel(interaction.user)],
-            ['Roles', snapshot.roles.length],
-            ['Channels', channels.size],
-            ['Categories', snapshot.categories.length],
-            ['Emoji', snapshot.emoji.length],
-            ['Member roles', snapshot.memberRoles.length],
+            ['Roles', d.roles.length],
+            ['Channels', d.channels.length],
+            ['Categories', d.categories.length],
+            ['Emoji', m.emojiCount],
+            ['Members', d.members.length],
         ],
     }));
 }
@@ -215,300 +107,147 @@ export async function handleList(interaction) {
     await interaction.editReply({ embeds: [embed] });
 }
 
+// Restore (register H-801, rebuilt 2026-11-20): a preview first, nothing deleted unless the admin asks,
+// deletes last. The work is done by core/backup-restore.js, shared with the dashboard.
+const clip = (lines, max = 1000) => {
+    let out = '';
+    let n = 0;
+    for (const l of lines) {
+        const next = `${out}${out ? '\n' : ''}• ${l}`;
+        if (next.length > max - 30) break;
+        out = next; n++;
+    }
+    return lines.length > n ? `${out}\n…and ${lines.length - n} more` : out;
+};
+
+function restorePreviewEmbed(guildId, backupRow, summary, removeExtras, extra) {
+    const c = summary.counts;
+    const embed = new EmbedBuilder()
+        .setColor(themeColor(guildId, c.deletes ? 'danger' : 'primary'))
+        .setTitle(`♻️ Restore preview: ${backupRow.snapshot_name}`.slice(0, 256))
+        .setDescription([
+            c.total ? `This restore would make **${c.total}** change${c.total === 1 ? '' : 's'}. Nothing has been changed yet.` : 'The server already matches this backup. There is nothing to restore.',
+            removeExtras ? '**Also remove** is on: channels, categories and roles that are not in the backup are deleted at the end, and only if everything before worked.'
+                : 'Nothing that is not in the backup is removed.',
+            extra || '',
+        ].filter(Boolean).join('\n\n'));
+    const kept = summary.keptNotInBackup;
+    const keptLines = kept ? [...kept.categories.map(n => `Category ${n}`), ...kept.channels.map(n => `#${n}`), ...kept.roles.map(n => `Role ${n}`)] : [];
+    for (const [title, lines] of [['Will be created', summary.create], ['Will be changed', summary.update], ['Will be deleted', summary.remove],
+        ['Not in the backup, kept', keptLines], ['Cannot be restored', summary.skipped], ['Good to know', summary.notes]]) {
+        if (lines?.length) embed.addFields({ name: `${title} (${lines.length})`, value: clip(lines) });
+    }
+    return embed.setFooter({ text: 'Buttons stay active for 2 minutes' });
+}
+
+function restoreButtons(summary, removeExtras, running) {
+    const row = new ActionRowBuilder();
+    if (summary.counts.total && !running) {
+        row.addComponents(new ButtonBuilder().setCustomId('bkrestore_go')
+            .setLabel(summary.counts.deletes ? `Restore and delete ${summary.counts.deletes}` : 'Restore')
+            .setStyle(summary.counts.deletes ? ButtonStyle.Danger : ButtonStyle.Primary));
+    }
+    row.addComponents(new ButtonBuilder().setCustomId('bkrestore_toggle')
+        .setLabel(removeExtras ? 'Keep things not in the backup' : 'Preview with "also remove"')
+        .setStyle(ButtonStyle.Secondary));
+    row.addComponents(new ButtonBuilder().setCustomId('bkrestore_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary));
+    return [row];
+}
+
 export async function handleRestore(interaction) {
+    // H-801 kill switch: refuse before reading the backup or touching the server.
+    if (isRestoreDisabled()) {
+        return interaction.reply({ content: RESTORE_UNAVAILABLE_MESSAGE, ephemeral: true });
+    }
     await interaction.deferReply({ ephemeral: true });
 
-    const guildId = interaction.guild.id;
-    const userId = interaction.user.id;
+    const guild = interaction.guild;
     const backupId = interaction.options.getInteger('backup_id');
-
-    const [backups] = await pool.execute(
-        `SELECT * FROM server_backups WHERE id = ? AND guild_id = ?`,
-        [backupId, guildId]
-    );
-
-    if (backups.length === 0) {
-        return await interaction.editReply({
-            content: `Backup with ID ${backupId} not found for this server!`
-        });
+    const backupRow = await loadBackupRow(pool, guild.id, backupId);
+    if (!backupRow) {
+        return interaction.editReply({ content: `Backup with ID ${backupId} not found for this server!` });
     }
 
-    const snapshot = JSON.parse(backups[0].snapshot_json);
-    const guild = interaction.guild;
-
-    await interaction.editReply({
-        content: '⚠️ **WARNING**: Restore will DELETE all existing channels and roles!\n\nStarting restore process...'
+    let removeExtras = false;
+    let pv = await previewRestore({ guild, backupRow, options: { removeExtras } });
+    if (!pv.ok) return interaction.editReply({ content: pv.error });
+    const running = !!activeRun(guild.id);
+    let msg = await interaction.editReply({
+        embeds: [restorePreviewEmbed(interaction.guildId, backupRow, pv.summary, removeExtras, running ? 'A restore is already running for this server.' : '')],
+        components: restoreButtons(pv.summary, removeExtras, running),
     });
+    if (!msg?.awaitMessageComponent) return;
 
-    let deletedChannels = 0;
-    let deletedRoles = 0;
-    let createdChannels = 0;
-    let createdRoles = 0;
-
-    // Sent before the deletes start: the restore deletes every channel, the log channel included.
-    void logFeatureEvent(() => (guild), 'backup.restoreStarted', () => ({
-        title: '⏳ Backup Restore Started',
-        description: `Restoring server backup **${backups[0].snapshot_name}** with \`/admin backup restore\`. All existing channels and roles are deleted and re-created from the backup.`,
-        fields: [
-            ['Name', backups[0].snapshot_name],
-            ['Backup ID', String(backupId)],
-            ['By', userLabel(interaction.user)],
-        ],
-    }));
-
-    try {
-        // Delete existing channels (except system channels)
-        for (const [id, channel] of guild.channels.cache) {
-            if (channel.id !== guild.rulesChannelId && channel.id !== guild.publicUpdatesChannelId) {
-                try {
-                    await channel.delete('Backup restore');
-                    deletedChannels++;
-                } catch (err) {
-                    logger.warn('[Backup] Could not delete channel', { channelId: id, error: err.message });
-                }
-            }
-        }
-
-        // Delete existing roles (except @everyone and managed roles)
-        for (const [id, role] of guild.roles.cache) {
-            if (!role.managed && id !== guild.id) {
-                try {
-                    await role.delete('Backup restore');
-                    deletedRoles++;
-                } catch (err) {
-                    logger.warn('[Backup] Could not delete role', { roleId: id, error: err.message });
-                }
-            }
-        }
-
-        // Recreate roles
-        for (const roleData of snapshot.roles) {
-            try {
-                await guild.roles.create({
-                    name: roleData.name,
-                    color: roleData.color,
-                    hoist: roleData.hoist,
-                    permissions: BigInt(roleData.permissions),
-                    mentionable: roleData.mentionable,
-                    reason: 'Backup restore'
-                });
-                createdRoles++;
-            } catch (err) {
-                logger.warn('[Backup] Could not create role', { roleName: roleData.name, error: err.message });
-            }
-        }
-
-        // Recreate categories
-        const categoryMap = new Map();
-        for (const catData of snapshot.categories) {
-            try {
-                const category = await guild.channels.create({
-                    name: catData.name,
-                    type: 4,
-                    position: catData.position,
-                    reason: 'Backup restore'
-                });
-                categoryMap.set(catData.name, category);
-            } catch (err) {
-                logger.warn('[Backup] Could not create category', { categoryName: catData.name, error: err.message });
-            }
-        }
-
-        // Recreate channels in categories
-        for (const catData of snapshot.categories) {
-            const category = categoryMap.get(catData.name);
-            if (!category) continue;
-
-            for (const channelData of catData.channels) {
-                try {
-                    const createData = {
-                        name: channelData.name,
-                        type: channelData.type,
-                        parent: category.id,
-                        position: channelData.position,
-                        topic: channelData.topic,
-                        nsfw: channelData.nsfw,
-                        rateLimitPerUser: channelData.rateLimitPerUser,
-                        reason: 'Backup restore'
-                    };
-
-                    if (channelData.bitrate) createData.bitrate = channelData.bitrate;
-                    if (channelData.userLimit) createData.userLimit = channelData.userLimit;
-
-                    await guild.channels.create(createData);
-                    createdChannels++;
-                } catch (err) {
-                    logger.warn('[Backup] Could not create channel', { channelName: channelData.name, error: err.message });
-                }
-            }
-        }
-
-        // Recreate root channels (no parent)
-        for (const channelData of snapshot.channels) {
-            try {
-                const createData = {
-                    name: channelData.name,
-                    type: channelData.type,
-                    position: channelData.position,
-                    topic: channelData.topic,
-                    nsfw: channelData.nsfw,
-                    rateLimitPerUser: channelData.rateLimitPerUser,
-                    reason: 'Backup restore'
-                };
-
-                if (channelData.bitrate) createData.bitrate = channelData.bitrate;
-                if (channelData.userLimit) createData.userLimit = channelData.userLimit;
-
-                await guild.channels.create(createData);
-                createdChannels++;
-            } catch (err) {
-                logger.warn('[Backup] Could not create channel', { channelName: channelData.name, error: err.message });
-            }
-        }
-
-        // Restore emoji (v2.0+)
-        let createdEmoji = 0;
-        if (snapshot.emoji && snapshot.emoji.length > 0) {
-            for (const emojiData of snapshot.emoji) {
-                try {
-                    await guild.emojis.create({
-                        attachment: emojiData.url,
-                        name: emojiData.name,
-                        reason: 'Backup restore'
-                    });
-                    createdEmoji++;
-                } catch (err) {
-                    logger.warn('[Backup] Could not create emoji', { emojiName: emojiData.name, error: err.message });
-                }
-            }
-        }
-
-        // Restore stickers (v2.0+)
-        let createdStickers = 0;
-        if (snapshot.stickers && snapshot.stickers.length > 0) {
-            for (const stickerData of snapshot.stickers) {
-                try {
-                    await guild.stickers.create({
-                        file: stickerData.url,
-                        name: stickerData.name,
-                        tags: stickerData.tags,
-                        description: stickerData.description,
-                        reason: 'Backup restore'
-                    });
-                    createdStickers++;
-                } catch (err) {
-                    logger.warn('[Backup] Could not create sticker', { stickerName: stickerData.name, error: err.message });
-                }
-            }
-        }
-
-        // Restore webhooks (v2.0+)
-        let createdWebhooks = 0;
-        if (snapshot.webhooks && snapshot.webhooks.length > 0) {
-            for (const webhookData of snapshot.webhooks) {
-                try {
-                    const channel = guild.channels.cache.find(ch => ch.name === webhookData.channelName);
-                    if (channel && channel.isTextBased()) {
-                        await channel.createWebhook({
-                            name: webhookData.name,
-                            avatar: webhookData.avatar,
-                            reason: 'Backup restore'
-                        });
-                        createdWebhooks++;
-                    }
-                } catch (err) {
-                    logger.warn('[Backup] Could not create webhook', { webhookName: webhookData.name, error: err.message });
-                }
-            }
-        }
-
-        // Restore server icon and banner (v2.0+)
+    for (;;) {
+        let i;
         try {
-            if (snapshot.guildIcon) {
-                await guild.setIcon(snapshot.guildIcon).catch(() => {});
-            }
-            if (snapshot.guildBanner) {
-                await guild.setBanner(snapshot.guildBanner).catch(() => {});
-            }
-        } catch (err) {
-            logger.warn('[Backup] Could not restore server icon/banner', { error: err.message });
+            i = await msg.awaitMessageComponent({ filter: (b) => b.user.id === interaction.user.id && b.customId.startsWith('bkrestore_'), time: 120_000 });
+        } catch {
+            await interaction.editReply({ components: [] }).catch(() => {});
+            return;
         }
-
-        // Restore member roles (v2.0+)
-        let restoredMemberRoles = 0;
-        if (snapshot.memberRoles && snapshot.memberRoles.length > 0) {
-            for (const memberData of snapshot.memberRoles) {
-                try {
-                    const member = await guild.members.fetch(memberData.userId).catch(() => null);
-                    if (member) {
-                        const rolesToAdd = [];
-                        for (const roleName of memberData.roles) {
-                            const role = guild.roles.cache.find(r => r.name === roleName);
-                            if (role) rolesToAdd.push(role);
-                        }
-                        if (rolesToAdd.length > 0) {
-                            await member.roles.add(rolesToAdd);
-                            restoredMemberRoles++;
-                        }
+        if (i.customId === 'bkrestore_cancel') {
+            await i.update({ content: 'Restore cancelled. Nothing was changed.', embeds: [], components: [] });
+            return;
+        }
+        if (i.customId === 'bkrestore_toggle') {
+            removeExtras = !removeExtras;
+            await i.deferUpdate();
+            pv = await previewRestore({ guild, backupRow, options: { removeExtras } });
+            if (!pv.ok) { await interaction.editReply({ content: pv.error, embeds: [], components: [] }); return; }
+            msg = await interaction.editReply({ embeds: [restorePreviewEmbed(interaction.guildId, backupRow, pv.summary, removeExtras)], components: restoreButtons(pv.summary, removeExtras, false) });
+            continue;
+        }
+        // bkrestore_go
+        await i.deferUpdate();
+        const started = await startRestore({
+            guild, backupRow, options: { removeExtras, restoreBotConfig: true, restoreBans: false },
+            by: interaction.user, source: 'command', expectedHash: pv.summary.hash, graceDays: 30,
+            deps: {
+                onStart: (run, summary) => void logFeatureEvent(() => (guild), 'backup.restoreStarted', () => ({
+                    title: '⏳ Backup Restore Started',
+                    description: `Restoring server backup **${run.backupName}** with \`/admin backup restore\`. ${removeExtras ? 'Channels and roles that are not in the backup are removed at the end.' : 'Nothing that is not in the backup is removed.'}`,
+                    fields: [['Name', run.backupName], ['By', userLabel(interaction.user)], ['Create', `${summary.counts.createRoles} roles, ${summary.counts.createCategories} categories, ${summary.counts.createChannels} channels`],
+                        ['Change', summary.counts.updates], ['Delete', summary.counts.deletes]],
+                })),
+                onFinish: (run) => {
+                    const fields = [['Steps done', `${run.completed.length}/${run.total}`], ['Failed', run.failed.length], ['By', userLabel(interaction.user)]];
+                    if (run.status === 'failed') {
+                        void logFeatureEvent(() => (guild), 'backup.failed', () => ({
+                            title: '❌ Backup Restore Stopped',
+                            description: `The restore of **${run.backupName}** stopped: ${run.error || 'unknown error'}. It can be resumed from the dashboard's Backups page.`,
+                            fields,
+                        }));
+                    } else {
+                        void logFeatureEvent(() => (guild), 'backup.restored', () => ({
+                            title: '♻️ Backup Restored',
+                            description: `Server backup **${run.backupName}** was restored with \`/admin backup restore\`.`,
+                            fields,
+                        }));
                     }
-                } catch (err) {
-                    logger.warn('[Backup] Could not restore member roles', { userId: memberData.userId, error: err.message });
-                }
-            }
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor(themeColor(interaction.guildId, 'success'))
-            .setTitle('✅ Backup Restored')
-            .setDescription(`Successfully restored backup **${backups[0].snapshot_name}**!`)
-            .addFields(
-                { name: 'Channels Deleted', value: `${deletedChannels}`, inline: true },
-                { name: 'Channels Created', value: `${createdChannels}`, inline: true },
-                { name: '\u200B', value: '\u200B', inline: true },
-                { name: 'Roles Deleted', value: `${deletedRoles}`, inline: true },
-                { name: 'Roles Created', value: `${createdRoles}`, inline: true },
-                { name: '\u200B', value: '\u200B', inline: true },
-                { name: 'Emoji Created', value: `${createdEmoji}`, inline: true },
-                { name: 'Stickers Created', value: `${createdStickers}`, inline: true },
-                { name: 'Webhooks Created', value: `${createdWebhooks}`, inline: true },
-                { name: 'Member Roles Restored', value: `${restoredMemberRoles}`, inline: true }
-            )
-            .setTimestamp();
-
-        await interaction.editReply({ content: null, embeds: [embed] });
-
-        logger.info('[Backup] Restored backup', {
-            guildId,
-            backupId,
-            userId,
-            deletedChannels,
-            deletedRoles,
-            createdChannels,
-            createdRoles
+                },
+            },
         });
-
-        // The log channel was re-created with a new id, so this only lands if logging was re-pointed (or uses a channel the restore kept).
-        void logFeatureEvent(() => (guild), 'backup.restored', () => ({
-            title: '♻️ Backup Restored',
-            description: `Server backup **${backups[0].snapshot_name}** was restored with \`/admin backup restore\`.`,
-            fields: [
-                ['Name', backups[0].snapshot_name],
-                ['By', userLabel(interaction.user)],
-                ['Channels deleted / created', `${deletedChannels} / ${createdChannels}`],
-                ['Roles deleted / created', `${deletedRoles} / ${createdRoles}`],
-                ['Emoji', createdEmoji],
-                ['Member roles restored', restoredMemberRoles],
-            ],
-        }));
-
-    } catch (error) {
-        logger.error('[Backup] Restore failed', { error: error.message, stack: error.stack });
-        void logFeatureEvent(() => (guild), 'backup.failed', () => ({
-            title: '❌ Backup Failed',
-            description: `Restoring server backup **${backups[0].snapshot_name}** stopped with an error. Part of the backup may already have been applied.`,
-            fields: [['Action', 'Restore'], ['By', userLabel(interaction.user)], ['Why', String(error.message || 'Unknown error').slice(0, 300), false]],
-        }));
-        throw new Error(`Restore failed: ${error.message}`);
+        if (!started.ok) {
+            if (started.summary) {
+                pv = { ...pv, summary: started.summary };
+                msg = await interaction.editReply({ embeds: [restorePreviewEmbed(interaction.guildId, backupRow, started.summary, removeExtras, started.error)], components: restoreButtons(started.summary, removeExtras, false) });
+                continue;
+            }
+            await interaction.editReply({ content: started.error, embeds: [], components: [] });
+            return;
+        }
+        await interaction.editReply({
+            content: `⏳ Restoring **${backupRow.snapshot_name}**: ${started.run.total} steps. This can take several minutes; progress shows on the dashboard's Backups page, where an interrupted restore can be resumed.`,
+            embeds: [], components: [],
+        });
+        const run = await started.done;
+        const text = `${run.status === 'failed' ? '❌ Restore stopped' : run.failed.length ? '⚠️ Restore finished with errors' : '✅ Restore finished'}: **${backupRow.snapshot_name}**, ${run.completed.length} of ${run.total} steps done`
+            + (run.failed.length ? `, ${run.failed.length} failed:\n${run.failed.slice(0, 8).map(f => `• ${f.label}: ${f.error}`).join('\n')}` : '.')
+            + (run.status === 'failed' ? '\nIt can be resumed from the dashboard\'s Backups page.' : '');
+        // The reply token lasts 15 minutes; a long restore reports by DM instead.
+        await interaction.editReply({ content: text.slice(0, 1900) }).catch(() => interaction.user.send({ content: text.slice(0, 1900) }).catch(() => {}));
+        return;
     }
 }
 
@@ -570,7 +309,10 @@ export async function handleInfo(interaction) {
     const creator = await interaction.guild.members.fetch(backup.created_by_id).catch(() => null);
     const creatorName = creator ? creator.user.tag : 'Unknown User';
 
-    const channelCount = snapshot.channels.length + snapshot.categories.reduce((sum, cat) => sum + cat.channels.length, 0);
+    // Every backup kind: weekly and dashboard (v5, under snapshot.discord) and the old command format (H-801).
+    const norm = normalizeSnapshot(snapshot, { guildId });
+    const channelCount = norm.channels.length;
+    const originalName = snapshot.guildName || snapshot.discord?.settings?.name || 'Unknown';
 
     const embed = new EmbedBuilder()
         .setColor(themeColor(interaction.guildId, 'primary'))
@@ -581,12 +323,12 @@ export async function handleInfo(interaction) {
             { name: 'Created At', value: new Date(backup.created_at).toLocaleString(), inline: true },
             { name: '\u200B', value: '\u200B', inline: true },
             { name: 'Total Channels', value: `${channelCount}`, inline: true },
-            { name: 'Categories', value: `${snapshot.categories.length}`, inline: true },
-            { name: 'Roles', value: `${snapshot.roles.length}`, inline: true },
-            { name: 'Backup Version', value: snapshot.version || '1.0', inline: true },
-            { name: 'Original Server Name', value: snapshot.guildName, inline: true }
+            { name: 'Categories', value: `${norm.categories.length}`, inline: true },
+            { name: 'Roles', value: `${norm.roles.length}`, inline: true },
+            { name: 'Backup Version', value: String(snapshot.version || '1.0'), inline: true },
+            { name: 'Original Server Name', value: String(originalName).slice(0, 1024), inline: true }
         )
-        .setFooter({ text: `Use /admin backup restore ${backupId} to restore this backup` })
+        .setFooter({ text: `Use /admin backup restore ${backupId} to see what a restore would change` })
         .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

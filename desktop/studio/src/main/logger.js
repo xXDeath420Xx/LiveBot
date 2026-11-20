@@ -15,6 +15,7 @@ const path = require('node:path');
 
 const SECRET_KEY = /pass(word)?|token|secret|authorization|^auth$|authentication|cookie|pairing_?code/i;
 const TOKEN_RE = /sbd_[A-Za-z0-9_-]{8,}/g;
+const BRIDGE_TOKEN_RE = /sdk_[A-Za-z0-9_-]{8,}/g;   // the Stream Deck pairing token (bridge-server.js)
 const BEARER_RE = /(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi;
 const CODE_RE = /\b[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}\b/g;
 const PAIR_URL_RE = /(code=)[^&\s"]+/gi;
@@ -22,6 +23,7 @@ const PAIR_URL_RE = /(code=)[^&\s"]+/gi;
 function scrubString(s) {
     return String(s)
         .replace(TOKEN_RE, 'sbd_[hidden]')
+        .replace(BRIDGE_TOKEN_RE, 'sdk_[hidden]')
         .replace(BEARER_RE, '$1[hidden]')
         .replace(PAIR_URL_RE, '$1[hidden]')
         .replace(CODE_RE, '[code hidden]');

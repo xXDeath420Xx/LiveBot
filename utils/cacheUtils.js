@@ -74,10 +74,12 @@ export function startPeriodicCleanup(cleanupFn, intervalMs, name = 'cleanup') {
         }
     };
 
+    // unref: housekeeping only; it must not keep a script or test run alive on its own (H-796)
     interval = setInterval(runCleanup, intervalMs);
+    interval.unref?.();
 
     // Run initial cleanup after a short delay
-    setTimeout(runCleanup, 5000);
+    setTimeout(runCleanup, 5000).unref?.();
 
     logger.debug(`[CacheUtils] Started ${name} cleanup interval (${intervalMs}ms)`);
 

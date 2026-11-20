@@ -63,7 +63,7 @@ export default {
                         .addStringOption(opt => opt.setName('name').setDescription('Name for this backup').setRequired(true).setMaxLength(100)))
                 .addSubcommand(sub => sub.setName('list').setDescription('View all server backups'))
                 .addSubcommand(sub =>
-                    sub.setName('restore').setDescription('Restore from a backup (DESTRUCTIVE)')
+                    sub.setName('restore').setDescription('Preview a restore from a backup, then confirm it')
                         .addIntegerOption(opt => opt.setName('backup_id').setDescription('ID of the backup to restore').setRequired(true)))
                 .addSubcommand(sub =>
                     sub.setName('delete').setDescription('Delete a backup')
@@ -200,7 +200,8 @@ export default {
                 .addSubcommand(sub =>
                     sub.setName('quarantine').setDescription('Quarantine a user (temporarily restrict permissions)')
                         .addUserOption(opt => opt.setName('user').setDescription('The user to quarantine.').setRequired(true))
-                        .addBooleanOption(opt => opt.setName('enable').setDescription('Enable or disable quarantine for the user.').setRequired(true)))
+                        .addBooleanOption(opt => opt.setName('enable').setDescription('Enable or disable quarantine for the user.').setRequired(true))
+                        .addStringOption(opt => opt.setName('reason').setDescription('Why (saved with the quarantine and shown in the audit log)').setMaxLength(500)))
                 .addSubcommand(sub =>
                     sub.setName('slowmode').setDescription('Sets or removes a slowmode cooldown for the current channel.')
                         .addStringOption(opt => opt.setName('duration').setDescription('The slowmode duration (e.g., 10m, 5m, 1h) or "off".').setRequired(true))

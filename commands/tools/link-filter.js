@@ -201,7 +201,7 @@ async function execute(interaction) {
         { name: '✅ Always allowed', value: `Social & streaming — ${SOCIAL_PLATFORMS.slice(0, 8).join(', ')}…\nChat plumbing — ${MEDIA_HOSTS.slice(0, 6).join(', ')}…` },
         { name: '🚫 Always removed', value: `Shorteners and commission marketplaces — ${BLOCKED_HOSTS.slice(0, 8).join(', ')}…` },
         { name: '🔎 Sent for a decision', value: `Anything unrecognised, plus monetisation links (${MONETISATION_HOSTS.slice(0, 4).join(', ')}…). Approving one allowlists the domain forever.` },
-        { name: 'Not handled here', value: 'Discord invite links — those are the invite filter\'s job (`/invite-filter`).' },
+        { name: 'Not handled here', value: 'Discord invite links — those are the invite filter\'s job, set on the dashboard\'s Raid lockdown page.' },
       )
       .setFooter({ text: 'Obfuscation (example [dot] com, hxxps://) is resolved before matching.' });
     return interaction.reply({ embeds: [embed], ...EPHEMERAL });
@@ -224,7 +224,7 @@ async function execute(interaction) {
       { name: `Allowed here (${allow.length})`, value: allow.length ? allow.slice(0, 25).map(d => `\`${d.domain}\``).join(' ') : '—' },
       { name: `Blocked here (${deny.length})`, value: deny.length ? deny.slice(0, 25).map(d => `\`${d.domain}\``).join(' ') : '—' },
     )
-    .setFooter({ text: 'Staff are always exempt. Discord invites are handled by /invite-filter.' });
+    .setFooter({ text: 'Staff are always exempt. Discord invites are handled by the invite filter (dashboard, Raid lockdown page).' });
   return interaction.reply({ embeds: [embed], ...EPHEMERAL });
 }
 

@@ -1,0 +1,30 @@
+<%#
+  The shared site frame for pages whose route builds the page body as a string (the Sprite Tracker,
+  the scam lookup, holiday countdowns and other small public pages). Rendered by
+  dashboard/services/site-frame.js (renderFramed / sendFramed); never rendered by name from a route.
+
+  Locals (besides the usual res.locals: uiTheme, uiDensity, uiStyle, userPrefs, siteUser):
+    title        full <title> text, "<Page> · CertiFried"            (required)
+    description  meta description and og:description
+    path         canonical path, e.g. '/scams'
+    noindex      true: <meta name="robots" content="noindex">
+    ogTitle, ogImage, ogType   share-card overrides (see the site head partial)
+    headHtml     extra head markup: page stylesheets (link tags), twitter:* tags. Trusted, built by the route.
+    bodyHtml     the page: section tabs (optional) and main#main-content. Trusted, built by the route.
+    scriptsHtml  scripts after the footer. Trusted, built by the route.
+    bodyClass    extra class on body (cfs-body is always there)
+    active       site header nav key (see the site header partial); hideUser, returnTo as there.
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: locals.title, description: locals.description, path: locals.path, noindex: !!locals.noindex, ogTitle: locals.ogTitle || null, ogImage: locals.ogImage || null, ogType: locals.ogType || null }) %>
+<%- locals.headHtml || '' %>
+</head>
+<body class="cfs-body<%= locals.bodyClass ? ' ' + locals.bodyClass : '' %>">
+<%- include('partials/site-header', { active: locals.active || '', user: null, hideUser: !!locals.hideUser, returnTo: locals.returnTo || locals.sitePath || null }) %>
+<%- locals.bodyHtml || '' %>
+<%- include('partials/site-footer') %>
+<%- locals.scriptsHtml || '' %>
+</body>
+</html>

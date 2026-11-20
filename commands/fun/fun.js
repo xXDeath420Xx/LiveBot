@@ -17,6 +17,7 @@ import * as insultHandler from './fun-insult-handler.js';
 import { LANGUAGES as EVIL_INSULT_LANGUAGES } from '../../core/evil-insults.js';
 import { themeColor } from '../../core/guild-theme.js';
 import { getConfig } from '../../core/feature-config.js';
+import { withAchievement } from '../../core/achievement-hooks.js';
 
 function isOn(v) {
   return v === true || v === 1 || v === '1';
@@ -285,8 +286,8 @@ export default {
 
       if (group === 'astrology') {
         switch (subcommand) {
-          case 'horoscope': return await astrologyHandler.handleHoroscope(interaction);
-          case 'tarot': return await astrologyHandler.handleTarot(interaction);
+          case 'horoscope': return withAchievement(interaction, 'fortune_seeker', await astrologyHandler.handleHoroscope(interaction));
+          case 'tarot': return withAchievement(interaction, 'fortune_seeker', await astrologyHandler.handleTarot(interaction));
           case 'numerology': return await astrologyHandler.handleNumerology(interaction);
           case 'compatibility': return await astrologyHandler.handleCompatibility(interaction);
         }
@@ -294,7 +295,7 @@ export default {
 
       if (group === 'creative') {
         switch (subcommand) {
-          case 'meme': return await creativeHandler.handleMeme(interaction);
+          case 'meme': return withAchievement(interaction, 'meme_lord', await creativeHandler.handleMeme(interaction));
           case 'story': return await creativeHandler.handleStory(interaction);
           case 'prompt': return await creativeHandler.handlePrompt(interaction);
           case 'color': return await creativeHandler.handleColor(interaction);
@@ -395,7 +396,7 @@ export default {
         }
         if (!meme) return interaction.editReply({ content: '❌ Could not find a meme suitable for this channel. Please try again.' });
         const embed = new EmbedBuilder().setColor('#FF4500').setTitle(meme.title.length > 256 ? meme.title.substring(0, 253) + '...' : meme.title).setURL(meme.postLink).setImage(meme.url).setFooter({ text: `👍 ${meme.ups} upvotes • r/${meme.subreddit}` }).setTimestamp();
-        return interaction.editReply({ embeds: [embed] });
+        return withAchievement(interaction, 'meme_lord', await interaction.editReply({ embeds: [embed] }));
 
       } else if (subcommand === 'creatememe') {
         const templateId = interaction.options.getString('template');
@@ -404,7 +405,7 @@ export default {
         const response = await axios.post('https://api.imgflip.com/caption_image', new URLSearchParams({ template_id: templateId, text0: topText, text1: bottomText, username: 'imgflip_hubot', password: 'imgflip_hubot' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 });
         if (!response.data.success) return interaction.editReply({ content: '❌ Failed to create meme. Please try again.' });
         const embed = new EmbedBuilder().setColor('#00D9FF').setTitle('🎨 Your Custom Meme').setImage(response.data.data.url).setFooter({ text: 'Created with Imgflip' }).setTimestamp();
-        return interaction.editReply({ embeds: [embed] });
+        return withAchievement(interaction, 'meme_lord', await interaction.editReply({ embeds: [embed] }));
 
       } else if (subcommand === 'fact') {
         const category = interaction.options.getString('category') || 'random';

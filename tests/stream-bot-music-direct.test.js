@@ -12,6 +12,7 @@ import { createSpotifyDirect, ffmpegMp3 } from '../core/stream-bot/music/spotify
 import { createMusic } from '../core/stream-bot/music/index.js';
 import { createSigner } from '../core/stream-bot/music/audio.js';
 import { withDefaults } from '../core/stream-bot/music/settings.js';
+import { acquire as realAcquire, release as realRelease } from '../core/spotify-connect-manager.js';
 
 /*
  * Spotify-direct for stream song requests (core/stream-bot/music/spotify-direct.js) against a FAKE session manager and a
@@ -28,9 +29,9 @@ const clock = { t: Date.parse('2026-11-19T17:00:00Z') };
 const now = () => clock.t;
 
 /**
- * The manager's acquire / release rules (core/spotify-connect-manager.js), on in-memory sessions, as they are: an owner
- * preemption kills the holder's streamTrack ffmpeg (session.activeStream) and calls session.stopHolder in a microtask,
- * after the new holder's stopHolder has replaced it.
+ * The manager's REAL acquire / release (core/spotify-connect-manager.js) on in-memory sessions: an owner preemption kills
+ * the holder's streamTrack ffmpeg (session.activeStream), moves the session and then calls the BUMPED holder's
+ * stopHolder in a microtask (H-760). Everything that would reach go-librespot is faked.
  */
 function fakeManager({ owner = 'owner-1', linked = ['linked-2'], brokenLinked = [] } = {}) {
     const sessions = { owner: { id: 'owner', busyGuildId: null }, 'u_linked-2': { id: 'u_linked-2', busyGuildId: null } };
@@ -39,19 +40,11 @@ function fakeManager({ owner = 'owner-1', linked = ['linked-2'], brokenLinked = 
         isOwnerUser: (id) => id === owner,
         isLinked: async (id) => linked.includes(id) || brokenLinked.includes(id),
         getSessionForUser: async (id) => (id === owner ? sessions.owner : linked.includes(id) ? sessions[`u_${id}`] : sessions.owner),
-        acquire(session, guildId, { owner: isOwner = false, stopHolder = null } = {}) {
-            m.calls.push(['acquire', session.id, guildId, isOwner]);
-            if (session.busyGuildId && session.busyGuildId !== guildId) {
-                if (isOwner && !session.ownerHeld) {
-                    try { session.activeStream?.kill('SIGKILL'); } catch { /* gone */ }
-                    session.activeStream = null;
-                    Promise.resolve().then(() => session.stopHolder?.()).catch(() => {});
-                } else return false;
-            }
-            Object.assign(session, { busyGuildId: guildId, ownerHeld: isOwner, stopHolder });
-            return true;
+        acquire(session, guildId, opts = {}) {
+            m.calls.push(['acquire', session.id, guildId, !!opts.owner]);
+            return realAcquire(session, guildId, opts);
         },
-        release(session, guildId) { m.calls.push(['release', session.id, guildId]); if (!guildId || session.busyGuildId === guildId) Object.assign(session, { busyGuildId: null, ownerHeld: false, stopHolder: null }); },
+        release(session, guildId) { m.calls.push(['release', session.id, guildId]); return realRelease(session, guildId); },
         streamTrack: async (session, uri) => {
             m.calls.push(['streamTrack', session.id, uri]);
             if (m.noAudio) return null;
@@ -167,6 +160,11 @@ test('the owner taking the session for Discord ends the stream song and rests Sp
     const done = await r.live.done;
     assert.equal(done.preempted, true, 'seen from the session holder: our audio ended because the owner took it');
     assert.equal(m.sessions.owner.busyGuildId, 'guild-owner', 'the stream did not release the Discord holder');
+    await new Promise((x) => setTimeout(x, 300));
+    assert.ok(!m.calls.some((c) => c[0] === 'pause'), "H-760: the bumped stream never pauses the owner's new playback");
+    await r.live.pause();
+    await r.live.seek(1000);
+    assert.ok(!m.calls.some((c) => c[0] === 'pause' || c[0] === 'seek'), 'nor does a late pause or seek from the player');
     assert.match(d.suspension(4).why, /taken for Discord/);
     assert.equal((await d.open({ profileId: 4, discordUserId: 'owner-1', item: item() })).reason, 'suspended');
     clock.t += 31 * 60_000;
@@ -195,7 +193,11 @@ test('nothing reading: the buffer stops at its cap and the pipe pushes back; no 
     m.streams.at(-1).write(Buffer.alloc(4096));
     await tick();
     assert.equal(enc.made[0].stdout.isPaused(), true, 'reading stopped above the cap');
-    const done = await r.live.done;
+    // H-821: the attach-wait timer is unref'd (it must never hold the bot open), and with the pipe paused nothing else is
+    // pending here, so without a handle of our own the event loop empties before it fires and the runner cancels this
+    // test and every one after it. The server always has other handles.
+    const keepAlive = setInterval(() => {}, 1000);
+    const done = await r.live.done.finally(() => clearInterval(keepAlive));
     assert.equal(done.why, 'no_player');
     assert.ok(names(m).includes('pause'));
 });

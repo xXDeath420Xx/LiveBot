@@ -16,6 +16,7 @@ export default {
     .addSubcommand((s) => s.setName('skip').setDescription('Skip to the next queued episode (only when a season/queue is playing)'))
     .addSubcommand((s) => s.setName('queue').setDescription('Show queued-up episodes'))
     .addSubcommand((s) => s.setName('status').setDescription('Show what is playing'))
+    .addSubcommand((s) => s.setName('open').setDescription('Open Watch Together (the Discord Activity) in your voice channel'))
     .addSubcommand((s) => s.setName('config').setDescription('Enable Cinema and set the control role (admin)')
       .addBooleanOption((o) => o.setName('enabled').setDescription('Enable in this server').setRequired(true))
       .addRoleOption((o) => o.setName('control_role').setDescription('Role allowed to control playback')))

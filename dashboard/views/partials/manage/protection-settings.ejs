@@ -161,6 +161,20 @@
         </div>
     </section>
 
+    <section class="cf-section" aria-labelledby="ps-gb-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-gb-title">Accepted global ban appeals</h2>
+                <p class="cf-section-desc">People whose global ban appeal a moderator accepted for this server with <code>/globalban appeals</code>.
+                    The global ban no longer acts on them here. Every other protection still does. Remove someone to let the global ban act on them again.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psGbCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="psGb" class="ps-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading', compact: true }) %></div>
+        </div>
+    </section>
+
     <section class="cf-section" aria-labelledby="ps-mgr-title">
         <header class="cf-section-head">
             <div>
@@ -562,6 +576,7 @@
       tile('Invite links: allowed users, roles and channels', String(o.inviteLinkAllowed ?? 0), 'advanced-protection', false),
       tile('Self-bot exempt roles', String(o.selfbotExemptRoles?.length ?? 0), 'advanced-protection', false),
       tile('Global ban exempt roles', String(o.globalBanExemptRoles?.length ?? 0), 'global-ban', false),
+      tile('Global ban appeals accepted here', String(o.globalBanAppealsAllowed ?? 0), 'protection-settings', false),
       tile('Commission filter rulings', String(o.commissionRulings ?? 0), 'commission-filter', false),
     );
   }
@@ -632,6 +647,17 @@
         if (!confirm(`Clear ${h.displayName || h.id}? They lose the exemption they kept from ${roleLabel(h.via)}.`)) return;
         act(() => req(api(`/allowlist/user/${h.id}`), { method: 'DELETE' }), 'Cleared.');
       }, h.stillHolds, 'They still hold the role'))) : [el('div', { class: 'ps-muted', text: 'Nobody recorded.' })]));
+  }
+
+  function renderGlobalBan() {
+    const list = state.globalBan || [];
+    $('psGbCount').textContent = String(list.length);
+    $('psGb').replaceChildren(...(list.length ? list.map(u => userItem(u,
+      `since ${when(u.addedAt)}`,
+      xButton('Remove', () => {
+        if (!confirm(`Remove ${u.displayName || u.id}? The global ban acts on them in this server again.`)) return;
+        act(() => req(api(`/allowlist/globalban/${u.id}`), { method: 'DELETE' }), 'Removed. The global ban acts on them here again.');
+      }))) : [el('div', { class: 'ps-muted', text: 'None.' })]));
   }
 
   function renderManagers() {
@@ -741,7 +767,7 @@
     try {
       state = await req(api('/'));
       if (!state.actor.canConfigure) notice('This page is view-only for you.');
-      renderPause(); renderOverview(); renderUsers(); renderRoles(); renderHeld(); renderManagers(); renderBots();
+      renderPause(); renderOverview(); renderUsers(); renderRoles(); renderHeld(); renderGlobalBan(); renderManagers(); renderBots();
     } catch (err) { showError(err.message); }
   }
   $('cfk-ps-bot-add')?.addEventListener('click', () => {

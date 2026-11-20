@@ -146,7 +146,9 @@ export function pickSession(/* userId */) {
  *   owner=true       — this is the bot owner; PREEMPT a non-owner holder (priority on
  *                      their own account, in any server).
  *   stopHolder=fn    — how to stop THIS guild's playback; stored so a later owner
- *                      preemption can cleanly bump us.
+ *                      preemption can cleanly bump us. Called as stopHolder({ preempted: true,
+ *                      by, from }) once the session already belongs to the new holder `by`, so a
+ *                      stop function must not pause or release a session it no longer holds.
  * Returns false when the session is taken and we can't preempt (non-owner, or it's
  * the owner already streaming elsewhere — one stream per account, even for the owner).
  */
@@ -157,7 +159,11 @@ export function acquire(session, guildId, opts = {}) {
       logger.info(`[SpotifyConnect] owner preempting ${session.id} from guild ${session.busyGuildId}`);
       try { session.activeStream?.kill('SIGKILL'); } catch {} // free the FIFO immediately
       session.activeStream = null;
-      Promise.resolve().then(() => session.stopHolder?.()).catch(() => {}); // stop their queue
+      // H-760: take the BUMPED holder's stop function now. It used to be read in the microtask, after the line
+      // below had replaced it with the new holder's, so the owner's own playback was stopped instead of theirs.
+      const bumpedStop = session.stopHolder;
+      const info = { preempted: true, by: guildId, from: session.busyGuildId };
+      Promise.resolve().then(() => bumpedStop?.(info)).catch(() => {}); // stop their queue
     } else {
       return false;
     }

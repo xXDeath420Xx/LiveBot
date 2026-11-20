@@ -3,7 +3,8 @@
  *
  * Three faces, same data:
  *   GET /countdown/:slug         → HTML with OpenGraph tags so Discord/Slack
- *                                  auto-unfurl the share into a rich card
+ *                                  auto-unfurl the share into a rich card (in the
+ *                                  shared site frame: services/site-frame.js)
  *   GET /countdown/:slug.png     → 1200×630 PNG (OG image size), canvas-rendered
  *   GET /countdown/:slug.json    → JSON for other integrations
  *
@@ -22,6 +23,8 @@ import {
     publicCountdownUrl,
 } from '../../../core/holiday-manager.js';
 import logger from '../../../utils/logger.js';
+import { sendFramed } from '../../services/site-frame.js';
+import { stylesheetTag } from '../../services/framed-assets.js';
 
 const LOG = '[PublicCountdown]';
 const router = express.Router();
@@ -120,13 +123,16 @@ function escapeHtml(s) {
     ));
 }
 
-function renderHtml(info, { host, slug }) {
-    const url = `https://${host}/countdown/${encodeURIComponent(slug)}`;
+/**
+ * The countdown page's site-frame locals (views/site-frame.ejs). Pure: scripts/theme-audit renders it.
+ * The holiday colour is carried as --hc on the page and only used as an accent
+ * (css/cf-public-pages.css mixes it toward the theme's text colour so it reads in every theme).
+ */
+export function countdownPage(info, { host, slug }) {
     const imgUrl = `https://${host}/countdown/${encodeURIComponent(slug)}.png`;
     const title = info.isToday
-        ? `Today is ${info.label}!`
+        ? `Today is ${info.label}`
         : `${info.daysRemaining} day${info.daysRemaining === 1 ? '' : 's'} until ${info.label}`;
-    const desc = `${info.label} falls on ${formatHolidayDate(info.nextDate)}. Live countdown · CertiFried`;
     // Discord bakes OG fields into a message's embed at post time and never refreshes them, so
     // using the dynamic "60 days until X" there means stale text forever. We hand Discord an
     // evergreen title/description and keep the live number inside the og:image (which Discord's
@@ -134,79 +140,46 @@ function renderHtml(info, { host, slug }) {
     const evergreenTitle = info.isToday
         ? `Today is ${info.label}`
         : `${info.label} countdown · CertiFried`;
-    const evergreenDesc = `Live countdown to ${info.label} — see current days remaining.`;
+    const evergreenDesc = `Live countdown to ${info.label}: how many days are left.`;
     const pal = paletteFor(info.slug);
+    const hc = /^#[0-9a-f]{6}$/i.test(pal.accent) ? pal.accent : '';
+    const date = formatHolidayDate(info.nextDate);
+    const s = encodeURIComponent(slug);
 
-    return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<meta name="robots" content="index,follow" />
-<title>${escapeHtml(title)} · CertiFried</title>
-<meta name="description" content="${escapeHtml(desc)}" />
+    const headHtml = `${stylesheetTag('/css/cf-public-pages.css')}
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(evergreenTitle)}">
+<meta name="twitter:description" content="${escapeHtml(evergreenDesc)}">
+<meta name="twitter:image" content="${escapeHtml(imgUrl)}">`;
 
-<!-- Open Graph (Discord, Facebook, Slack) — evergreen so posted embeds don't go stale. -->
-<meta property="og:type" content="website" />
-<meta property="og:title" content="${escapeHtml(evergreenTitle)}" />
-<meta property="og:description" content="${escapeHtml(evergreenDesc)}" />
-<meta property="og:image" content="${imgUrl}" />
-<meta property="og:image:width" content="1200" />
-<meta property="og:image:height" content="630" />
-<meta property="og:url" content="${url}" />
-<meta property="og:site_name" content="CertiFried" />
-
-<!-- Twitter / X -->
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="${escapeHtml(evergreenTitle)}" />
-<meta name="twitter:description" content="${escapeHtml(evergreenDesc)}" />
-<meta name="twitter:image" content="${imgUrl}" />
-
-<style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: ${pal.bg}; color: ${pal.ink}; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 64px 24px 96px; }
-  .accent { color: ${pal.accent}; }
-  .kicker { color: ${pal.accent}; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; margin: 0 0 12px; }
-  h1 { margin: 0 0 8px; font-size: clamp(80px, 18vw, 180px); line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
-  .label { margin: 32px 0 8px; font-size: clamp(32px, 6vw, 56px); font-weight: 700; }
-  .date { color: rgba(255,255,255,0.75); font-size: clamp(16px, 2.4vw, 22px); margin: 0 0 48px; }
-  .meta { color: rgba(255,255,255,0.55); font-size: 14px; display: flex; gap: 24px; flex-wrap: wrap; }
-  .meta a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-  .others { margin-top: 72px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 32px; }
-  .others h2 { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.55); margin: 0 0 16px; font-weight: 600; }
-  .others ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-  .others li { padding: 0; }
-  .others a { color: inherit; text-decoration: none; display: block; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; font-size: 14px; }
-  .others a:hover { background: rgba(255,255,255,0.04); }
-  .others .d { color: ${pal.accent}; font-weight: 600; margin-right: 8px; }
-</style>
-</head>
-<body>
-<main class="wrap">
-  ${info.isToday ? '<p class="kicker">Today</p>' : `<p class="kicker">${info.daysRemaining === 1 ? '1 day until' : `${info.daysRemaining} days until`}</p>`}
-  <h1>${info.isToday ? '🎉' : escapeHtml(String(info.daysRemaining))}</h1>
-  <p class="label">${escapeHtml(info.emoji)} ${escapeHtml(info.label)}</p>
-  <p class="date">${escapeHtml(formatHolidayDate(info.nextDate))}</p>
-  <p class="meta">
-    <a href="/countdown/${encodeURIComponent(slug)}.json">JSON</a>
-    <a href="/countdown/${encodeURIComponent(slug)}.png">OG image</a>
-    <a href="/">CertiFried</a>
-  </p>
-  <section class="others">
-    <h2>Other countdowns</h2>
-    <ul id="others"><!-- hydrated client-side --></ul>
+    const bodyHtml = `
+<main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow cd-page"${hc ? ` style="--hc:${hc}"` : ''}>
+  <div class="cd-hero">
+    <p class="cd-kicker">${info.isToday ? 'Today' : (info.daysRemaining === 1 ? '1 day until' : `${escapeHtml(String(info.daysRemaining))} days until`)}</p>
+    <p class="cd-number">${info.isToday ? 'Today' : escapeHtml(String(info.daysRemaining))}</p>
+    <h1 class="cd-label">${escapeHtml(info.label)}</h1>
+    <p class="cd-date">${escapeHtml(date)}</p>
+    <p class="cd-links">
+      <a href="/countdown/${s}.json">JSON</a>
+      <a href="/countdown/${s}.png">Share image</a>
+      <a href="/countdown.json">All countdowns as JSON</a>
+    </p>
+  </div>
+  <section class="cfs-section cd-others" id="others-section" aria-labelledby="cd-others-h" hidden>
+    <h2 id="cd-others-h">Other countdowns</h2>
+    <ul id="others"><!-- filled in by the script below --></ul>
   </section>
-</main>
-<script>
-  // Progressive enhancement: hydrate the "other countdowns" list client-side
-  // using safe DOM methods (createElement + textContent). No innerHTML even
-  // for our own JSON — stay out of the habit.
+</main>`;
+
+    const scriptsHtml = `<script>
+  // Progressive enhancement: fill the "other countdowns" list with safe DOM methods
+  // (createElement + textContent). No innerHTML, even for our own JSON.
   fetch('/countdown.json').then(function(r){return r.json();}).then(function(d){
     var ul = document.getElementById('others');
     if (!ul || !Array.isArray(d.countdowns)) return;
-    var currentSlug = ${JSON.stringify(slug)};
+    var currentSlug = ${JSON.stringify(slug).replace(/</g, '\u003c')};
     for (var i = 0; i < d.countdowns.length; i++) {
       var c = d.countdowns[i];
       if (c.slug === currentSlug) continue;
@@ -215,16 +188,43 @@ function renderHtml(info, { host, slug }) {
       a.href = '/countdown/' + encodeURIComponent(c.slug);
       var sp = document.createElement('span');
       sp.className = 'd';
-      sp.textContent = (c.isToday ? 'today!' : (c.daysRemaining + 'd'));
+      sp.textContent = (c.isToday ? 'Today' : (c.daysRemaining + 'd'));
       a.appendChild(sp);
-      a.appendChild(document.createTextNode(' ' + c.emoji + ' ' + c.label));
+      a.appendChild(document.createTextNode(c.label));
       li.appendChild(a);
       ul.appendChild(li);
     }
+    if (ul.children.length) document.getElementById('others-section').hidden = false;
   }).catch(function(){ /* non-essential */ });
-</script>
-</body>
-</html>`;
+</script>`;
+
+    return {
+        title: `${title} · CertiFried`,
+        description: evergreenDesc,
+        path: `/countdown/${s}`,
+        ogTitle: evergreenTitle,
+        ogImage: imgUrl,
+        ogType: 'website',
+        headHtml, bodyHtml, scriptsHtml,
+    };
+}
+
+/** The 404 page for a slug that is not in the catalogue. */
+export function unknownHolidayPage(slug) {
+    return {
+        title: 'Unknown holiday · CertiFried',
+        description: 'That holiday is not in the CertiFried countdown catalogue.',
+        noindex: true,
+        headHtml: stylesheetTag('/css/cf-public-pages.css'),
+        bodyHtml: `
+<main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+  <div class="cfs-empty cfs-panel">
+    <h2>Unknown holiday</h2>
+    <p><code class="pp-code">${escapeHtml(slug)}</code> is not in our countdown catalogue. <a href="/countdown.json">See the list of holidays</a>.</p>
+  </div>
+</main>`,
+        scriptsHtml: '',
+    };
 }
 
 // Index/JSON — list of every holiday with its days-remaining.
@@ -305,13 +305,14 @@ router.get('/countdown/:slug', async (req, res) => {
     const slug = String(req.params.slug || '').toLowerCase();
     try {
         if (!getHoliday(slug)) {
-            return res.status(404).type('html').send(`<!doctype html><title>Unknown holiday</title><body style="font-family:system-ui;background:#15172A;color:#fff;padding:40px"><h1>Unknown holiday</h1><p><code>${escapeHtml(slug)}</code> isn't in our catalog. <a href="/countdown.json" style="color:#5865F2">See the list</a>.</p></body>`);
+            return await sendFramed(req, res, unknownHolidayPage(slug), 404);
         }
         const info = await computeCountdown(slug);
         if (!info) return res.status(500).send('countdown unavailable');
         const host = req.headers.host || 'certifriedmultitool.com';
-        res.set('Cache-Control', 'public, max-age=600');
-        res.type('html').send(renderHtml(info, { host, slug }));
+        // private: the site header can carry the signed-in user's name and avatar.
+        res.set('Cache-Control', 'private, max-age=600');
+        await sendFramed(req, res, countdownPage(info, { host, slug }));
     } catch (e) {
         logger.error(`${LOG} slug HTML failed`, { slug, err: e.message });
         res.status(500).send('internal error');

@@ -11,6 +11,8 @@ import { createStreamBotPrivacy } from '../core/stream-bot/privacy.js';
 import { parseFirebot } from '../core/stream-bot/import/firebot.js';
 import { parseStreamerbot } from '../core/stream-bot/import/streamerbot.js';
 import { buildPlan } from '../core/stream-bot/import/mapper.js';
+import { viewersDdl, VIEWER_TABLES } from '../migrations/464_stream_bot_viewers.js';
+import { createViewerStore } from '../core/stream-bot/viewers/store.js';
 
 /*
  * Stream bot import writes (core/stream-bot/import/apply.js) on throwaway tables: the stream bot tables of migration
@@ -27,6 +29,7 @@ const ALL = ['commands', 'automations', 'timers', 'counters', 'rewards', 'quotes
 test.before(async () => {
     T = await makeTables(pool, 'i');
     for (const sql of importDdl(T.prefix)) await pool.query(sql);
+    for (const sql of viewersDdl(T.prefix)) await pool.query(sql);   // viewer records (H-747, migration 464)
     ch = { channels: `${T.prefix}tk_channels`, commands: `${T.prefix}tk_cc`, timers: `${T.prefix}tk_timers` };
     await pool.query(`CREATE TABLE \`${ch.channels}\` LIKE tokes_channels`);
     await pool.query(`CREATE TABLE \`${ch.commands}\` LIKE tokes_custom_commands`);
@@ -39,6 +42,7 @@ test.before(async () => {
 test.after(async () => {
     for (const n of [...IMPORT_TABLES].reverse()) await pool.query(`DROP TABLE IF EXISTS \`${T.prefix}${n}\``);
     for (const t of Object.values(ch || {})) await pool.query(`DROP TABLE IF EXISTS \`${t}\``);
+    for (const n of [...VIEWER_TABLES].reverse()) await pool.query(`DROP TABLE IF EXISTS \`${T.prefix}${n}\``);
     await T.drop();
     await pool.end().catch(() => {});
 });
@@ -78,8 +82,15 @@ test('first import: everything created switched off, marked, and recorded', asyn
         assert.equal(t.platforms, 'twitch', 'Firebot timers post on Twitch');
     }
     assert.equal(await store.variableStore.get(profile.id, 'server', 'deaths'), '7');
-    assert.equal(await store.variableStore.get(profile.id, 'twitch:700000101', 'watch_minutes'), '1200');
-    assert.equal(await store.variableStore.get(profile.id, 'twitch:700000102', 'chat_messages'), null, 'zero values are not stored');
+    // Viewer stats go to viewer records (H-747), no longer to {db:} values.
+    const vs = createViewerStore({ db: pool, prefix: T.prefix });
+    const fan = await vs.byAccount(profile.id, 'twitch', '700000101');
+    assert.equal(fan.watchMinutes, 1200);
+    assert.equal(fan.messages, 340);
+    assert.equal(fan.importedFrom, 'firebot');
+    assert.equal((await vs.byAccount(profile.id, 'twitch', '700000102')).watchMinutes, 15);
+    assert.equal(await store.variableStore.get(profile.id, 'twitch:700000101', 'watch_minutes'), null, 'no {db:} values any more');
+    assert.ok(out.results.some((r) => r.category === 'viewers' && r.links.some((l) => l.href === '/stream/bot/viewers')));
     const rewards = await importStore.listItems(profile.id, { kind: 'reward' });
     assert.deepEqual(rewards.map((r) => r.data.definition.title).sort(), ['Confetti', 'Hydrate', 'Mystery box']);
     const created = out.results.find((r) => r.name === '!socials');
@@ -99,6 +110,9 @@ test('re-import creates nothing twice; a deleted target comes back; values and h
     const [[{ n: ccAfter }]] = await pool.query(`SELECT COUNT(*) AS n FROM \`${ch.commands}\``);
     assert.equal(ccAfter, ccBefore);
     assert.equal(await store.variableStore.get(profile.id, 'server', 'deaths'), '42', 'a counter changed since is not overwritten');
+    const vs = createViewerStore({ db: pool, prefix: T.prefix });
+    assert.equal((await vs.byAccount(profile.id, 'twitch', '700000101')).watchMinutes, 1200, 'importing again does not count watch time twice');
+    assert.equal(out.results.find((r) => r.category === 'viewers' && r.source === 'firebot').result, 'already');
 
     const death = (await store.listAutomations(profile.id)).find((a) => a.name === 'Firebot: !death');
     await store.deleteAutomation(profile.id, death.id);

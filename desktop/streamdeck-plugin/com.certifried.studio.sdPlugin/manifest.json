@@ -1,0 +1,178 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "CertiFried",
+  "Version": "0.2.6.0",
+  "Author": "CertiFried",
+  "Description": "Control CertiFried Studio from Stream Deck: run automations, switch OBS scenes, show or hide sources, mute inputs, change counters, play sounds and apply light presets.",
+  "URL": "https://certifriedmultitool.com/downloads/studio",
+  "Category": "CertiFried",
+  "CategoryIcon": "imgs/plugin/category",
+  "Icon": "imgs/plugin/icon",
+  "CodePath": "bin/plugin.js",
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "24"
+  },
+  "UUID": "com.certifried.studio",
+  "Actions": [
+    {
+      "Name": "Run automation",
+      "UUID": "com.certifried.studio.run-automation",
+      "Icon": "imgs/actions/run-automation/icon",
+      "Tooltip": "Runs a CertiFried automation.",
+      "PropertyInspectorPath": "ui/run-automation.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/run-automation/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        }
+      ]
+    },
+    {
+      "Name": "Switch scene",
+      "UUID": "com.certifried.studio.switch-scene",
+      "Icon": "imgs/actions/switch-scene/icon",
+      "Tooltip": "Switches OBS to a scene. Lit while it is the live scene.",
+      "PropertyInspectorPath": "ui/switch-scene.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/switch-scene/key",
+          "Name": "Not live",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        },
+        {
+          "Image": "imgs/actions/switch-scene/key-active",
+          "Name": "Live",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        }
+      ],
+      "DisableAutomaticStates": true
+    },
+    {
+      "Name": "Toggle source",
+      "UUID": "com.certifried.studio.toggle-source",
+      "Icon": "imgs/actions/toggle-source/icon",
+      "Tooltip": "Shows or hides a source in an OBS scene. Lit while it is visible.",
+      "PropertyInspectorPath": "ui/toggle-source.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/toggle-source/key",
+          "Name": "Hidden",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        },
+        {
+          "Image": "imgs/actions/toggle-source/key-active",
+          "Name": "Visible",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        }
+      ],
+      "DisableAutomaticStates": true
+    },
+    {
+      "Name": "Mute input",
+      "UUID": "com.certifried.studio.mute-input",
+      "Icon": "imgs/actions/mute-input/icon",
+      "Tooltip": "Mutes or unmutes an OBS audio input.",
+      "PropertyInspectorPath": "ui/mute-input.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/mute-input/key",
+          "Name": "On",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        },
+        {
+          "Image": "imgs/actions/mute-input/key-active",
+          "Name": "Muted",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        }
+      ],
+      "DisableAutomaticStates": true
+    },
+    {
+      "Name": "Counter",
+      "UUID": "com.certifried.studio.counter",
+      "Icon": "imgs/actions/counter/icon",
+      "Tooltip": "Adds to or takes from a CertiFried counter and shows its value.",
+      "PropertyInspectorPath": "ui/counter.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/counter/key",
+          "TitleAlignment": "middle",
+          "FontSize": 18
+        }
+      ]
+    },
+    {
+      "Name": "Play sound",
+      "UUID": "com.certifried.studio.play-sound",
+      "Icon": "imgs/actions/play-sound/icon",
+      "Tooltip": "Plays a sound through CertiFried Studio.",
+      "PropertyInspectorPath": "ui/play-sound.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/play-sound/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        }
+      ]
+    },
+    {
+      "Name": "Light preset",
+      "UUID": "com.certifried.studio.light-preset",
+      "Icon": "imgs/actions/light-preset/icon",
+      "Tooltip": "Applies a light preset from CertiFried Studio.",
+      "PropertyInspectorPath": "ui/light-preset.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/light-preset/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 10
+        }
+      ]
+    }
+  ]
+}

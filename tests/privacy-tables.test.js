@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     classifyTable, redactRow, DELETE_PLAN, ANONYMISE_PLAN, SAFETY_TABLES, SECRET_TABLES, plannedTables,
-    fitExportToBudget, USER_ID_COLUMNS,
+    fitExportToBudget, USER_ID_COLUMNS, PAIR_ID_COLUMNS, EXPORT_EXTRA,
 } from '../core/privacy-tables.js';
+import { PER_USER_COLUMNS } from '../core/critters/privacy.js';
 
 /*
  * /privacy delete must never remove moderation records, and /privacy export must never hand
@@ -30,7 +31,8 @@ test('safety and secret tables are classified as such, including by name shape',
 
 test('plans use only member-id columns and fixed conditions', () => {
     for (const p of DELETE_PLAN) {
-        assert.ok(USER_ID_COLUMNS.includes(p.column), `${p.table}.${p.column}`);
+        // Two-party critters rows (duels, marriages, proposals, prayers) name a member in user1/user2/sender/receiver.
+        assert.ok(USER_ID_COLUMNS.includes(p.column) || (p.table.startsWith('critter_') && PAIR_ID_COLUMNS.includes(p.column)), `${p.table}.${p.column}`);
         assert.match(p.table, /^[a-z0-9_]+$/);
         if (p.where) assert.equal(p.where, 'event_type IS NULL');
     }
@@ -67,4 +69,12 @@ test('fitExportToBudget trims the largest sections until the export fits', () =>
     assert.ok(Buffer.byteLength(JSON.stringify(sections)) <= 20_000);
     assert.equal(sections.small.rows.length, 1);
     assert.equal(sections.big.truncated, true);
+});
+
+test('every critters per-member column is deleted or anonymised, and pair tables are listed for export', () => {
+    const planned = new Set([...DELETE_PLAN, ...ANONYMISE_PLAN].map(p => `${p.table}.${p.column}`));
+    for (const c of PER_USER_COLUMNS) assert.ok(planned.has(`${c.table}.${c.column}`), `${c.table}.${c.column}`);
+    for (const e of EXPORT_EXTRA) {
+        for (const c of e.columns) assert.ok(PAIR_ID_COLUMNS.includes(c) || c === 'last_winner', `${e.table}.${c}`);
+    }
 });

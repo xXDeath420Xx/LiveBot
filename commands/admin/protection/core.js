@@ -80,6 +80,7 @@ export async function status(interaction) {
                 `Invite-link allowed users/roles/channels: ${other.inviteLinkAllowed ?? 0}`,
                 `Self-bot exempt roles: ${other.selfbotExemptRoles?.length ?? 0}`,
                 `Global-ban exempt roles: ${other.globalBanExemptRoles?.length ?? 0}`,
+                `Global ban appeals accepted here: ${other.globalBanAppealsAllowed ?? 0}`,
                 `Commission-filter rulings: ${other.commissionRulings ?? 0}`,
             ].join('\n') },
         )

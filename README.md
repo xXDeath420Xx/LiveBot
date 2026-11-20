@@ -81,6 +81,6 @@ The AGPL is the GPL plus one clause for network software: if you run a modified 
 service that other people use (a public bot, a hosted dashboard), you must offer those users the
 source code of your modified version. Running it unmodified, or only for yourself, needs nothing extra.
 
-Some parts come from other projects and keep their own licences, including a module under
-CC BY-NC-SA 4.0 that may not be used commercially. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+Some parts come from other projects and keep their own licences. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Two games were written independently of the projects that inspired them: see
 [LICENSE-OWO-NOTICE.md](LICENSE-OWO-NOTICE.md) and [LICENSE-CATBOT-NOTICE.md](LICENSE-CATBOT-NOTICE.md).

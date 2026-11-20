@@ -23,10 +23,10 @@ export function commandInput(ev) {
     return ev?.type === 'chat' ? m.split(/\s+/).slice(1).join(' ') : m;
 }
 
-/** Reply where the event came from: the same Twitch / Kick channel, else the first linked channel on that platform. */
+/** Reply where the event came from: the same Twitch / Kick / YouTube channel, else the first linked channel on that platform. */
 export async function replyInEventChat(io, profileId, ev, text) {
     const channels = await io.channelsFor(profileId);
-    const p = ev?.platform === 'twitch' || ev?.platform === 'kick' ? ev.platform : (channels.find((c) => c.platform === 'twitch') ? 'twitch' : 'kick');
+    const p = ['twitch', 'kick', 'youtube'].includes(ev?.platform) ? ev.platform : (channels.find((c) => c.platform === 'twitch') ? 'twitch' : 'kick');
     const own = ev?.channelId ? channels.filter((c) => c.platform === p && String(c.platform_user_id) === String(ev.channelId)) : [];
     const target = own[0] || channels.find((c) => c.platform === p);
     if (!target) return { ok: false, error: 'no linked channel to answer in' };

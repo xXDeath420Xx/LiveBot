@@ -39,8 +39,8 @@ export default {
         {
             title: 'Work through the setup checklist',
             text: [
-                'The server overview shows your member and stream counts, then a **Setup checklist**: a mod log channel, a server log channel, welcome messages, an AutoMod rule, verification, raid detection, anti-nuke, Discord\'s spammer check, phishing links and the global ban network.',
-                'Each **Set up** link opens the exact setting. **Hide** removes the checklist; it also disappears once every step is done.',
+                'The server overview shows your member and stream counts, then a **Setup checklist**. It starts with what most new servers set up in their first week, in this order: welcome messages, a server log channel, raid detection, phishing links, self-bot detection, the global ban network and support tickets. Then a mod log channel, an AutoMod rule, verification, anti-nuke and Discord\'s spammer check.',
+                'Each **Set up** link opens the exact setting, and the first steps also have a **Guide** link to the guide for that feature. **Hide** removes the checklist; it also disappears once every step is done.',
             ],
             image: 'getting-started-overview',
         },

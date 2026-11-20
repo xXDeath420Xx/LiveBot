@@ -112,7 +112,7 @@ export const PAGES = Object.freeze([
     { page: 'digimon', section: 'games', title: "Digimon", desc: "Partners, wild spawns, trades, the market and the daily quiz", icon: 'fas fa-dragon', tags: "digimon digivolve partner tame evolve quiz trade market battle" },
     // Greenhouse Tycoon (v2, phase 4) replaces the old game's page; ?page=cfx is an alias of it (PAGE_ALIASES).
     { page: 'greenhouse', section: 'economy', title: "Greenhouse Tycoon", desc: "Members who play, the season and where to play", icon: 'fas fa-seedling', tags: "greenhouse tycoon certifried cfx plants garden breeding hybrids idle season leaderboard standings weekly challenge quests twitch panel extension web game arcade" },
-    { page: 'owo', section: 'games', title: "OwO hunt and zoo", desc: "Animal hunting, teams, weapons and battles", icon: 'fas fa-paw', tags: "owo hunt zoo animals catch mini-game rarity pet collection legendary weapon battle quest" },
+    { page: 'owo', section: 'games', title: "Critters", desc: "The /owo game: hunting, teams, weapons and battles", icon: 'fas fa-paw', tags: "owo critters hunt zoo animals catch mini-game rarity pet collection legendary weapon battle quest acorns" },
     { page: 'rpg', section: 'games', title: "RPG", desc: "Characters, quests and battles", icon: 'fas fa-dragon', tags: "rpg character quest battle adventure" },
     // economy
     { page: 'economy', section: 'economy', title: "Economy", desc: "Currency, shop and transactions", icon: 'fas fa-coins', tags: "economy currency coins shop balance transfer" },

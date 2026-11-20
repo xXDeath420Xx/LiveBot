@@ -40,9 +40,8 @@ import startGiveawayScheduler from './jobs/giveaway-scheduler.js';
 import { startSocialFeedScheduler, stopSocialFeedScheduler } from './jobs/social-feed-scheduler.js';
 import { startStreamCheckScheduler, stopStreamCheckScheduler } from './jobs/stream-check-scheduler.js';
 import { startKofiExpiry, stopKofiExpiry } from './jobs/kofi-expiry.js';
-import { startOwoBossReaper, stopOwoBossReaper } from './jobs/owo-boss-reaper.js';
-import { startOwoLotteryDraw, stopOwoLotteryDraw } from './jobs/owo-lottery-draw.js';
-import { startOwoBattleEscrowSweeper, stopOwoBattleEscrowSweeper } from './jobs/owo-battle-escrow-sweeper.js';
+// Critters (/owo game): stamps critter_meta.live_since, then the lottery draw, escrow sweeper and boss reaper jobs.
+import { startCritters, stopCritters } from './core/critters-startup.js';
 import { startGrowTreeReaper, stopGrowTreeReaper } from './jobs/growtree-reaper.js';
 import { startVaultCleanup, stopVaultCleanup } from './jobs/vault-cleanup.js';
 import { startAnnouncementUpdater, stopAnnouncementUpdater } from './jobs/announcement-updater.js';
@@ -83,6 +82,7 @@ import { startAffiliateRecheckScheduler, stopAffiliateRecheckScheduler } from '.
 import { startTwitchIdentitySync } from './jobs/twitch-identity-sync.js';
 import { startKickTokenRefreshScheduler, stopKickTokenRefreshScheduler } from './jobs/kick-token-refresh-scheduler.js';
 import { startKickTimerScheduler, stopKickTimerScheduler } from './jobs/kick-timer-scheduler.js';
+import { startOrientationRefreshWatcher } from './core/orientation-manager.js';
 import { startTimeCapsuleScheduler, stopTimeCapsuleScheduler } from './jobs/time-capsule-scheduler.js';
 import { startHabitTrackerScheduler, stopHabitTrackerScheduler } from './jobs/habit-tracker-scheduler.js';
 import { startPetStatDecayScheduler, stopPetStatDecayScheduler } from './jobs/pet-stat-decay-scheduler.js';
@@ -1068,9 +1068,7 @@ async function initializeSchedulersAndDashboard(client) {
   // Start streaming schedulers
   startStreamCheckScheduler(client);
   startKofiExpiry(client);
-  startOwoBossReaper(client);
-  startOwoLotteryDraw(client);
-  startOwoBattleEscrowSweeper(client);
+  startCritters(client).catch(err => logger.warn('[Core] Critters startup failed', { error: err.message }));
   startGrowTreeReaper();
   startVaultCleanup();
   logger.info('[Core] Stream check scheduler initialized');
@@ -1221,6 +1219,7 @@ async function initializeSchedulersAndDashboard(client) {
   // Start Kick timer scheduler (posts scheduled chat messages)
   startKickTimerScheduler();
   logger.info('[Core] Kick timer scheduler initialized');
+  startOrientationRefreshWatcher(); // owner-triggered bulk guide refresh (data/requests/orientation-refresh-all.request)
 
   // Hourly validation of every stored Twitch user token, as Twitch asks (H-751; core/twitch-token-validator.js).
   import('./core/twitch-token-validator.js')
@@ -1739,9 +1738,7 @@ async function shutdown() {
 
     // Stop streaming schedulers
     stopStreamCheckScheduler();
-    stopOwoBossReaper();
-    stopOwoLotteryDraw();
-    stopOwoBattleEscrowSweeper();
+    stopCritters();
     logger.info('[Scheduler] Stream check scheduler stopped');
 
     stopAnnouncementUpdater();

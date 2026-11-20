@@ -1,0 +1,13 @@
+{
+  "name": "certifried-activities",
+  "private": true,
+  "type": "module",
+  "description": "CertiFried's Discord Activity page (Watch Together, Greenhouse Tycoon). Built into dist/ by build.mjs; served at /activity.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "2.5.0",
+    "hls.js": "1.7.4"
+  }
+}

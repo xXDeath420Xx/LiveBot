@@ -8,6 +8,9 @@
  *   hub.publishEvent(profileId, event)    to sockets that subscribed to 'events'
  *   hub.connected(profileId)              devices online now
  *   hub.disconnectDevice(deviceId, code)  revoke: close at once (4403)
+ *   hub.onAck(id, fn) → off()             fn({ id, status, result, error }) once, when the dispatch gets its final answer:
+ *                                         'acked', 'failed' (the device said so, or no answer after maxAttempts) or
+ *                                         'expired' (here or in the sweep); called after that status is written
  *   hub.sweep()                           heartbeat and hello timeouts, expired queue rows (every 5 s once attached)
  *   hub.use({ onState, onEvent, onRequest, onConnect })  Phase 2 handlers for CertiFried Studio (core/stream-bot/studio.js);
  *                                         onConnect(conn) runs after each welcome (the "CertiFried Studio connected" event)
@@ -58,6 +61,15 @@ export function createHub({
     let wss = null;
     let sweeper = null;
     let handlers = {};             // Phase 2: { onState, onEvent, onRequest }
+    const ackWatchers = new Map();         // dispatch id -> Set(fn): hub.onAck (H-758)
+
+    /** Tell onAck watchers the final answer (after it is written, so a reader of the row sees the same). */
+    function settled(id, answer) {
+        const set = ackWatchers.get(id);
+        if (!set) return;
+        ackWatchers.delete(id);
+        for (const fn of set) { try { fn({ id, ...answer }); } catch (e) { log('warn', 'ack watcher failed', { error: e?.message }); } }
+    }
     const features = () => [handlers.onState && 'state', handlers.onEvent && 'event', handlers.onRequest && 'request'].filter(Boolean);
     const REQ_ID = /^[A-Za-z0-9_-]{1,40}$/;
 
@@ -106,10 +118,13 @@ export function createHub({
         const rec = p.record;
         if (new Date(rec.expiresAt).getTime() <= now()) {
             await store.updateDispatch(id, { status: 'expired', error: 'no answer before it expired' }).catch(() => {});
+            settled(id, { status: 'expired', result: null, error: 'no answer before it expired' });
             return;
         }
         if ((rec.attempts || 1) >= maxAttempts) {
-            await store.updateDispatch(id, { status: 'failed', error: `no answer after ${rec.attempts} tries` }).catch(() => {});
+            const error = `no answer after ${rec.attempts} tries`;
+            await store.updateDispatch(id, { status: 'failed', error }).catch(() => {});
+            settled(id, { status: 'failed', result: null, error });
             return;
         }
         const devices = devicesFor(rec.profileId, rec.target, rec.capability);
@@ -169,6 +184,7 @@ export function createHub({
             ? { status: 'acked', ackedAt: new Date(now()), result: msg.result && typeof msg.result === 'object' ? msg.result : null, error: null }
             : { status: 'failed', ackedAt: new Date(now()), error: String(msg.error || 'the device reported a failure').slice(0, 255) };
         await store.updateDispatch(id, fields).catch((e) => log('warn', 'ack update failed', { error: e.message }));
+        settled(id, { status: fields.status, result: fields.result ?? null, error: fields.error ?? null });
     }
 
     function onMessage(conn, data, isBinary) {
@@ -252,6 +268,12 @@ export function createHub({
             else if (conn.authed && t - conn.lastSeen > heartbeatMs * 2.5) { send(conn, { type: 'error', code: 'heartbeat_timeout', message: 'No ping' }); shut(conn, CLOSE.timeout, 'heartbeat timeout'); }
         }
         try { await store.expireDispatches(new Date(t)); } catch (e) { log('warn', 'expire failed', { error: e.message }); }
+        // Watched dispatches waiting in the queue (not with a device) may have just expired there.
+        for (const id of [...ackWatchers.keys()]) {
+            if (pending.has(id)) continue;
+            const row = await store.getDispatch(id).catch(() => null);
+            if (row && ['acked', 'failed', 'expired'].includes(row.status)) settled(id, { status: row.status, result: row.result ?? null, error: row.error ?? null });
+        }
     }
 
     const newId = () => `d_${crypto.randomBytes(12).toString('hex')}`;
@@ -305,6 +327,19 @@ export function createHub({
         /** Phase 2: handlers for Studio's state, event and request frames (each optional; welcome lists those set). */
         use(h = {}) { handlers = { ...handlers, ...h }; return this; },
         hasDevice(profileId, target, capability = null) { return devicesFor(profileId, target, capability).length > 0; },
+        /** H-758: call fn once with the dispatch's final answer (see the header). Returns off() to stop waiting. */
+        onAck(id, fn) {
+            const key = String(id || '');
+            if (!key || typeof fn !== 'function') return () => {};
+            if (!ackWatchers.has(key)) ackWatchers.set(key, new Set());
+            ackWatchers.get(key).add(fn);
+            return () => {
+                const set = ackWatchers.get(key);
+                if (!set) return;
+                set.delete(fn);
+                if (!set.size) ackWatchers.delete(key);
+            };
+        },
         disconnectDevice(deviceId, code = CLOSE.revoked) {
             const c = byDevice.get(Number(deviceId));
             if (!c) return false;
@@ -317,12 +352,13 @@ export function createHub({
             if (sweeper) clearInterval(sweeper);
             for (const p of pending.values()) clearTimeout(p.timer);
             pending.clear();
+            ackWatchers.clear();
             for (const c of sockets) { try { c.ws.terminate(); } catch { /* ignore */ } }
             sockets.clear();
             byDevice.clear();
             try { wss?.close(); } catch { /* ignore */ }
         },
-        _state: { sockets, byDevice, pending },
+        _state: { sockets, byDevice, pending, ackWatchers },
     };
 }
 

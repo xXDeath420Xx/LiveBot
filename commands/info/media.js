@@ -174,8 +174,10 @@ export default {
         const group = interaction.options.getSubcommandGroup();
 
         try {
-            // Steam group requires ManageChannels permission
-            if (group === 'steam') {
+            // Steam: news, price, search and watchers are lookups anyone can run (H-810); changing watchers,
+            // mentions, the currency or running a check needs Manage Channels.
+            const steamReadOnly = new Set(['news', 'price', 'search', 'watchers']);
+            if (group === 'steam' && !steamReadOnly.has(interaction.options.getSubcommand())) {
                 if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
                     return interaction.reply({
                         content: 'You need **Manage Channels** permission to use Steam commands.',

@@ -27,12 +27,19 @@ export const STREAM_BOT_SCOPES = Object.freeze([
     // Added 2026-11-19 with the stream actions; a grant made before then needs re-approving for them (REAPPROVE).
     'moderator:manage:chat_messages',
     'moderator:manage:shoutouts',
+    // Added 2026-11-19 (H-763): the Import page's "Add to Twitch blocked terms" for saved banned words (owner's button only).
+    'moderator:manage:blocked_terms',
+    // Added 2026-11-19 (H-747): the chatters list (GET /helix/chat/chatters), everyone in chat including lurkers, for viewer
+    // watch time. It names who is connected to chat; it is not the follows list and reads no revenue.
+    'moderator:read:chatters',
 ]);
 
 /** Scopes added after the first grants: what each turns on, for the Connections page's "Re-approve to enable". */
 export const REAPPROVE = Object.freeze([
     { scope: 'moderator:manage:chat_messages', label: 'Clear chat, Delete messages' },
     { scope: 'moderator:manage:shoutouts', label: 'Shoutouts' },
+    { scope: 'moderator:manage:blocked_terms', label: 'Twitch blocked terms from imported banned words' },
+    { scope: 'moderator:read:chatters', label: 'Watch time for viewers who do not chat' },
 ]);
 
 /** Labels of what a stored grant cannot do yet because it predates a scope (empty when nothing is missing). */
@@ -64,6 +71,7 @@ export const TWITCH_FEATURES = Object.freeze([
         need: [['channel:manage:broadcast', 'channel:manage:raids', 'channel:edit:commercial', 'clips:edit', 'moderator:manage:announcements']] },
     { key: 'chatmod', label: 'Clear chat and delete messages', events: [], need: [['moderator:manage:chat_messages']] },
     { key: 'shoutout', label: 'Shoutouts', events: [], need: [['moderator:manage:shoutouts']] },
+    { key: 'chatters', label: 'Watch time for everyone in chat (Viewers)', events: [], need: [['moderator:read:chatters']] },
 ]);
 
 export function scopeSatisfied(have, need) {

@@ -75,6 +75,7 @@ strong { font-weight: 600; }
 .kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; margin: 0 0 8px; }
 .kv dt { color: var(--cf-text-3); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv.wide { grid-template-columns: 130px 1fr; }
 .muted { color: var(--cf-text-2); font-size: 13px; margin: 6px 0; }
 .empty { color: var(--cf-text-3); font-size: 13px; margin: 8px 0 0; }
 .msg { min-height: 0; margin: 6px 0; font-size: 13px; }
@@ -99,6 +100,9 @@ strong { font-weight: 600; }
 .btn.danger { color: var(--cf-danger); }
 .btn.small { padding: 3px 8px; font-size: 12px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; }
+.table td.light-actions { white-space: nowrap; text-align: right; }
+.table td .sub { display: block; color: var(--cf-text-3); font-size: 12px; }
 .actions.tight { margin-top: 0; }
 
 .field { display: grid; gap: 4px; font-size: 13px; color: var(--cf-text-2); }

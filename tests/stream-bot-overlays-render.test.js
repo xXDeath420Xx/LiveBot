@@ -69,6 +69,11 @@ test.before(async () => {
             }
             if (m && /^\/(img|media)\//.test(m[3])) { res.writeHead(200, { 'content-type': 'image/png' }); return res.end(PNG); }
             if (m && /^\/(sound|tts)\//.test(m[3])) { res.writeHead(200, { 'content-type': 'audio/wav' }); return res.end(WAV); }
+            if (url.pathname === '/__demo/alerts') {
+                const p = D.page('alerts', { demo: true });
+                res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+                return res.end(render(p.template, p.locals));
+            }
             if (url.pathname === '/__dash/list') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(render(D.list.template, D.list.locals)); }
             if (url.pathname === '/__dash/edit') {
                 const e = D.edit('alerts', { previewSrc: `/stream/bot/overlay/alerts/sbo_${'C'.repeat(32)}?preview=1` });
@@ -180,6 +185,12 @@ for (const t of OVERLAY_TYPES) {
                     await page.waitForFunction(() => document.querySelector('.sbmo-card') && !document.querySelector('.sbmo-card').hidden, { timeout: 5000 });
                     const r = await page.evaluate(() => ({ title: document.querySelector('.sbmo-title').textContent, by: document.querySelector('.sbmo-by').textContent, pos: getComputedStyle(document.querySelector('.sbmo-card')).position }));
                     assert.deepEqual(r, { title: 'Golden Hour', by: 'Requested by Juniper', pos: 'static' }, 'the music player card, placed by the widget');
+                    const look = await page.evaluate(() => ({ cover: document.querySelector('.sbmo-card').classList.contains('sbo-np--cover'), times: [...document.querySelectorAll('.sbo-np-time')].map((n) => n.textContent),
+                        width: document.querySelector('.sbmo-card').parentElement.style.width, size: getComputedStyle(document.querySelector('.sbmo-title')).fontSize }));
+                    assert.equal(look.cover, true);
+                    assert.equal(look.times.length, 2);
+                    assert.equal(look.times[1], '3:20', 'the length beside the bar');
+                    assert.deepEqual([look.width, look.size], ['450px', '19px']);
                     break;
                 }
                 case 'canvas': {
@@ -193,6 +204,27 @@ for (const t of OVERLAY_TYPES) {
                     assert.ok(acked.includes('d_000000000000000000000000') && acked.includes('d_111111111111111111111111'), 'both actions acknowledged');
                     break;
                 }
+                case 'scene': {
+                    await page.waitForSelector('.sbs-title', { timeout: 5000 });
+                    await page.waitForFunction(() => document.querySelector('.sbs-bg')?.complete, { timeout: 5000 });
+                    const r = await page.evaluate(() => ({
+                        title: document.querySelector('.sbs-title').textContent, shimmer: document.querySelector('.sbs-title').classList.contains('sbs-title--shimmer'),
+                        sub: document.querySelector('.sbs-marquee .sbs-sub')?.textContent, count: document.querySelector('.sbs-count')?.textContent,
+                        socials: document.querySelector('.sbs-socials')?.textContent, fx: document.querySelectorAll('canvas.sbs-fx').length,
+                        glow: document.querySelectorAll('.sbs-glow--lantern').length, bg: document.querySelector('.sbs-bg').getAttribute('src'),
+                        grain: /^url\("data:image\/png/.test(document.querySelector('.sbs-grain')?.style.backgroundImage || ''),
+                    }));
+                    assert.equal(r.title, 'Starting soon');
+                    assert.ok(r.shimmer);
+                    assert.equal(r.sub, 'Grab a drink, the stream starts shortly');
+                    assert.match(r.count, /^Starting in [45]:\d\d$/, 'the countdown runs from when the scene opens');
+                    assert.equal(r.socials, 'twitch.tv/maplehollow · kick.com/maplehollow');
+                    assert.equal(r.fx, 2, 'embers and rain');
+                    assert.equal(r.glow, 1);
+                    assert.match(r.bg, /\/media\/0f1e2d3c4b5a6978$/, 'the artwork comes from this server');
+                    assert.ok(r.grain, 'grain is drawn locally, not fetched');
+                    break;
+                }
                 default: break;
             }
             await new Promise((r) => setTimeout(r, 400));
@@ -204,6 +236,26 @@ for (const t of OVERLAY_TYPES) {
         }
     });
 }
+
+test('alert box: text over the image, the image at a share of its size, and the text waiting for the image', async () => {
+    const { page, errors } = await open(`${base}/__demo/alerts`, { width: 800, height: 600 });
+    try {
+        await page.waitForFunction(() => typeof window.__sboFeed === 'function', { timeout: 5000 });
+        const [hello] = D.frames('alerts');
+        await page.evaluate((h) => {
+            window.__sboFeed('hello', h);
+            window.__sboFeed('alert', { id: 'over1', key: 'follow', label: 'Follow (Twitch)', layout: 'over', animation: 'fade', durationMs: 8000, title: 'MapleFan_88', name: 'MapleFan_88',
+                detail: '', message: '', media: { kind: 'image', src: 'media/0f1e2d3c4b5a6978' }, sound: null, tts: null, mediaScale: 200, textDelayMs: 400, variation: null });
+        }, hello[1]);
+        await page.waitForSelector('.sbo-alert--over .sbo-alert-media > .sbo-alert-text', { timeout: 5000 });
+        assert.equal(await page.evaluate(() => document.querySelector('.sbo-alert-text').classList.contains('sbo-text-wait')), true, 'the text waits');
+        await page.waitForFunction(() => !document.querySelector('.sbo-alert-text').classList.contains('sbo-text-wait'), { timeout: 3000 });
+        await page.waitForFunction(() => document.querySelector('.sbo-alert-media img').style.width === '2px', { timeout: 3000 });
+        const pos = await page.evaluate(() => getComputedStyle(document.querySelector('.sbo-alert-text')).position);
+        assert.equal(pos, 'absolute', 'the text sits on the picture');
+        assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+});
 
 test('the settings page in Chrome: the preview frame scales the real overlay, a variation can be added, Save sends every setting', async () => {
     const list = await open(`${base}/__dash/list`, { width: 1280, height: 900 });
@@ -233,7 +285,7 @@ test('the settings page in Chrome: the preview frame scales the real overlay, a 
         assert.deepEqual(body.config.alerts.cheer.variations.map((v) => v.min), [1000, 10000, 25000]);
         assert.equal(body.config.alerts.cheer.variations[2].message, 'Enormous');
         assert.equal(body.config.alerts.cheer.tts, true);
-        assert.equal(Object.keys(body.config.alerts).length, 13);
+        assert.equal(Object.keys(body.config.alerts).length, 17, "every alert, the YouTube ones too (kept while the editor hides them)");
         await new Promise((r) => setTimeout(r, 300));
         assert.deepEqual(errors, [], 'settings page: console errors');
     } finally { await page.close(); }

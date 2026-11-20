@@ -205,7 +205,7 @@ test('Kick: title and category need channel:write, delete a message, read stream
     });
     let scopes = ['chat:write', 'moderation:chat_message:manage'];
     const kick = createKickApi({ resolveChannel: async () => ({ broadcasterId: '800000001', token: 'kick-tok', scopes }), appToken: async () => 'app-tok', fetchImpl });
-    await assert.rejects(kick.setTitle('800000001', 'New'), (e) => e.code === 'missing_scope' && /channel:write/.test(e.message));
+    await assert.rejects(kick.setTitle('800000001', 'New'), (e) => e.code === 'missing_scope' && e.scope === 'channel:write' && /^Change title and category: needs permission\./.test(e.message));
     scopes = [...scopes, 'channel:write'];
     await kick.setTitle('800000001', 'New');
     assert.deepEqual(fetchImpl.calls.at(-1).body, { stream_title: 'New' });
@@ -269,7 +269,8 @@ test('stream actions: a dry run sends nothing; clip outputs; title on both platf
 
 test('the catalogue marks Twitch-only actions, and validation catches bad polls, ifs and arguments', () => {
     for (const t of ['stream.clip', 'stream.ad', 'stream.raid', 'stream.poll', 'stream.prediction', 'stream.announce', 'chat.clear']) assert.deepEqual(actionType(t).platforms, ['twitch'], t);
-    for (const t of ['stream.title', 'stream.category', 'stream.shoutout', 'chat.delete']) assert.deepEqual(actionType(t).platforms, ['twitch', 'kick'], t);
+    for (const t of ['stream.title', 'stream.category', 'stream.shoutout']) assert.deepEqual(actionType(t).platforms, ['twitch', 'kick'], t);
+    assert.deepEqual(actionType('chat.delete').platforms, ['twitch', 'kick', 'youtube'], 'chat.delete works on YouTube too (H-741)');
     assert.ok(ACTION_TYPES.filter((a) => a.executor === 'stream').every((a) => a.target === 'server'));
     const bad = validateActions([
         { type: 'stream.poll', title: 'Q', choices: 'only one', duration: 5 },
@@ -448,7 +449,9 @@ test('the grant asks for chat moderation and shoutouts, still never follows or r
     for (const s of FORBIDDEN_SCOPES) assert.equal(STREAM_BOT_SCOPES.includes(s), false);
     assert.equal(STREAM_BOT_SCOPES.some((s) => /follows|^analytics:|revenue|payout|subscriptions:read|user:read:subscriptions/.test(s)), false);
     const old = 'bits:read channel:edit:commercial channel:manage:broadcast channel:manage:polls channel:manage:predictions channel:manage:raids channel:manage:redemptions channel:read:ads channel:read:hype_train channel:read:redemptions channel:read:subscriptions clips:edit moderator:manage:announcements moderator:read:followers user:bot user:read:chat'.split(' ');
-    assert.deepEqual(reapproveNeeded(old), ['Clear chat, Delete messages', 'Shoutouts']);
+    assert.deepEqual(reapproveNeeded(old), ['Clear chat, Delete messages', 'Shoutouts', 'Twitch blocked terms from imported banned words', 'Watch time for viewers who do not chat']);
+    assert.ok(STREAM_BOT_SCOPES.includes('moderator:read:chatters'), 'H-747: the chatters list counts watch time for viewers who do not chat');
+    assert.ok(STREAM_BOT_SCOPES.includes('moderator:manage:blocked_terms'), 'H-763: the Import page can add banned words to Twitch blocked terms');
     assert.deepEqual(reapproveNeeded(STREAM_BOT_SCOPES), []);
     const cov = coverage({ streamBot: old });
     assert.equal(cov.find((f) => f.key === 'chatmod').covered, false);

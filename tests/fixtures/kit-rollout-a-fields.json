@@ -502,33 +502,57 @@
     },
     "backups": {
       "ids": [
+        "bk-create-title",
+        "bk-list-title",
         "bkList",
         "bkNoMatch",
+        "bkRun",
+        "bkRunBar",
+        "bkRunLog",
+        "bkRunResume",
+        "bkRunTitle",
         "diffBody",
         "diffClose",
         "diffOverlay",
         "diffSummary",
         "diffTitle",
         "f-backups-snapshot_name",
-        "restore-grace-period"
+        "f-backups-snapshot_name-desc",
+        "restore-grace-period",
+        "restore-grace-period-desc",
+        "rsBans",
+        "rsBody",
+        "rsCancel",
+        "rsClose",
+        "rsConfig",
+        "rsGo",
+        "rsOverlay",
+        "rsRemove",
+        "rsStatus",
+        "rsTitle"
       ],
       "names": [
         "backupId",
-        "gracePeriod",
         "snapshot_name"
       ],
       "data": [
         "data-bk-compare",
+        "data-bk-restore",
         "data-name"
       ],
       "forms": [
         "POST /manage/222222222222222222/create-backup",
-        "POST /manage/222222222222222222/delete-backup",
-        "POST /manage/222222222222222222/restore-backup"
+        "POST /manage/222222222222222222/delete-backup"
       ],
       "search": [
+        "bk-create-title",
+        "bk-list-title",
+        "bkSearch",
         "diffTitle",
-        "f-backups-snapshot_name"
+        "f-backups-snapshot_name",
+        "restore-grace-period",
+        "rsBans",
+        "rsTitle"
       ]
     },
     "csv": {
@@ -567,6 +591,8 @@
         "psAiTextMode",
         "psAiToday",
         "psError",
+        "psGb",
+        "psGbCount",
         "psHeld",
         "psHeldCount",
         "psMgrAdd",
@@ -1318,15 +1344,29 @@
     },
     "phishing": {
       "ids": [
+        "cfk-phish-whitelist",
+        "cfk-phish-whitelist-desc",
         "f-phishing-action",
+        "f-phishing-action-desc",
         "f-phishing-alert_channel_id",
+        "f-phishing-alert_channel_id-desc",
         "f-phishing-exempt_channels",
+        "f-phishing-exempt_channels-desc",
         "f-phishing-mute_duration_minutes",
+        "f-phishing-mute_duration_minutes-desc",
         "f-phishing-report_channel_id",
+        "f-phishing-report_channel_id-desc",
         "log_detections",
+        "log_detections-desc",
         "mute-duration-group",
+        "phish-allow-title",
+        "phish-detect-title",
+        "phish-evidence-title",
         "phishing-config-form",
-        "phishing_enabled"
+        "phishing_enabled",
+        "phishing_enabled-desc",
+        "phishing_scan_images",
+        "phishing_scan_images-desc"
       ],
       "names": [
         "action",
@@ -1336,16 +1376,26 @@
         "report_channel_id",
         "whitelist_domains"
       ],
-      "data": [],
+      "data": [
+        "data-feature-switch",
+        "data-kind"
+      ],
       "forms": [
         "GET "
       ],
       "search": [
+        "cfk-phish-whitelist",
         "f-phishing-action",
         "f-phishing-alert_channel_id",
         "f-phishing-exempt_channels",
         "f-phishing-mute_duration_minutes",
-        "f-phishing-report_channel_id"
+        "f-phishing-report_channel_id",
+        "log_detections",
+        "phish-allow-title",
+        "phish-detect-title",
+        "phish-evidence-title",
+        "phishing_enabled",
+        "phishing_scan_images"
       ]
     },
     "link-filter": {

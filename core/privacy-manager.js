@@ -13,7 +13,9 @@
  * services/cfx/privacy. Neither has a Discord-id column, so the table discovery below does not see them.
  *
  * Stream bot (core/stream-bot, register of the 2026-11-19 design): export and delete also cover the member's stream
- * bot profile (stream_bot_* tables, keyed by owner_discord_id, which the discovery below does not see) and, as a
+ * bot profile (stream_bot_* tables, keyed by owner_discord_id, which the discovery below does not see), their own
+ * Twitch, Kick and YouTube sign-ins in stream_platform_accounts with the multicast destinations made from them (H-820;
+ * tokens revoked at the platform first) and, as a
  * viewer, events and {db:} values tied to their linked Twitch / Kick accounts, through core/stream-bot/privacy.js.
  *
  * Every action is recorded in privacy_actions_log (export / delete / view / update) and every
@@ -28,11 +30,12 @@ import { purgeUserEvidenceCache } from './evidence-capture.js';
 import { purgeCachedMessagesForUser } from '../utils/message-cache.js';
 import {
     USER_ID_COLUMNS, classifyTable, redactRow, DELETE_PLAN, ANONYMISE_PLAN, KEPT_CATEGORIES, plannedTables,
-    fitExportToBudget,
+    fitExportToBudget, EXPORT_EXTRA,
 } from './privacy-tables.js';
 import { createPersonPrivacy } from '../services/cfx/privacy/index.js';
 import { createStreamBotPrivacy } from './stream-bot/privacy.js';
 import { createStore as createStreamBotStore } from './stream-bot/store.js';
+import { followsExport, followsDelete, COLLECTED_ON as FOLLOWS_COLLECTED_ON } from './twitch-follows-archive.js';
 
 export const EXPORT_COOLDOWN_SECONDS = 24 * 60 * 60;
 export const DELETE_COOLDOWN_SECONDS = 60 * 60;
@@ -172,6 +175,19 @@ async function discoverUserTables() {
         if (!tables.has(t)) tables.set(t, []);
         tables.get(t).push(c);
     }
+    // Two-party tables (EXPORT_EXTRA, e.g. critter duels and marriages) name the member in columns such as
+    // sender/receiver or user1/user2, which the column-name discovery above does not look for.
+    const extra = EXPORT_EXTRA.flatMap(({ table, columns }) => columns.map(c => [table, c]));
+    if (extra.length) {
+        const [found] = await pool.query(
+            `SELECT TABLE_NAME AS t, COLUMN_NAME AS c FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND (TABLE_NAME, COLUMN_NAME) IN (?)`, [extra]);
+        for (const { t, c } of found) {
+            if (!SAFE_IDENTIFIER.test(t) || !SAFE_IDENTIFIER.test(c)) continue;
+            if (!tables.has(t)) tables.set(t, []);
+            if (!tables.get(t).includes(c)) tables.get(t).push(c);
+        }
+    }
     return tables;
 }
 
@@ -256,6 +272,16 @@ async function buildExportNow(userId) {
     } catch (error) {
         errors.push('stream_bot');
         logger.warn('[Privacy] Export skipped the stream bot data', { error: error.message });
+    }
+
+    // H-762: channels the member's linked Twitch account followed, read once on 2026-10-28 (no longer collected).
+    try {
+        const twitchIds = (await streamBotPrivacy().viewerAccounts(userId)).filter((a) => a.platform === 'twitch').map((a) => a.id);
+        const rows = await followsExport(pool, twitchIds);
+        if (rows.length) sections.twitch_user_follows = { total: rows.length, truncated: false, rows, note: `Historical: read once on ${FOLLOWS_COLLECTED_ON}, no longer collected` };
+    } catch (error) {
+        errors.push('twitch_user_follows');
+        logger.warn('[Privacy] Export skipped the historical Twitch follows', { error: error.message });
     }
 
     const settings = await getPrivacySettings(userId).catch(() => null);
@@ -384,6 +410,11 @@ export async function deleteUserData(userId) {
         logger.error('[Privacy] Game data delete failed', { userId, error: error.message });
     }
 
+    // H-820: the stream bot delete ends with the member's Twitch and Kick sign-ins (stream_platform_accounts), so the
+    // Twitch accounts for the followed-channels step below are read first.
+    const linkedTwitchIds = await streamBotPrivacy().viewerAccounts(userId)
+        .then((list) => list.filter((a) => a.platform === 'twitch').map((a) => a.id)).catch(() => null);
+
     // Stream bot: the member's profile and everything under it, and events / {db:} values about them as a viewer.
     try {
         const s = await streamBotPrivacy().deleteFor(userId);
@@ -391,6 +422,16 @@ export async function deleteUserData(userId) {
     } catch (error) {
         failed.push('stream_bot');
         logger.error('[Privacy] Stream bot data delete failed', { userId, error: error.message });
+    }
+
+    // H-762: the historical followed-channels list of the member's linked Twitch account.
+    try {
+        const twitchIds = linkedTwitchIds ?? (await streamBotPrivacy().viewerAccounts(userId)).filter((a) => a.platform === 'twitch').map((a) => a.id);
+        const n = await followsDelete(pool, twitchIds);
+        if (n) deleted.twitch_user_follows = (deleted.twitch_user_follows || 0) + n;
+    } catch (error) {
+        failed.push('twitch_user_follows');
+        logger.error('[Privacy] Historical Twitch follows delete failed', { userId, error: error.message });
     }
 
     const rows = Object.values(deleted).reduce((s, n) => s + n, 0) + Object.values(anonymised).reduce((s, n) => s + n, 0);

@@ -30,6 +30,7 @@ import RPGLeaderboardManager from '../../../../core/rpg-leaderboard-manager.js';
 import { registerRPGMessage, setRPGChannel, getRPGChannel } from '../../../../core/rpg-reply-handler.js';
 import { createProgressBar } from '../utils.js';
 import { themeColor } from '../../../../core/guild-theme.js';
+import { awardAchievement } from '../../../../core/achievement-hooks.js';
 
 /**
  * Handle campaign subcommands
@@ -2094,6 +2095,8 @@ export async function handleQuest(interaction, subcommand, characterManager, que
         const questId = interaction.options.getInteger('quest_id', true);
         try {
             const result = await questManager.completeQuest(cid, questId);
+            awardAchievement(interaction, 'first_quest');
+            awardAchievement(interaction, 'quest_master');
             const r = result.rewards;
             const embed = new EmbedBuilder()
                 .setColor(themeColor(interaction.guildId, 'warning'))

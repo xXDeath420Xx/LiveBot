@@ -58,10 +58,12 @@ router.post('/manage/:guildId/sticky', async (req, res) => {
       `INSERT INTO sticky_messages (guild_id, channel_id, message_content, created_by)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
-       message_content = VALUES(message_content),
-       last_message_id = NULL`,
+       message_content = VALUES(message_content)`,
       [guildId, channel_id, message_content, req.user?.id || 'dashboard']
     );
+    // last_message_id is kept so the next repost deletes the old sticky (it used to be cleared, leaving the
+    // old one behind), and the cached row is dropped so the new text is used at once (H-806).
+    configCache.invalidate('sticky_messages', `${guildId}:${channel_id}`);
 
     res.json({ success: true });
   } catch (error) {
@@ -75,6 +77,7 @@ router.delete('/manage/:guildId/sticky/:channelId', async (req, res) => {
   try {
     const { guildId, channelId } = req.params;
 
+    configCache.invalidate('sticky_messages', `${guildId}:${channelId}`);
     await pool.execute(
       'DELETE FROM sticky_messages WHERE guild_id = ? AND channel_id = ?',
       [guildId, channelId]

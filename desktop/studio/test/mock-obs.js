@@ -98,7 +98,31 @@ async function startMockObs({ password = null, rpcVersion = 1 } = {}) {
             }
             case 'GetSceneItemList': {
                 const s = scene(data.sceneName); if (!s) return nf('scene');
-                return res({ sceneItems: s.map((it) => ({ sourceName: it.source, sourceUuid: state.inputs[it.source]?.uuid, sceneItemId: it.id, sceneItemEnabled: it.enabled, inputKind: state.inputs[it.source]?.kind })) });
+                return res({ sceneItems: s.map((it, i) => ({ sourceName: it.source, sourceUuid: state.inputs[it.source]?.uuid, sceneItemId: it.id, sceneItemEnabled: it.enabled, sceneItemIndex: i, inputKind: state.inputs[it.source]?.kind })) });
+            }
+            case 'GetSceneItemIndex': {
+                const s = scene(data.sceneName); if (!s) return nf('scene');
+                const i = s.findIndex((x) => x.id === data.sceneItemId); if (i < 0) return nf('scene item');
+                return res({ sceneItemIndex: i });
+            }
+            case 'SetSceneItemIndex': {
+                // OBS counts from the bottom: index 0 is the lowest item (the first in our array).
+                const s = scene(data.sceneName); if (!s) return nf('scene');
+                const i = s.findIndex((x) => x.id === data.sceneItemId); if (i < 0) return nf('scene item');
+                const [it] = s.splice(i, 1);
+                s.splice(Math.max(0, Math.min(s.length, Number(data.sceneItemIndex))), 0, it);
+                return res({});
+            }
+            case 'GetSceneItemTransform': {
+                const it = scene(data.sceneName)?.find((x) => x.id === data.sceneItemId); if (!it) return nf('scene item');
+                return res({ sceneItemTransform: { ...(it.transform || {}) } });
+            }
+            case 'SetSceneItemTransform': {
+                const it = scene(data.sceneName)?.find((x) => x.id === data.sceneItemId); if (!it) return nf('scene item');
+                const t = data.sceneItemTransform || {};
+                if ('boundsWidth' in t && !(t.boundsWidth >= 1)) return res(undefined, 402, 'boundsWidth must be >= 1');   // as obs-websocket does
+                it.transform = { ...(it.transform || {}), ...t };
+                return res({});
             }
             case 'GetSceneItemId': {
                 const s = scene(data.sceneName); if (!s) return nf('scene');
@@ -144,6 +168,16 @@ async function startMockObs({ password = null, rpcVersion = 1 } = {}) {
                 emit('InputCreated', { inputName: data.inputName, inputUuid: uuid, inputKind: data.inputKind });
                 return res({ inputUuid: uuid, sceneItemId: id });
             }
+            case 'RemoveInput': {
+                const name = data.inputUuid ? Object.keys(state.inputs).find((n) => state.inputs[n].uuid === data.inputUuid) : data.inputName;
+                if (!name || !state.inputs[name]) return nf('input');
+                const uuid = state.inputs[name].uuid;
+                delete state.inputs[name];
+                for (const items of Object.values(state.scenes)) for (let k = items.length - 1; k >= 0; k--) if (items[k].source === name) items.splice(k, 1);
+                (state.removed ||= []).push(name);
+                emit('InputRemoved', { inputName: name, inputUuid: uuid });
+                return res({});
+            }
             case 'CreateSceneItem': {
                 const s = scene(data.sceneName); if (!s) return nf('scene');
                 if (!state.inputs[data.sourceName] && !state.scenes[data.sourceName]) return nf('source');
@@ -151,6 +185,7 @@ async function startMockObs({ password = null, rpcVersion = 1 } = {}) {
                 s.push({ id, source: data.sourceName, enabled: data.sceneItemEnabled !== false });
                 return res({ sceneItemId: id });
             }
+            case 'GetInputMute': { const i = state.inputs[data.inputName]; if (!i) return nf('input'); return res({ inputMuted: !!i.muted }); }
             case 'SetInputMute': case 'ToggleInputMute': {
                 const i = state.inputs[data.inputName]; if (!i) return nf('input');
                 i.muted = type === 'ToggleInputMute' ? !i.muted : !!data.inputMuted;

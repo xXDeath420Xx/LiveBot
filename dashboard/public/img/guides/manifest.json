@@ -1,6 +1,6 @@
 {
  "_about": "Guide screenshots from scripts/site-shots/run.mjs (invented demo server \"Maple Hollow\"; no real data). Regenerate with: node scripts/site-shots/run.mjs",
- "generated": "2026-11-19",
+ "generated": "2026-11-20",
  "images": [
   {
    "id": "getting-started-setup",
@@ -225,6 +225,876 @@
     "file": "schedules-poster.thumb.webp",
     "width": 480,
     "height": 270
+   }
+  },
+  {
+   "id": "achievements-discord",
+   "file": "achievements-discord.webp",
+   "alt": "An achievement post in #level-ups: Wren Alder unlocked Chatterbox for sending 1,000 messages, a silver achievement worth 25 points, paying 250 coins and 250 XP.",
+   "width": 1200,
+   "height": 792,
+   "guides": [
+    "achievements"
+   ],
+   "thumb": {
+    "file": "achievements-discord.thumb.webp",
+    "width": 480,
+    "height": 317
+   }
+  },
+  {
+   "id": "achievements-page",
+   "file": "achievements-page.webp",
+   "alt": "The Achievements page: the switch at the top on, unlocks announced in #level-ups, 26 achievements, 212 members tracked and 641 unlocks.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "achievements"
+   ],
+   "thumb": {
+    "file": "achievements-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "ai-assistant-discord",
+   "file": "ai-assistant-discord.webp",
+   "alt": "Wren Alder mentions the bot in #general to ask how many people are in the server and who runs it; the bot replies that Maple Hollow has 1,284 members and is owned by Juniper Vale.",
+   "width": 1200,
+   "height": 408,
+   "guides": [
+    "ai-assistant"
+   ],
+   "thumb": {
+    "file": "ai-assistant-discord.thumb.webp",
+    "width": 480,
+    "height": 163
+   }
+  },
+  {
+   "id": "announcements-page",
+   "file": "announcements-page.webp",
+   "alt": "The Announce page: an Autumn Fair announcement with a picture, text, small print and a ping for Regulars, and its preview on the right.",
+   "width": 1200,
+   "height": 860,
+   "guides": [
+    "announcements"
+   ],
+   "thumb": {
+    "file": "announcements-page.thumb.webp",
+    "width": 480,
+    "height": 344
+   }
+  },
+  {
+   "id": "announcements-scheduled",
+   "file": "announcements-scheduled.webp",
+   "alt": "The Scheduled messages page with five messages: a Monday rules reminder, Friday movie night, a bump every 2 hours, a monthly art contest and a one-off that has posted.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "announcements"
+   ],
+   "thumb": {
+    "file": "announcements-scheduled.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "anti-nuke-join-gate-alert",
+   "file": "anti-nuke-join-gate-alert.webp",
+   "alt": "An Anti-Nuke Triggered alert in #mod-log: fennelfox_ deleted 3 channels, and the response was a kick from the server.",
+   "width": 1200,
+   "height": 592,
+   "guides": [
+    "anti-nuke-join-gate"
+   ],
+   "thumb": {
+    "file": "anti-nuke-join-gate-alert.thumb.webp",
+    "width": 480,
+    "height": 237
+   }
+  },
+  {
+   "id": "anti-nuke-join-gate-page",
+   "file": "anti-nuke-join-gate-page.webp",
+   "alt": "The Account age gate on the dashboard: accounts under 24 hours are removed, under 7 days they must apply, applications go to #mod-log.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "anti-nuke-join-gate"
+   ],
+   "thumb": {
+    "file": "anti-nuke-join-gate-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "backups-page",
+   "file": "backups-page.webp",
+   "alt": "The Backups page: a box to name a new backup, the rejoin setting, and the saved weekly and hand-made backups with Compare, Restore and Delete buttons.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "backups"
+   ],
+   "thumb": {
+    "file": "backups-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "chat-games-discord",
+   "file": "chat-games-discord.webp",
+   "alt": "A counting channel: Wren posts 41 and Hazel 42, both with a check mark. Hazel then posts 43 as well, and the bot resets the count to 0.",
+   "width": 1200,
+   "height": 1166,
+   "guides": [
+    "chat-games"
+   ],
+   "thumb": {
+    "file": "chat-games-discord.thumb.webp",
+    "width": 480,
+    "height": 466
+   }
+  },
+  {
+   "id": "chat-games-counting-page",
+   "file": "chat-games-counting-page.webp",
+   "alt": "The Counting page: the form to start counting in a channel, then #counting with 1287 as the next number, its record and resets, and Reset to 0 chosen for a wrong number.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "chat-games"
+   ],
+   "thumb": {
+    "file": "chat-games-counting-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "collecting-games-discord",
+   "file": "collecting-games-discord.webp",
+   "alt": "A Good cat appears in #cat-cafe with its picture. Pip types cat, and the bot says pipcalloway caught it in 2.418 seconds and earned 8 Cat Coins.",
+   "width": 1200,
+   "height": 846,
+   "guides": [
+    "collecting-games"
+   ],
+   "thumb": {
+    "file": "collecting-games-discord.thumb.webp",
+    "width": 480,
+    "height": 338
+   }
+  },
+  {
+   "id": "collecting-games-minigames-page",
+   "file": "collecting-games-minigames-page.webp",
+   "alt": "The Minigames page: Cat Bot spawning in #cat-cafe every 120 to 900 seconds, with the form to add another channel and the Cat Bot option switches.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "collecting-games"
+   ],
+   "thumb": {
+    "file": "collecting-games-minigames-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "commands-page",
+   "file": "commands-page.webp",
+   "alt": "The Commands page: three admin commands set to Mod only, the tools commands open to Everyone with /timezone disabled, each marked Slash or Text with its uses in 30 days.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "commands"
+   ],
+   "thumb": {
+    "file": "commands-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "commands-drawer",
+   "file": "commands-drawer.webp",
+   "alt": "The settings for /fish: open to everyone except the Muted role, only in #bot-commands, with a 5 second cooldown for each member.",
+   "width": 1200,
+   "height": 1300,
+   "guides": [
+    "commands"
+   ],
+   "thumb": {
+    "file": "commands-drawer.thumb.webp",
+    "width": 480,
+    "height": 520
+   }
+  },
+  {
+   "id": "confessions-qotd-discord",
+   "file": "confessions-qotd-discord.webp",
+   "alt": "Confession number 12 in #confessions: a member admits to watering the server tree at 3am for a month, with the footer Anonymous.",
+   "width": 1200,
+   "height": 462,
+   "guides": [
+    "confessions-qotd"
+   ],
+   "thumb": {
+    "file": "confessions-qotd-discord.thumb.webp",
+    "width": 480,
+    "height": 185
+   }
+  },
+  {
+   "id": "confessions-qotd-qotd-discord",
+   "file": "confessions-qotd-qotd-discord.webp",
+   "alt": "A Question of the Day post in #general at 9:00 AM, pinging the Regulars role, asking which skill you would master overnight.",
+   "width": 1200,
+   "height": 464,
+   "guides": [
+    "confessions-qotd"
+   ],
+   "thumb": {
+    "file": "confessions-qotd-qotd-discord.thumb.webp",
+    "width": 480,
+    "height": 186
+   }
+  },
+  {
+   "id": "critters-discord",
+   "file": "critters-discord.webp",
+   "alt": "Sorrel Quinn hunts with /owo hunt and finds a rare Ember Fox for 25 acorns, then /owo zoo shows 15 of 40 kinds of critter caught.",
+   "width": 1200,
+   "height": 1006,
+   "guides": [
+    "critters"
+   ],
+   "thumb": {
+    "file": "critters-discord.thumb.webp",
+    "width": 480,
+    "height": 402
+   }
+  },
+  {
+   "id": "critters-page",
+   "file": "critters-page.webp",
+   "alt": "The Critters page on the dashboard: the game switched on, 48 hunters and 9,214 catches so far, and rare catches sent to the log channel.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "critters"
+   ],
+   "thumb": {
+    "file": "critters-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "custom-bot-setup",
+   "file": "custom-bot-setup.webp",
+   "alt": "The Custom bot section of Bot appearance: what to turn on in the Developer Portal, the Application ID and Bot token fields, and Set up custom bot.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "custom-bot"
+   ],
+   "thumb": {
+    "file": "custom-bot-setup.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "custom-bot-status",
+   "file": "custom-bot-status.webp",
+   "alt": "The Custom bot panel for Maple Helper: online and active, set up by Juniper Vale as self-service, and the form to replace it with a different bot.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "custom-bot"
+   ],
+   "thumb": {
+    "file": "custom-bot-status.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "custom-commands-page",
+   "file": "custom-commands-page.webp",
+   "alt": "The Custom commands page: 4 commands used 616 times in all, run with the ! prefix, the templates to start from and the Variables panel.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "custom-commands"
+   ],
+   "thumb": {
+    "file": "custom-commands-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "custom-commands-discord",
+   "file": "custom-commands-discord.webp",
+   "alt": "Pip types !cookie and the bot answers \"Pip Calloway has 13 cookies\"; Wren asks where to get roles and an auto-response points to #roles.",
+   "width": 1200,
+   "height": 676,
+   "guides": [
+    "custom-commands"
+   ],
+   "thumb": {
+    "file": "custom-commands-discord.thumb.webp",
+    "width": 480,
+    "height": 270
+   }
+  },
+  {
+   "id": "discord-events-reminders",
+   "file": "discord-events-reminders.webp",
+   "alt": "The Event Reminders page: DM reminders on, 30 minutes before the start, start announcements in #announcements pinging Game night, and one repeating event.",
+   "width": 1200,
+   "height": 1300,
+   "guides": [
+    "discord-events"
+   ],
+   "thumb": {
+    "file": "discord-events-reminders.thumb.webp",
+    "width": 480,
+    "height": 520
+   }
+  },
+  {
+   "id": "discord-events-discord",
+   "file": "discord-events-discord.webp",
+   "alt": "A post in #announcements pinging Game night: \"Friday game night is starting now!\", where it happens (the Campfire voice channel) and an Open event button.",
+   "width": 1200,
+   "height": 642,
+   "guides": [
+    "discord-events"
+   ],
+   "thumb": {
+    "file": "discord-events-discord.thumb.webp",
+    "width": 480,
+    "height": 257
+   }
+  },
+  {
+   "id": "game-news-free-games",
+   "file": "game-news-free-games.webp",
+   "alt": "The Free games page: the form for adding a subscription with its preview, and one subscription posting free-to-keep games to #free-games with a Gamers mention.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "game-news"
+   ],
+   "thumb": {
+    "file": "game-news-free-games.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "game-news-discord",
+   "file": "game-news-discord.webp",
+   "alt": "A free game alert in #free-games pinging Gamers: an invented game on Epic Games, $19.99 struck through and free until 26 November, with links to the store and the launcher.",
+   "width": 1200,
+   "height": 1246,
+   "guides": [
+    "game-news"
+   ],
+   "thumb": {
+    "file": "game-news-discord.thumb.webp",
+    "width": 480,
+    "height": 498
+   }
+  },
+  {
+   "id": "giveaways-polls-discord",
+   "file": "giveaways-polls-discord.webp",
+   "alt": "A giveaway for a Maple Hollow hoodie with 24 party popper entries, ending in 3 days, then a poll on movie night with 17 votes: Yes 59 percent, No 29, Saturday instead 12.",
+   "width": 1200,
+   "height": 1374,
+   "guides": [
+    "giveaways-polls"
+   ],
+   "thumb": {
+    "file": "giveaways-polls-discord.thumb.webp",
+    "width": 480,
+    "height": 550
+   }
+  },
+  {
+   "id": "giveaways-polls-page",
+   "file": "giveaways-polls-page.webp",
+   "alt": "The Giveaways page: one running giveaway with End now and two ended ones with Reroll, each with Delete, under the Create giveaway button.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "giveaways-polls"
+   ],
+   "thumb": {
+    "file": "giveaways-polls-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "global-ban-page",
+   "file": "global-ban-page.webp",
+   "alt": "The Global ban page: Protect mode selected, a confidence of 75 needed to act, alerts going to #mod-log, and this server's bans contributed.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "global-ban"
+   ],
+   "thumb": {
+    "file": "global-ban-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "global-ban-alert",
+   "file": "global-ban-alert.webp",
+   "alt": "A Global Ban Alert in #mod-log: a high-severity phishing account with a confidence of 88 out of 100 was banned on joining.",
+   "width": 1200,
+   "height": 832,
+   "guides": [
+    "global-ban"
+   ],
+   "thumb": {
+    "file": "global-ban-alert.thumb.webp",
+    "width": 480,
+    "height": 333
+   }
+  },
+  {
+   "id": "nsfw-protection-page",
+   "file": "nsfw-protection-page.webp",
+   "alt": "The NSFW protection page: both models loaded, and avatar checks switched on with Log only and review and an act threshold of 0.90.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "nsfw-protection"
+   ],
+   "thumb": {
+    "file": "nsfw-protection-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "orientation-discord",
+   "file": "orientation-discord.webp",
+   "alt": "The server guide message in #bot-commands: the features Maple Hollow has on, the protection and other features still to set up with the command for each, the commands everyone can use, and links to the guides and the dashboard.",
+   "width": 720,
+   "height": 1747,
+   "guides": [
+    "orientation"
+   ],
+   "thumb": {
+    "file": "orientation-discord.thumb.webp",
+    "width": 480,
+    "height": 1165
+   }
+  },
+  {
+   "id": "orientation-page",
+   "file": "orientation-page.webp",
+   "alt": "The Orientation page on the dashboard: the guide channel to post the server guide in, and the commands that post, refresh and remove it.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "orientation"
+   ],
+   "thumb": {
+    "file": "orientation-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "quarantine-name-avatar-test",
+   "file": "quarantine-name-avatar-test.webp",
+   "alt": "The private reply to a name filter test: Jun1per V4le, folded to juniper vaie, matches the exact filter Juniper Vale with the action kick.",
+   "width": 1200,
+   "height": 602,
+   "guides": [
+    "quarantine-name-avatar"
+   ],
+   "thumb": {
+    "file": "quarantine-name-avatar-test.thumb.webp",
+    "width": 480,
+    "height": 241
+   }
+  },
+  {
+   "id": "quarantine-name-avatar-page",
+   "file": "quarantine-name-avatar-page.webp",
+   "alt": "The Quarantine page: the Quarantined role is set, and two suspect accounts are held, each with a Release button.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "quarantine-name-avatar"
+   ],
+   "thumb": {
+    "file": "quarantine-name-avatar-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "reminders-utilities-discord",
+   "file": "reminders-utilities-discord.webp",
+   "alt": "A reminder post mentioning Juniper Vale about movie night, then a time capsule from Sorrel Quinn opening a month after it was sealed.",
+   "width": 1200,
+   "height": 918,
+   "guides": [
+    "reminders-utilities"
+   ],
+   "thumb": {
+    "file": "reminders-utilities-discord.thumb.webp",
+    "width": 480,
+    "height": 367
+   }
+  },
+  {
+   "id": "reminders-utilities-page",
+   "file": "reminders-utilities-page.webp",
+   "alt": "The Reminders page: four upcoming channel reminders with when each is sent, how it repeats, its channel, who made it and a Delete button.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "reminders-utilities"
+   ],
+   "thumb": {
+    "file": "reminders-utilities-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "replace-bots-discord",
+   "file": "replace-bots-discord.webp",
+   "alt": "The private reply to /utilities takeover bots: MEE6, Carl-bot and Streamcord are covered, and DISBOARD has nothing to replace.",
+   "width": 1200,
+   "height": 578,
+   "guides": [
+    "replace-bots"
+   ],
+   "thumb": {
+    "file": "replace-bots-discord.thumb.webp",
+    "width": 480,
+    "height": 231
+   }
+  },
+  {
+   "id": "roles-tools-page",
+   "file": "roles-tools-page.webp",
+   "alt": "The Stat roles page with three rules: Regulars at 1,000 messages, Night owls at 600 minutes in voice, and Members for accounts 7 days old.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "roles-tools"
+   ],
+   "thumb": {
+    "file": "roles-tools-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "scam-links-page",
+   "file": "scam-links-page.webp",
+   "alt": "The Phishing links page: phishing detection switched on, the action set to delete the message, alerts going to #mod-log and the detection log kept.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "scam-links"
+   ],
+   "thumb": {
+    "file": "scam-links-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "scam-links-discord",
+   "file": "scam-links-discord.webp",
+   "alt": "A Phishing Link Detected alert in #mod-log: the member, their account age, the action taken, the matched domain, the full link and the channel.",
+   "width": 1200,
+   "height": 884,
+   "guides": [
+    "scam-links"
+   ],
+   "thumb": {
+    "file": "scam-links-discord.thumb.webp",
+    "width": 480,
+    "height": 354
+   }
+  },
+  {
+   "id": "self-promo-page",
+   "file": "self-promo-page.webp",
+   "alt": "The Self-promo page: switched on, #self-promo as the request channel, go-lives announced there, and Twitch, Kick and YouTube links accepted.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "self-promo"
+   ],
+   "thumb": {
+    "file": "self-promo-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "server-stats-page",
+   "file": "server-stats-page.webp",
+   "alt": "The Server stats page for the last 7 days: 3,974 messages, 186 members who posted, 41 joined and 12 left, with messages per day and the top senders and channels.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "server-stats"
+   ],
+   "thumb": {
+    "file": "server-stats-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "server-stats-displays",
+   "file": "server-stats-displays.webp",
+   "alt": "The Stat display channels page: total members, the local time, members with the Verified role and Twitch followers, each shown in a voice channel name, and the form to add another.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "server-stats"
+   ],
+   "thumb": {
+    "file": "server-stats-displays.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "spam-filters-page",
+   "file": "spam-filters-page.webp",
+   "alt": "The Self-bot detection settings on the Raid lockdown page: switched on, what it looks for, and the response time, burst and strike limits.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "spam-filters"
+   ],
+   "thumb": {
+    "file": "spam-filters-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "spam-filters-discord",
+   "file": "spam-filters-discord.webp",
+   "alt": "A self-bot alert in #mod-log: a message burst and inhuman response times, 70% confidence, alert only, with Kick, Ban, False Positive and View History buttons.",
+   "width": 1200,
+   "height": 1004,
+   "guides": [
+    "spam-filters"
+   ],
+   "thumb": {
+    "file": "spam-filters-discord.thumb.webp",
+    "width": 480,
+    "height": 402
+   }
+  },
+  {
+   "id": "stream-alert-options-style",
+   "file": "stream-alert-options-style.webp",
+   "alt": "Live announcement style: the server default set to the custom card, #new-videos set to Components V2, and one streamer kept on the platform preview.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "stream-alert-options"
+   ],
+   "thumb": {
+    "file": "stream-alert-options-style.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "studio-devices",
+   "file": "studio-devices.webp",
+   "alt": "The stream bot Devices page: CertiFried Studio on MAPLE-STREAM online and connected to OBS with Just Chatting on air, and the section for pairing Studio with a code.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "studio"
+   ],
+   "thumb": {
+    "file": "studio-devices.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "supporter-alerts-throne",
+   "file": "supporter-alerts-throne.webp",
+   "alt": "The Throne wishlists page: one tracked creator, sorrelquinnart, posting in #announcements, and the form for tracking another creator.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "supporter-alerts"
+   ],
+   "thumb": {
+    "file": "supporter-alerts-throne.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "supporter-alerts-discord",
+   "file": "supporter-alerts-discord.webp",
+   "alt": "A Throne gift alert in #announcements: Hazel Marsh gifted Sorrel Quinn a watercolour brush set worth $34.00, with a View Wishlist button.",
+   "width": 1200,
+   "height": 650,
+   "guides": [
+    "supporter-alerts"
+   ],
+   "thumb": {
+    "file": "supporter-alerts-discord.thumb.webp",
+    "width": 480,
+    "height": 260
+   }
+  },
+  {
+   "id": "task-lists-discord",
+   "file": "task-lists-discord.webp",
+   "alt": "A task list called Movie night prep with five tasks, two ticked and crossed out, \"2/5 completed\", and the private reply to /todo done.",
+   "width": 1200,
+   "height": 796,
+   "guides": [
+    "task-lists"
+   ],
+   "thumb": {
+    "file": "task-lists-discord.thumb.webp",
+    "width": 480,
+    "height": 318
+   }
+  },
+  {
+   "id": "task-lists-page",
+   "file": "task-lists-page.webp",
+   "alt": "The Task lists page: the form for a new list, then the Movie night prep list with two of its five tasks done and buttons to undo, tick or remove each.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "task-lists"
+   ],
+   "thumb": {
+    "file": "task-lists-page.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "twitch-tools-auto-track",
+   "file": "twitch-tools-auto-track.webp",
+   "alt": "Auto-track mappings: one mapping that announces Regulars who go live on Twitch in #stream-alerts with the Live now role, and the form for adding another.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "twitch-tools"
+   ],
+   "thumb": {
+    "file": "twitch-tools-auto-track.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "twitch-tools-clip",
+   "file": "twitch-tools-clip.webp",
+   "alt": "A new clip posted in #stream-alerts: its title, the game, a length of 28 seconds, 143 views and who made the clip.",
+   "width": 1200,
+   "height": 1020,
+   "guides": [
+    "twitch-tools"
+   ],
+   "thumb": {
+    "file": "twitch-tools-clip.thumb.webp",
+    "width": 480,
+    "height": 408
+   }
+  },
+  {
+   "id": "verification-panel",
+   "file": "verification-panel.webp",
+   "alt": "The verification panel in #verify: Welcome to Maple Hollow, press Verify me and type the code from the picture, 3 tries within 5 minutes.",
+   "width": 1200,
+   "height": 584,
+   "guides": [
+    "verification"
+   ],
+   "thumb": {
+    "file": "verification-panel.thumb.webp",
+    "width": 480,
+    "height": 234
+   }
+  },
+  {
+   "id": "voice-channels-page",
+   "file": "voice-channels-page.webp",
+   "alt": "Temporary voice channels on the Utilities page: switched on, with Join to create as the creator channel, the Community category and the name {username}'s Channel.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "voice-channels"
+   ],
+   "thumb": {
+    "file": "voice-channels-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "weather-timezones-discord",
+   "file": "weather-timezones-discord.webp",
+   "alt": "Rowan Pike says movie night starts at 8pm, and the bot replies with that time in New York, Los Angeles, London and Sydney.",
+   "width": 1200,
+   "height": 572,
+   "guides": [
+    "weather-timezones"
+   ],
+   "thumb": {
+    "file": "weather-timezones-discord.thumb.webp",
+    "width": 480,
+    "height": 229
+   }
+  },
+  {
+   "id": "weather-timezones-page",
+   "file": "weather-timezones-page.webp",
+   "alt": "The Weather page: weather alerts switched on, how alerts are sent, and the commands members use to save their ZIP code.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "weather-timezones"
+   ],
+   "thumb": {
+    "file": "weather-timezones-page.thumb.webp",
+    "width": 480,
+    "height": 304
    }
   },
   {
@@ -618,6 +1488,21 @@
    }
   },
   {
+   "id": "stream-bot-devices",
+   "file": "stream-bot-devices.webp",
+   "alt": "The Devices page: lights CertiFried Studio found (an Elgato Key Light, Philips Hue lamp and room, a Govee strip, a Nanoleaf waiting to be paired and a Logitech Litra), the Govee cloud key with a floor lamp, light presets Live and Be right back, Voicemeeter Banana running with its strips and buses, and the Stream Deck plugin connected.",
+   "width": 1200,
+   "height": 2700,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-devices.thumb.webp",
+    "width": 480,
+    "height": 1080
+   }
+  },
+  {
    "id": "stream-bot-timers",
    "file": "stream-bot-timers.webp",
    "alt": "The Timers page: a Socials timer with two messages taking turns every 20 minutes on Twitch and Kick, only while live and after 10 chat lines, a Stretch break timer that is off, and a timer from the Kick channel page.",
@@ -630,6 +1515,51 @@
     "file": "stream-bot-timers.thumb.webp",
     "width": 480,
     "height": 360
+   }
+  },
+  {
+   "id": "stream-bot-viewers",
+   "file": "stream-bot-viewers.webp",
+   "alt": "The Viewers tab: 1,223 viewers recorded, watch time counted for everyone in the Twitch chat and for Kick chatters, the last count while live, and the table of viewers sorted by Leaves with their watch time, messages, last seen and rank.",
+   "width": 1200,
+   "height": 1050,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-viewers.thumb.webp",
+    "width": 480,
+    "height": 420
+   }
+  },
+  {
+   "id": "stream-bot-viewer",
+   "file": "stream-bot-viewer.webp",
+   "alt": "One viewer's page: MapleFan_88 with 18,420 Leaves, 248 hours watched and the rank Old growth, a form to add, remove or set Leaves with a note, their Twitch and linked Kick accounts, their subs, gift subs, Bits and tips, and the history of bonuses, gifts, gambles and rank-ups.",
+   "width": 1200,
+   "height": 1700,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-viewer.thumb.webp",
+    "width": 480,
+    "height": 680
+   }
+  },
+  {
+   "id": "stream-bot-viewers-settings",
+   "file": "stream-bot-viewers-settings.webp",
+   "alt": "Viewer settings: tracking on, the points named Leaves, 10 Leaves every 10 minutes while live, subscribers earn 1.5 times, bonuses for follows, subs, gift subs, Bits and raids, four ranks by hours watched, giving on and gambling off, and the six chat commands with their automations.",
+   "width": 1200,
+   "height": 2300,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-viewers-settings.thumb.webp",
+    "width": 480,
+    "height": 920
    }
   },
   {
@@ -675,6 +1605,67 @@
     "file": "stream-bot-overlay-live.thumb.webp",
     "width": 480,
     "height": 270
+   }
+  },
+  {
+   "id": "activity-launcher",
+   "file": "activity-launcher.webp",
+   "alt": "The CertiFried Activity in a voice channel: Watch Together, with a film playing now, and Greenhouse Tycoon.",
+   "width": 1000,
+   "height": 560,
+   "guides": [
+    "greenhouse",
+    "watch-together"
+   ],
+   "thumb": {
+    "file": "activity-launcher.thumb.webp",
+    "width": 480,
+    "height": 269
+   }
+  },
+  {
+   "id": "watch-together-player",
+   "file": "watch-together-player.webp",
+   "alt": "Watch Together playing The Lantern Keepers, 45 minutes in: the player with its controls, and the People tab listing five people watching, with Thistle as host and one still loading.",
+   "width": 1280,
+   "height": 720,
+   "guides": [
+    "watch-together"
+   ],
+   "thumb": {
+    "file": "watch-together-player.thumb.webp",
+    "width": 480,
+    "height": 270
+   }
+  },
+  {
+   "id": "watch-together-library",
+   "file": "watch-together-library.webp",
+   "alt": "The Library tab in Watch Together: a search box, All, Films and Shows, and the server's films and shows in a grid.",
+   "width": 1280,
+   "height": 720,
+   "guides": [
+    "watch-together"
+   ],
+   "thumb": {
+    "file": "watch-together-library.thumb.webp",
+    "width": 480,
+    "height": 270
+   }
+  },
+  {
+   "id": "watch-together-setup",
+   "file": "watch-together-setup.webp",
+   "alt": "The Cinema page on the dashboard: Cinema on, How films play set to Watch Together (Discord Activity), and the Library the server watches from.",
+   "width": 1200,
+   "height": 1040,
+   "guides": [
+    "watch-together"
+   ],
+   "thumb": {
+    "file": "watch-together-setup.thumb.webp",
+    "width": 480,
+    "height": 416
    }
   },
   {

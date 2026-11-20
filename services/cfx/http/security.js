@@ -1,5 +1,6 @@
 // Greenhouse Tycoon (cfx v2): request hardening. CORS, helmet, rate limits, the client address and the
 // public path prefix.
+import crypto from 'node:crypto';
 import net from 'node:net';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,15 +15,68 @@ import { DEFAULT_PUBLIC_URL, DEFAULT_TWITCH_EXT_CLIENT_ID, PUBLIC_PREFIX } from 
  *   - the site itself (CFX2_PUBLIC_URL) and its www. twin
  *   - the panel's hosted files, https://<extension client id>.ext-twitch.tv
  *   - Twitch's frames: supervisor.ext-twitch.tv, extension-files.twitch.tv, www.twitch.tv, dashboard.twitch.tv
+ *   - activity host mode (docs/activities.md): CertiFried's Discord Activity, https://<application id>.discordsays.com,
+ *     whose frame reaches /gh-api through Discord's URL mapping
  * Requests without an Origin header (same-origin GETs, server-to-server, curl) are not CORS requests.
  */
-export function allowedOrigins({ publicOrigin = DEFAULT_PUBLIC_URL, twitchExtClientId = DEFAULT_TWITCH_EXT_CLIENT_ID } = {}) {
+export function allowedOrigins({ publicOrigin = DEFAULT_PUBLIC_URL, twitchExtClientId = DEFAULT_TWITCH_EXT_CLIENT_ID, activityAppId = null } = {}) {
     const site = new URL(publicOrigin);
     const set = new Set([site.origin]);
     if (!site.hostname.startsWith('www.') && site.hostname !== '127.0.0.1') set.add(`${site.protocol}//www.${site.host}`);
     if (/^[a-z0-9]{1,64}$/.test(twitchExtClientId)) set.add(`https://${twitchExtClientId}.ext-twitch.tv`);
     for (const host of ['supervisor.ext-twitch.tv', 'extension-files.twitch.tv', 'www.twitch.tv', 'dashboard.twitch.tv']) set.add(`https://${host}`);
+    const activity = activityOrigin(activityAppId);
+    if (activity) set.add(activity);
     return set;
+}
+
+/** The Discord Activity's origin (https://<application id>.discordsays.com), or null without a valid id. */
+export function activityOrigin(appId) {
+    return /^\d{17,20}$/.test(String(appId || '')) ? `https://${appId}.discordsays.com` : null;
+}
+
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+/**
+ * Is a request from the Discord Activity? Everyone in an Activity reaches us through Discord's proxy, so they share
+ * a few addresses: such requests get their own, larger per-address buckets (DEFAULT_RATE_LIMITS activityIp and
+ * activityAuth) instead of the website's, and the per-account limits still apply after sign-in. Recognised by the
+ * Activity's Origin, or by Discord's proxy signature (X-Signature-Ed25519 over X-Discord-Proxy-Payload with the
+ * application's public key) when Discord does not pass the Origin on.
+ */
+export function createActivityMatcher({ appId = null, publicKey = null } = {}) {
+    const origin = activityOrigin(appId);
+    let key = null;
+    try {
+        if (/^[0-9a-f]{64}$/i.test(String(publicKey || ''))) {
+            key = crypto.createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, Buffer.from(publicKey, 'hex')]), format: 'der', type: 'spki' });
+        }
+    } catch {
+        key = null;
+    }
+    const seen = new WeakMap();
+    return function isActivity(req) {
+        if (!origin) return false;
+        if (seen.has(req)) return seen.get(req);
+        let ok = req.get?.('origin') === origin;
+        if (!ok && key) {
+            try {
+                const sig = String(req.get('x-signature-ed25519') || '');
+                const ts = String(req.get('x-signature-timestamp') || '');
+                const b64 = String(req.get('x-discord-proxy-payload') || '');
+                if (/^[0-9a-f]{128}$/i.test(sig) && ts && b64 && b64.length <= 4096) {
+                    const payload = Buffer.from(b64, 'base64');
+                    const data = JSON.parse(payload.toString('utf8'));
+                    ok = String(data.created_at) === ts && Number(data.expires_at) >= Math.floor(Date.now() / 1000)
+                        && crypto.verify(null, payload, key, Buffer.from(sig, 'hex'));
+                }
+            } catch {
+                ok = false;
+            }
+        }
+        seen.set(req, ok);
+        return ok;
+    };
 }
 
 export function corsMiddleware(origins) {
@@ -95,7 +149,10 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
     read: Object.freeze({ burst: 30, perSec: 3 }),
     write: Object.freeze({ burst: 10, perSec: 4 }),
     export: Object.freeze({ burst: 3, perSec: 3 / 3600 }),
-    delete: Object.freeze({ burst: 5, perSec: 5 / 3600 })
+    delete: Object.freeze({ burst: 5, perSec: 5 / 3600 }),
+    // The Discord Activity (createActivityMatcher): everyone in it shares Discord's proxy addresses.
+    activityIp: Object.freeze({ burst: 1500, perSec: 150 }),
+    activityAuth: Object.freeze({ burst: 120, perSec: 2 })
 });
 
 export function createRateLimiter({ burst, perSec, maxKeys = 100_000, now = () => Date.now() }) {
@@ -143,6 +200,8 @@ export function createLimiters(limits = DEFAULT_RATE_LIMITS, now) {
         read: createRateLimiter({ ...l.read, now }),
         write: createRateLimiter({ ...l.write, now }),
         export: createRateLimiter({ ...l.export, now }),
-        delete: createRateLimiter({ ...l.delete, now })
+        delete: createRateLimiter({ ...l.delete, now }),
+        activityIp: createRateLimiter({ ...l.activityIp, now }),
+        activityAuth: createRateLimiter({ ...l.activityAuth, now })
     };
 }

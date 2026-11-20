@@ -111,8 +111,9 @@ export function createSpotifyDirect({ manager = null, encode = ffmpegMp3, logger
         finish = (why) => {
             if (ended) return;
             ended = why;
-            // The manager's owner preemption kills streamTrack's ffmpeg (our audio ends) and moves the session to the new
-            // holder; it does not call our stopHolder. Seeing another holder here is how a preemption shows.
+            // The manager's owner preemption kills streamTrack's ffmpeg (our audio ends), moves the session to the new
+            // holder and then calls our stopHolder (since H-760; before, it called the new holder's). Whichever arrives
+            // first, another holder on the session is how a preemption shows.
             if (!preempted && session.busyGuildId && session.busyGuildId !== holder) preempted = true;
             const short = item.durationMs ? (now() - startedAt) < item.durationMs - L.earlyEndSlackMs : false;
             const early = !closing && (why !== 'ended' || short);
@@ -120,7 +121,11 @@ export function createSpotifyDirect({ manager = null, encode = ffmpegMp3, logger
             else if (early) suspend(profileId, 'Spotify stopped early, so it may be playing somewhere else on your account.');
             try { out.end(); } catch { /* ignore */ }
             if (why === 'ended' && !closing) enc.kill();
-            else {
+            else if (preempted) {
+                // The session is the owner's now and its FIFO has a new reader: never pause it from here, only retire ours.
+                try { wav.destroy?.(); } catch { /* gone */ }
+                enc.kill();
+            } else {
                 // Pause first, then retire the readers: go-librespot must never write into a pipe nobody reads (EPIPE).
                 Promise.resolve(m.pause(session)).catch(() => {}).finally(() => {
                     setTimeout(() => { try { wav.destroy?.(); } catch { /* gone */ } enc.kill(); }, 250);
@@ -161,9 +166,10 @@ export function createSpotifyDirect({ manager = null, encode = ffmpegMp3, logger
                     resolve(true);
                 }));
             },
-            pause: () => Promise.resolve(m.pause(session)).catch(() => {}),
-            resume: () => Promise.resolve(m.resume(session)).catch(() => {}),
-            seek: (ms) => Promise.resolve(typeof m.seek === 'function' ? m.seek(session, Math.max(0, Math.round(ms))) : null).catch(() => {}),
+            // Only while this song still holds the session: after a preemption it plays someone else's music.
+            pause: () => (session.busyGuildId === holder ? Promise.resolve(m.pause(session)).catch(() => {}) : Promise.resolve()),
+            resume: () => (session.busyGuildId === holder ? Promise.resolve(m.resume(session)).catch(() => {}) : Promise.resolve()),
+            seek: (ms) => (session.busyGuildId === holder ? Promise.resolve(typeof m.seek === 'function' ? m.seek(session, Math.max(0, Math.round(ms))) : null).catch(() => {}) : Promise.resolve()),
             close(why = 'closed') { if (!ended) { closing = true; finish(why); } return done; },
         };
         return { ok: true, live };

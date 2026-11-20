@@ -85,7 +85,7 @@ export default {
 
     if (sub === 'show') {
       const tree = await getTree(guildId);
-      if (!tree) return interaction.reply({ content: 'No tree here yet. An admin can plant one with `/arcade tree plant`.', ...EPHEMERAL });
+      if (!tree) return interaction.reply({ content: 'No tree here yet. An admin can plant one with `/tree plant`.', ...EPHEMERAL });
       await interaction.deferReply();
       const payload = await buildTreeMessage(tree, interaction.guild);
       return interaction.editReply(payload);
@@ -136,7 +136,7 @@ export default {
       const coins = await getCoins(interaction.user.id);
       return interaction.reply({
         content: coins
-          ? `🪙 You have **${coins.toLocaleString()}** coins. Spend them with \`/arcade tree compost\`.`
+          ? `🪙 You have **${coins.toLocaleString()}** coins. Spend them with \`/tree compost\`.`
           : '🪙 You have no coins yet. Catch bugs and fruit when they appear on the tree.',
         ...EPHEMERAL,
       });

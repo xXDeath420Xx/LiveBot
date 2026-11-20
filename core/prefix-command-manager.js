@@ -613,6 +613,12 @@ export async function handlePrefixCommand(message) {
             // The bridge is off here, but the text commands have no other way in.
             const tokens = [...commandName.split(/\s+/), ...rawArgs.split(/\s+/)].filter(Boolean);
             if (await runUniversalCommand(message, tokens, prefix, { textOnly: true })) return true;
+        } else if (message.guild) {
+            // The server's own custom commands answer with "Reach every slash command from chat" off too: they
+            // are not slash commands (H-805). Before, they only ran through the bridge.
+            const tokens = [...commandName.split(/\s+/), ...rawArgs.split(/\s+/)].filter(Boolean);
+            const { handleCustomPrefixCommand } = await import('./custom-command-handler.js');
+            if (tokens.length && await handleCustomPrefixCommand(message, tokens[0].toLowerCase(), tokens.slice(1))) return true;
         }
         // "/word" was meant as a command: say so, but still return false so automod and the other
         // message handlers see the message.

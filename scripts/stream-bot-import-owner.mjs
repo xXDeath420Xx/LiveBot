@@ -5,12 +5,18 @@
  *
  *   node scripts/stream-bot-import-owner.mjs [--dry-run] [--bundle <file>] [--owner <discord id>] [--only cat,cat] [--json]
  *                                            [--link source:kind:sourceId=automationId ...]
+ *                                            [--viewers-firebot <users.db>] [--viewers-streamerbot <users.dat>]
  *
  * The bundle was parsed on the owner's PC, stripped of credentials and scanned clean before it was copied here
  * (default STREAM_BOT_IMPORT_DIR/owner-<discord id>.json, outside git, mode 600). It is scanned again before use.
  * Everything is created switched off; items already imported are left alone (stream_bot_import_items), so this is
  * safe to run again after new action types or triggers land: items the mapper now supports are filled in, nothing
- * is created twice. Viewer stats are never written by this script. No chat, OBS or Twitch calls are made.
+ * is created twice. No chat, OBS or Twitch calls are made.
+ *
+ * Viewer stats (H-747): the bundle holds no viewer rows. --viewers-firebot / --viewers-streamerbot read Firebot's db/users.db and
+ * Streamer.bot's users.dat (copied from the owner's PC, mode 600, outside git; delete them afterwards), parse them with the
+ * importer's own parsers, scan them, and import them into Viewers with the category viewers (the owner approved this on
+ * 2026-11-19). Importing again replaces what the last import added (core/stream-bot/viewers/store.js importRows).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,6 +29,8 @@ import { reportOf } from '../core/stream-bot/import/report.js';
 import { scanForSecrets } from '../core/stream-bot/import/secrets.js';
 import { channelBuiltins } from '../core/stream-bot/import/index.js';
 import { CATEGORIES } from '../core/stream-bot/import/catalog.js';
+import { parseFirebot } from '../core/stream-bot/import/firebot.js';
+import { parseStreamerbot } from '../core/stream-bot/import/streamerbot.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
@@ -31,10 +39,24 @@ const DIR = process.env.STREAM_BOT_IMPORT_DIR || '/home/death/certifried-data/st
 const FILE = opt('bundle', path.join(DIR, `owner-${OWNER}.json`));
 const DRY = args.includes('--dry-run');
 const ONLY = opt('only') ? opt('only').split(',') : CATEGORIES.map((c) => c.key).filter((k) => k !== 'viewers');
+const VIEWERS_FB = opt('viewers-firebot');
+const VIEWERS_SB = opt('viewers-streamerbot');
 
 async function main() {
     const { bundles } = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     for (const b of bundles) { if (b.viewers) b.viewers.rows = []; }
+    // Viewer files given: their bundles replace the (empty) viewer part of the saved bundle.
+    const viewerBundles = [];
+    if (VIEWERS_FB) viewerBundles.push(parseFirebot({ files: new Map([['db/users.db', fs.readFileSync(VIEWERS_FB)]]), wantViewers: true }));
+    if (VIEWERS_SB) viewerBundles.push(parseStreamerbot({ files: new Map([['users.dat', fs.readFileSync(VIEWERS_SB)]]), wantViewers: true }));
+    if (viewerBundles.length) {
+        for (const b of bundles) delete b.viewers;
+        for (const vb of viewerBundles) {
+            if (scanForSecrets(vb).length) throw new Error(`the ${vb.source} viewer file scans as holding credential-shaped values; refusing`);
+            console.log(`${vb.source}: ${vb.viewers?.count || 0} viewers in the file, ${vb.viewers?.rows?.length || 0} rows to import`);
+            bundles.push(vb);   // only users.db / users.dat were given, so the bundle holds viewers and nothing else
+        }
+    }
     const leaks = scanForSecrets(bundles);
     if (leaks.length) throw new Error(`the bundle scans as holding ${leaks.length} credential-shaped values; refusing`);
     const store = createStore({ db: pool, encryption });
@@ -54,7 +76,7 @@ async function main() {
         if (!DRY) await importStore.upsertItem(profile.id, { importId: null, source: m[1], kind: m[2], sourceId: m[3], name: auto.name, status: 'changed', targetKind: 'automation', targetRef: `automation:${auto.id}`, data: { keep: true, linkedBy: 'hand' } });
         console.log(`${DRY ? 'would link' : 'linked'} ${m[1]}:${m[2]}:${m[3]} -> automation ${auto.id} (${auto.name})`);
     }
-    const plan = buildPlan(bundles, { channels, channelBots, builtins: await channelBuiltins(pool), wantViewers: false });
+    const plan = buildPlan(bundles, { channels, channelBots, builtins: await channelBuiltins(pool), wantViewers: viewerBundles.length > 0 && ONLY.includes('viewers') });
     const pages = new Map(channelBots.map((c) => [c.id, c.platform === 'kick' ? `/kick/channel/${encodeURIComponent(c.channelId)}/commands` : `/stream/bot/commands/${encodeURIComponent(c.channelId)}`]));
     if (DRY) {
         const r = reportOf(plan, { categories: ONLY });

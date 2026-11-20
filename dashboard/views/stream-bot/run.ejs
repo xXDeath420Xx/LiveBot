@@ -65,7 +65,7 @@
                     <td class="cf-nowrap"><%= s.at %></td>
                     <td><%= stepLabels[s.type] || s.type %></td>
                     <td><span class="cf-pill <%= ss[0] %>"><%= ss[1] %></span></td>
-                    <td class="sb-wrap"><%= s.detail %><% if (s.childRunId) { %> <a href="/stream/bot/runs/<%= s.childRunId %>">Open run <%= s.childRunId %></a><% } %></td>
+                    <td class="sb-wrap"><% const _kd = String(s.detail ?? '').split(/https?:\/\/[^\s]*\/tokes-bot\/auth\/kick\?returnTo=\/stream\/bot\/connections/); %><%= _kd[0] %><% for (let i = 1; i < _kd.length; i++) { %><a href="/tokes-bot/auth/kick?returnTo=/stream/bot/connections">Sign in to Kick</a><%= _kd[i] %><% } %><% if (s.childRunId) { %> <a href="/stream/bot/runs/<%= s.childRunId %>">Open run <%= s.childRunId %></a><% } %></td>
                     <td class="cf-cell-end cf-nowrap"><%= s.ms != null ? s.ms + ' ms' : '' %></td>
                 </tr>
                 <% }) %>

@@ -1,5 +1,6 @@
 /*
- * Stream bot timers (/stream/bot/timers): timed chat messages on the profile's linked Twitch and Kick channels, on the
+ * Stream bot timers (/stream/bot/timers): timed chat messages on the profile's linked Twitch and Kick channels (and
+ * YouTube once it is set up, design §13.10: each post costs 20 YouTube quota units and the page says so), on the
  * existing timer table and job (tokes_timers, jobs/kick-timer-scheduler.js; migration 456, core/stream-bot/timers.js).
  *
  *   GET    /stream/bot/timers                    the page: your timers, the Kick channel page timers of your linked
@@ -19,6 +20,7 @@ import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { getStreamBot } from '../../core/stream-bot/index.js';
 import { createTimerStore, validateTimer, timerView, TIMER_LIMITS } from '../../core/stream-bot/timers.js';
+import { youtubeBotConfig, QUOTA_COST, CHAT_MAX } from '../../core/stream-bot/youtube/config.js';
 
 const router = express.Router();
 const LOG = '[StreamBotTimers]';
@@ -39,6 +41,8 @@ const apiRoute = (fn) => async (req, res) => {
     }
 };
 const idOf = (v) => (/^\d{1,10}$/.test(String(v ?? '')) ? Number(v) : null);
+/** The platforms timers can post on here: YouTube only once it is set up on the server. */
+const postable = (yt) => (p) => p === 'twitch' || p === 'kick' || (yt && p === 'youtube');
 
 let timerStore = null;
 const timers = () => (timerStore ||= createTimerStore({ db: pool }));
@@ -59,6 +63,8 @@ async function listAll(profileId, kickIds) {
 router.get('/stream/bot/timers', needPage, async (req, res) => {
     try {
         const { sb, profile, channels, kickIds } = await load(req);
+        const yt = youtubeBotConfig();
+        const can = postable(yt.enabled);
         let list = { own: [], kick: [] };
         let schemaReady = true;
         try { list = await listAll(profile.id, kickIds); } catch (err) {
@@ -70,12 +76,14 @@ router.get('/stream/bot/timers', needPage, async (req, res) => {
         const decorate = (t) => ({ ...t, automationName: t.automationId ? names.get(t.automationId) || 'a deleted automation' : null });
         res.render('stream-bot/timers', {
             user: req.user, active: 'timers', pageTitle: 'Timers', profile, schemaReady,
+            youtube: yt.enabled ? { dailyUnits: yt.dailyUnits, sendUnits: QUOTA_COST['liveChatMessages.insert'], chatMax: CHAT_MAX } : null,
             own: list.own.map(decorate), kick: list.kick.map(decorate),
             pageData: {
                 own: list.own, kick: list.kick, automations, limits: TIMER_LIMITS,
-                linkedPlatforms: [...new Set(channels.map((c) => c.platform).filter((p) => p === 'twitch' || p === 'kick'))],
+                linkedPlatforms: [...new Set(channels.map((c) => c.platform).filter(can))],
+                youtube: yt.enabled ? { dailyUnits: yt.dailyUnits, sendUnits: QUOTA_COST['liveChatMessages.insert'] } : null,
             },
-            linked: channels.filter((c) => c.platform === 'twitch' || c.platform === 'kick').map((c) => ({ platform: c.platform, login: c.login || c.display_name })),
+            linked: channels.filter((c) => can(c.platform)).map((c) => ({ platform: c.platform, login: c.login || c.display_name })),
         });
     } catch (err) {
         logger.error(`${LOG} page failed`, { error: err?.message });
@@ -94,8 +102,9 @@ router.post('/stream/bot/api/timers', needApi, apiRoute(async (req, res) => {
     const v = validateTimer(req.body || {}, {
         automationIds: new Set(automations.map((a) => a.id)),
         linkedPlatforms: channels.map((c) => c.platform),
+        youtube: youtubeBotConfig().enabled,
     });
-    if (!channels.some((c) => c.platform === 'twitch' || c.platform === 'kick')) v.errors.push('Link a Twitch or Kick channel first (Connections).');
+    if (!channels.some((c) => postable(youtubeBotConfig().enabled)(c.platform))) v.errors.push(youtubeBotConfig().enabled ? 'Link a Twitch, Kick or YouTube channel first (Connections).' : 'Link a Twitch or Kick channel first (Connections).');
     if ((await timers().countForProfile(profile.id)) >= TIMER_LIMITS.perProfile) v.errors.push(`You have ${TIMER_LIMITS.perProfile} timers, the most a profile can have.`);
     if (v.errors.length) return res.status(400).json({ ok: false, errors: v.errors });
     const id = await timers().create(profile.id, v.value, req.user.id);
@@ -115,7 +124,7 @@ router.put('/stream/bot/api/timers/:id', needApi, apiRoute(async (req, res) => {
     if (!row) return res.status(404).json({ ok: false, error: 'That timer does not exist.' });
     const kickPage = row.profile_id == null;
     const automations = await sb.store.listAutomations(profile.id);
-    const v = validateTimer(req.body || {}, { kickPage, automationIds: new Set(automations.map((a) => a.id)), linkedPlatforms: channels.map((c) => c.platform) });
+    const v = validateTimer(req.body || {}, { kickPage, automationIds: new Set(automations.map((a) => a.id)), linkedPlatforms: channels.map((c) => c.platform), youtube: youtubeBotConfig().enabled });
     if (v.errors.length) return res.status(400).json({ ok: false, errors: v.errors });
     await timers().update(id, v.value, { kickPage });
     res.json({ ok: true, id });

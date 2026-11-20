@@ -1,110 +1,85 @@
-# OwO-Style Module Attribution & License Notice
+# Critters (`/owo`) Module — Clean-Room Notice
+
+## Summary
+
+CertiFried's `/owo` collecting game is now the **Critters** module. It was rewritten clean-room on
+**2026-11-19** and is licensed under CertiFried's own licence, **AGPL-3.0-or-later**, like the rest of
+the project. No code, text or data from OwO Bot remains in the published repository.
 
 ## Scope
 
-This notice applies **only** to the following CertiFried Utility files, which
-together form the "OwO-style" module:
+This notice applies to the files that implement the game:
 
-- `core/owo/**` — includes the full translated battle engine under
-  `core/owo/battle/**` (22 weapon classes, 21 passives, 12 buffs, interfaces,
-  utilities), catalog loader, cowoncy bridge, weapon/team/battle/quest/
-  autohunt/luck/ranch/profile services.
-- `commands/fun/owo.js`, `commands/fun/owo2.js`, `commands/fun/owoify.js`,
-  `commands/fun/autohunt.js`, `commands/fun/luck.js`,
-  `commands/fun/owo-profile.js` — slash-command surfaces.
-- `handlers/owo-prefix.js` — prefix-command surface.
-- `migrations/087_owo_integration.js` through `migrations/092_owo_*.js` — the
-  full schema port (60+ `owo_*` tables) and seed data.
-- `utils/mysql.js`, `utils/global.js`, `botHandlers/mysqlHandler.js` —
-  compatibility shims used *only* by the translated battle module.
+- `core/critters/**` (services, rules, data catalogs, jobs, rendering, privacy plan)
+- `core/critters-natural-prefix.js`, `core/critters-startup.js`, `core/text-owoify.js`
+- `handlers/critters-actions.js`, `handlers/critters-prefix.js`
+- `commands/fun/critters.js`, `critters-extra.js`, `critters-profile.js`, `critters-autohunt.js`,
+  `critters-luck.js`, `owoify-text.js`
+- `dashboard/routes/api/features/critters.js`, `dashboard/views/partials/manage/critters.ejs`
+- `migrations/463_critters_schema.js`
+- `tests/critters-*.test.js`
 
-All other files in CertiFried Utility are unaffected by this notice and remain
-under their original project license.
+## What was replaced
 
-## Attribution & derivation
+Until 2026-11-19 the game was an "OwO-style" module **derived from**
+[OwO Bot](https://github.com/ChristopherBThai/Discord-OwO-Bot) by Christopher Thai, licensed
+CC BY-NC-SA 4.0. Its non-commercial term conflicted with CertiFried's AGPL licence. On 2026-11-19 it
+was removed:
 
-The OwO-style module is a direct **derivative work** of **OwO Bot** by
-Christopher Thai:
+- `core/owo/**` (97 files, including the translated battle engine with its weapon, passive and buff
+  classes, and the seed catalogs of animals, ranks, weapons, passives and gems)
+- the old command files (`commands/fun/owo.js`, `owo2.js`, `owo-profile.js`, `autohunt.js`, `luck.js`,
+  `owoify.js`), `handlers/owo-prefix.js`, `handlers/owo-social.js`, `core/owo-natural-prefix.js`
+- the old jobs, the guild-boss button handler, the old dashboard route and manage page
+- the compatibility shims `utils/mysql.js`, `utils/global.js`, `botHandlers/mysqlHandler.js`
+- the scripts that generated, translated or imported upstream schema, code and data
+  (`scripts/build-owo-*.mjs`, `scripts/translate-owo-battle.mjs`, `scripts/owo-import-*.mjs`)
+- the old tests (`tests/owo-*.test.js`)
 
-- Source: https://github.com/ChristopherBThai/Discord-OwO-Bot
-- Original License: **CC-BY-NC-SA-4.0**
-  (Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International)
-- License text: https://creativecommons.org/licenses/by-nc-sa/4.0/
+The bodies of migrations `087`–`092`, `143`, `154`, `160` and `310`–`314` (`*_owo_*.js`) were removed
+as well, including the schema and seed data generated from upstream. They remain as empty historical
+stubs because they were already applied. Player progress was copied into the new tables by
+`migrations/463_critters_schema.js`.
 
-**What was ported directly** from the upstream source tree
-(`docs/Discord-OwO-Bot-master/`):
+## How it was rewritten
 
-- **Database schema** — `CREATE-OWO-TABLES.sql` (87 tables); CertiFried keeps
-  the 57 tables relevant to gameplay (patreon, surveys, duplicates of
-  systems we already own were excluded). Table names prefixed `owo_`, Discord
-  snowflake columns normalized to `VARCHAR(20)`, and `guild_id` added to
-  user-scoped tables so Lair's zoo ≠ Pac's zoo. Generated via
-  `scripts/build-owo-migration.mjs`.
-- **Seed catalogs** — `OWO-TABLE-DATA.sql`: 14 ranks, 20 animals (with full
-  HP / ATT / PR / WP / MAG / MR combat stats), 22 weapon registrations, 21
-  weapon-passive registrations, 35 gems. Loaded verbatim into `owo_animals`,
-  `owo_animals_rank`, `owo_weapon`, `owo_weapon_passive`, `owo_gem`.
-- **Battle-engine JavaScript** — all 84 files under upstream's
-  `src/commands/commandList/battle/**` translated Eris→Discord.js +
-  CommonJS→ESM via `scripts/translate-owo-battle.mjs`. Translation is
-  mechanical (imports, exports, module-level `exports.*` patterns); behavior
-  is unchanged. Registry indexes (`weapons/index.js`, `passives/index.js`,
-  `buffs/index.js`) replace upstream's `require-dir` pattern.
-- **Rank metadata** — rarity % / price / points / essence / XP tables from
-  `src/data/animal.json`, baked into `core/owo/catalog.js`.
-- **Quest tier/chance tables** — `src/data/quests.json` values for
-  hunt / battle / owo / xp quest types ported into
-  `core/owo/quests-service.js`.
+1. A spec writer read the old module and wrote a functional specification from its behaviour, in their
+   own words: what each command does, its inputs, outputs, limits and economy rules. Upstream data
+   (rarity tables, prices, the animal and weapon rosters, odds and curves) was described by its shape
+   only, never reproduced.
+2. Separate implementers built the new module from that specification and CertiFried's own code only.
+   They never saw the old code. All names, numbers, data catalogs, message text and art are new: for
+   example a 40-species roster across seven tiers, an 18-weapon roster with ten perks, and a new currency
+   (acorns).
+3. A mechanical comparison of old and new code found shared token sequences only in functional
+   interface (command, option and config-key names, database column names used by the data migration),
+   library boilerplate (discord.js builders, SQL clauses) and CertiFried's own dashboard conventions.
+   No message text is shared.
 
-**What is original to CertiFried:**
+## What is shared with OwO Bot
 
-- Per-guild isolation (upstream is global-state).
-- Economy integration via `core/owo/cowoncy.js` — routes to
-  `core/economy-manager.js` so the guild's native currency is the cowoncy.
-- `core/owo/manager.js` and everything else in `core/owo/*` (catalog loader,
-  teams/weapons/autohunt/luck/ranch/profile services, battle orchestrator).
-- Dashboard UI and API routes under `dashboard/**/owo*`.
-- Slash + prefix command surfaces.
-- Gate system (per-guild enable toggle, per-command enable/disable, channel
-  allow-list, role block-list).
+Only **functional interface and game ideas**, which are not copyrightable expression (see 17 U.S.C.
+§ 102(b) and the idea/expression dichotomy):
 
-## Changes from upstream behavior
+- the command names members already type (`/owo`, `owo hunt`, `owoh`, their aliases and options), kept
+  so existing players' habits still work;
+- the general concepts: hunting collectible animals of different rarities, a zoo, selling or
+  sacrificing duplicates, gems, lootboxes and weapon crates, teams of three, battles, daily rewards,
+  quests, rings and marriage.
 
-- **Currency** — no separate "cowoncy" wallet. Rewards flow through the
-  guild's existing economy-manager currency.
-- **Catalog** — starts with upstream's 20-animal public seed; admins can add
-  more animals via the dashboard catalog editor (Phase 9, pending).
-- **Battle engine** — simplified turn loop in `core/owo/battle-engine.js`
-  using the full upstream weapon/passive/buff classes for stat math. The
-  tuple-based stat shape upstream uses in `WeaponInterface.inflictDamage`
-  differs from ours (we use plain numbers); a faithful reimplementation
-  using the full weapon-ability chain is a pending refinement.
-- **Conditional ranks** (`patreon`, `cpatreon`, `distorted`, `hidden`,
-  `fabled`, `gem`, `bot`, `special`) kept as rank values in the catalog but
-  disabled in random rolls — activate by editing `RANK_META[rank].conditional`
-  in `core/owo/catalog.js`.
-- **Scope exclusions** — no monetization features (patreon module skipped),
-  no stripped-down gambling duplicates (CertiFried has its own gambling),
-  no upstream "alter" (patreon embed customization).
-
-## ShareAlike
-
-Per CC-BY-NC-SA-4.0, every file listed in **Scope** is released as a
-derivative work under **CC-BY-NC-SA-4.0**. The module **may not be used for
-commercial purposes**, including but not limited to:
-
-- Paid hosting services.
-- Donation-funded services (per the CC-BY-NC-SA FAQ, donations count as
-  commercial use when the software is the draw).
-- Patreon / Ko-fi / "pro tier" paywalls.
-- Advertising-revenue placements.
-- Any offering where software in this module is part of a revenue stream.
-
-CertiFried Utility as a whole is operated as a **non-commercial community
-project** — no paid features, no donations, no revenue of any kind.
+CertiFried is not affiliated with OwO Bot. "OwO" is used only as the command word.
 
 ## Related: @zuzak/owo
 
-The `/owoify` command uses the [`@zuzak/owo`](https://www.npmjs.com/package/@zuzak/owo)
-npm package (MIT-licensed) for text transformation. That package is an
-independent work and is **not** subject to OwO Bot's CC-BY-NC-SA license.
+The `/owoify` command uses the [`@zuzak/owo`](https://www.npmjs.com/package/@zuzak/owo) npm package
+(MIT) for text transformation. It is an independent work, listed in `THIRD_PARTY_NOTICES.md`.
+
+## Not in the published repository
+
+- The legacy `owo_*` database tables, kept on the server until the owner confirms the switch, and the
+  backups of the old files and tables.
+- `docs/Discord-OwO-Bot-master/`, a reference copy of the upstream source (CC BY-NC-SA 4.0), excluded by
+  `.publishignore`.
+
+Commits published before 2026-11-19 contain the old derived module under its CC BY-NC-SA 4.0 notice;
+those files keep that licence.

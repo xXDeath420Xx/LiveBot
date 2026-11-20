@@ -13,6 +13,9 @@
  *   protection_allowlist  kind user | role | held (once held an allowlisted role) | manager
  *                         | channel | category (the message protections' ignore list, migration 327:
  *                         a category covers every channel in it, including ones made later)
+ *                         | bot (trusted bots, migration 338: read by events/guildAuditLogEntryCreate.js)
+ *                         | globalban (migration 471: a global ban appeal this server accepted; exempts
+ *                           that person from the global ban only, never from the other protections)
  *   guilds.protection_*   the pause (+ optional auto-resume time)
  *
  * This is THE server allowlist. The automod whitelist (utils/automod-whitelist.js) and the spammer
@@ -39,7 +42,7 @@ const TTL = 60_000;
 const cache = new Map();   // guildId -> { at, state }
 
 const EMPTY = () => ({
-    users: new Set(), roles: new Set(), managers: new Set(), seen: new Map(), channels: new Set(), categories: new Set(), settings: null,
+    users: new Set(), roles: new Set(), managers: new Set(), seen: new Map(), channels: new Set(), categories: new Set(), globalBan: new Set(), settings: null,
 });
 
 /** Everything for one guild, cached. A missing table (migration not yet run) reads as empty. */
@@ -57,6 +60,7 @@ export async function getState(guildId) {
             else if (r.kind === 'held') state.seen.set(r.target_id, r.via_role_id);
             else if (r.kind === 'channel') state.channels.add(r.target_id);
             else if (r.kind === 'category') state.categories.add(r.target_id);
+            else if (r.kind === 'globalban') state.globalBan.add(r.target_id);
         }
         const [[settings]] = await pool.execute(
             `SELECT protection_paused AS enforcement_paused, protection_paused_until AS paused_until,
@@ -279,10 +283,10 @@ export async function removeManager(guild, roleId, by) {
 
 // ── allowlist ────────────────────────────────────────────────────────────────
 
-/** Allowlisted users and roles: [{ kind, target_id, added_by, note, added_at }]. */
+/** Allowlisted users, roles and trusted bots: [{ kind, target_id, added_by, note, added_at }]. */
 export async function listAllowlist(guildId) {
     const [rows] = await pool.execute(
-        "SELECT kind, target_id, added_by, note, added_at FROM protection_allowlist WHERE guild_id = ? AND kind IN ('user','role') ORDER BY added_at DESC",
+        "SELECT kind, target_id, added_by, note, added_at FROM protection_allowlist WHERE guild_id = ? AND kind IN ('user','role','bot') ORDER BY added_at DESC",
         [guildId]);
     return rows;
 }
@@ -296,7 +300,9 @@ export async function listSeen(guildId) { return listKind(guildId, 'held'); }
  * @returns {Promise<{ ok:boolean, error?:string }>}
  */
 export async function addAllow(guild, kind, targetId, by, note = null) {
-    if (kind !== 'user' && kind !== 'role') return { ok: false, error: 'Unknown kind.' };
+    // 'bot': a trusted bot (migration 338). The Protection Settings page offered it, but this refused it
+    // ("Unknown kind.") and the list left it out, so no bot could ever be trusted (fixed in fix wave 6).
+    if (kind !== 'user' && kind !== 'role' && kind !== 'bot') return { ok: false, error: 'Unknown kind.' };
     const guildId = gid(guild);
     const [[{ n }]] = await pool.execute(
         "SELECT COUNT(*) AS n FROM protection_allowlist WHERE guild_id = ? AND kind IN ('user','role')", [guildId]);
@@ -314,7 +320,7 @@ export async function addAllow(guild, kind, targetId, by, note = null) {
         }
     }
     invalidate(guildId);
-    listChanged(guild, kind === 'role' ? 'Role allowlisted' : 'User allowlisted', kind === 'role' ? `<@&${targetId}>` : `<@${targetId}>`, by);
+    listChanged(guild, kind === 'role' ? 'Role allowlisted' : kind === 'bot' ? 'Bot trusted' : 'User allowlisted', kind === 'role' ? `<@&${targetId}>` : `<@${targetId}>`, by);
     return { ok: true };
 }
 
@@ -326,6 +332,12 @@ export async function addAllow(guild, kind, targetId, by, note = null) {
  */
 export async function removeAllow(guild, kind, targetId, by) {
     const guildId = gid(guild);
+    if (kind === 'bot' || kind === 'globalban') {
+        const [r] = await pool.execute('DELETE FROM protection_allowlist WHERE guild_id = ? AND kind = ? AND target_id = ?', [guildId, kind, targetId]);
+        invalidate(guildId);
+        if (r.affectedRows) listChanged(guild, kind === 'bot' ? 'Bot no longer trusted' : 'Global ban appeal allowance removed', `<@${targetId}>`, by);
+        return { ok: true, removed: r.affectedRows > 0 };
+    }
     if (kind === 'role') {
         const [r] = await pool.execute("DELETE FROM protection_allowlist WHERE guild_id = ? AND kind = 'role' AND target_id = ?", [guildId, targetId]);
         const [s] = await pool.execute("DELETE FROM protection_allowlist WHERE guild_id = ? AND kind = 'held' AND via_role_id = ?", [guildId, targetId]);
@@ -344,6 +356,59 @@ export async function removeAllow(guild, kind, targetId, by) {
     invalidate(guildId);
     if (r.affectedRows) listChanged(guild, 'User taken off the allowlist', `<@${targetId}>`, by);
     return { ok: true, removed: r.affectedRows > 0 };
+}
+
+// ── global ban only (kind 'globalban', migration 471) ────────────────────────────
+
+/*
+ * A global ban appeal this server's moderators accepted for their own server (core/global-ban-manager.js
+ * approveAppealForServer, H-802 follow-up). It stops the global ban acting on that person here and nothing
+ * else: raid, phishing, name filters, spam and every other protection still apply. That is why it is a kind
+ * of its own and not a 'user' allowlist entry, which exempts someone from all of them.
+ */
+
+let globalBanKindReady = false;
+/** Does the database know the 'globalban' kind yet (migration 471)? Checked until it does. */
+export async function globalBanKindAvailable() {
+    if (globalBanKindReady) return true;
+    try {
+        const [[row]] = await pool.execute(
+            "SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'protection_allowlist' AND COLUMN_NAME = 'kind'");
+        globalBanKindReady = /'globalban'/.test(String(row?.t || ''));
+    } catch { globalBanKindReady = false; }
+    return globalBanKindReady;
+}
+
+/** Has this server accepted this person's global ban appeal for itself? A failed lookup reads as no. */
+export async function isGlobalBanAllowed(guildId, userId) {
+    if (!guildId || !userId) return false;
+    const state = await getState(String(guildId));
+    return state.globalBan.has(String(userId));
+}
+
+/** People this server let past the global ban: [{ target_id, added_by, note, added_at }]. */
+export async function listGlobalBanAllowed(guildId) { return listKind(guildId, 'globalban'); }
+
+/**
+ * Let someone past the global ban in this server only. Refuses (changing nothing) until migration 471 is
+ * applied, rather than falling back to the full allowlist.
+ * @returns {Promise<{ ok:boolean, error?:string }>}
+ */
+export async function allowGlobalBan(guild, userId, by, note = null) {
+    if (!(await globalBanKindAvailable())) {
+        return { ok: false, error: 'This needs a database update (migration 471) that has not been applied yet, so nothing was changed. The CertiFried team still reviews the appeal.' };
+    }
+    const guildId = gid(guild);
+    const [[{ n }]] = await pool.execute(
+        "SELECT COUNT(*) AS n FROM protection_allowlist WHERE guild_id = ? AND kind = 'globalban'", [guildId]);
+    if (Number(n) >= MAX_ALLOWLIST) return { ok: false, error: `This server can let at most ${MAX_ALLOWLIST} people past the global ban.` };
+    await pool.execute(
+        `INSERT INTO protection_allowlist (guild_id, kind, target_id, added_by, note) VALUES (?, 'globalban', ?, ?, ?)
+         ON DUPLICATE KEY UPDATE added_by = VALUES(added_by), note = COALESCE(VALUES(note), note)`,
+        [guildId, String(userId), by ?? null, note ? String(note).slice(0, 255) : null]);
+    invalidate(guildId);
+    listChanged(guild, 'Global ban appeal accepted for this server', `<@${userId}>`, by);
+    return { ok: true };
 }
 
 /**
@@ -541,6 +606,7 @@ export async function protectionsOverview(guildId) {
             inviteLinkAllowed: await count('SELECT COUNT(*) AS n FROM automod_link_whitelist WHERE guild_id = ?'),
             selfbotExemptRoles: await one('SELECT exempt_roles FROM selfbot_detection_config WHERE guild_id = ?', r => json(r.exempt_roles)),
             globalBanExemptRoles: await one('SELECT exempt_roles FROM global_ban_config WHERE guild_id = ?', r => json(r.exempt_roles)),
+            globalBanAppealsAllowed: await count("SELECT COUNT(*) AS n FROM protection_allowlist WHERE guild_id = ? AND kind = 'globalban'"),
             commissionRulings: await count('SELECT COUNT(*) AS n FROM commission_spam_exemptions WHERE guild_id = ?'),
         },
     };
@@ -549,5 +615,6 @@ export async function protectionsOverview(guildId) {
 export default {
     getState, invalidate, isExempt, isPaused, getPause, protectionHold, takeAutomatedAction, isManager, liveConfigAccess,
     listManagers, addManager, removeManager, listAllowlist, listSeen, addAllow, removeAllow, noteRoleChange,
+    globalBanKindAvailable, isGlobalBanAllowed, listGlobalBanAllowed, allowGlobalBan,
     pause, resume, protectionsOverview, isIgnoredChannel, listIgnored, addIgnored, removeIgnored,
 };

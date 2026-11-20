@@ -54,6 +54,8 @@
 .sb-coverage { margin-top: var(--cf-4); }
 .sb-coverage-label { margin: 0 0 6px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
 .sb-coverage .cf-chips { list-style: none; margin: 0; padding: 0; }
+.sb-kickbot-action { margin-top: var(--cf-3); }
+.sb-coverage .sb-channel-note + .cf-chips { margin-top: var(--cf-3); }
 .sb-channel-note { margin: var(--cf-3) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
 .sb-inline-form { margin: 0; }
 .cf-chips { list-style: none; padding: 0; margin: 0; }
@@ -112,3 +114,16 @@ fieldset.sb-field { border: 0; margin: 0; padding: 0; min-width: 0; }
     .sb-filter { max-width: none; }
     .sb-block-tools { margin-left: 0; width: 100%; }
 }
+/* Viewers (H-747): rank rows on Viewers, Settings; the last watch-time count under the KPIs; sortable headers. */
+.sbv-ranks { list-style: none; margin: 0 0 var(--cf-3); padding: 0; display: flex; flex-direction: column; gap: var(--cf-2); }
+.sbv-rank { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+.sbv-rank > input[type="text"] { flex: 1 1 12rem; min-width: 0; }
+.sbv-rank > input[type="number"] { flex: 0 1 8rem; min-width: 0; }
+.sb-viewers-sample { margin: 0 0 var(--cf-4); font-size: var(--cf-text-sm); }
+.sb-viewers-table th a { color: inherit; text-decoration: none; }
+.sb-viewers-table th a:hover, .sb-viewers-table th a:focus-visible { text-decoration: underline; }
+.sb-viewers-table th[aria-sort="ascending"] a::after { content: " \2191"; }
+.sb-viewers-table th[aria-sort="descending"] a::after { content: " \2193"; }
+/* The filter row (Events, Viewers) inside .cf-rows: the kit makes a form there a block with a rule between children. */
+.cf-rows > form.sb-filters { display: flex; }
+.cf-section .cf-rows > form.sb-filters > * ~ * { border-top: 0; }   /* outranks the kit rule (0,2,2) */

@@ -17,6 +17,7 @@ const MARK = '<!-- generated:start -->';
 const PROJECTS = [
   ['CertiFried (bot and dashboard)', '.'],
   ['CertiFried Studio (desktop/studio)', 'desktop/studio'],
+  ['CertiFried Stream Deck plugin (desktop/streamdeck-plugin)', 'desktop/streamdeck-plugin'],
   ['Dashboard package (dashboard)', 'dashboard'],
   ['Stream relay (stream-relay)', 'stream-relay'],
   ['Cinema (cinema)', 'cinema'],

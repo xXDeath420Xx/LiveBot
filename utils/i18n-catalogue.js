@@ -14,7 +14,12 @@ import logger from './logger.js';
  * ./i18n.js, which imports this.
  *
  * Catalogues live in `locales/*.json` and are the source of truth — they can be
- * reviewed in a diff, which per-guild override rows cannot.
+ * reviewed in a diff, which per-guild override rows cannot. Slash command
+ * description translations live apart, in `locales/commands/<locale>.json`: flat
+ * keys by deployed command path (`admin.mod.purge.amount.description`), loaded
+ * under `commands.` (so `commands.admin.mod.purge.amount.description`). Flat keys
+ * because a nested file cannot hold both a subcommand's description and an
+ * option named `description`.
  *
  * A missing key falls back to the fallback locale, then DEFAULT_LOCALE, and
  * finally renders as the key itself. It never throws and never returns an empty
@@ -55,6 +60,26 @@ function loadCatalogues() {
             // A malformed catalogue must not take the bot down; it degrades to
             // the fallback locale for that language only.
             logger.error(`[i18n] Failed to load locale "${locale}": ${error.message}`);
+        }
+    }
+
+    // Command description translations (locales/commands/<locale>.json, flat keys). They win over any
+    // commands.* entry in the main catalogue. A file for a locale with no main catalogue is ignored.
+    let commandFiles = [];
+    try {
+        commandFiles = readdirSync(path.join(LOCALES_DIR, 'commands')).filter((f) => f.endsWith('.json'));
+    } catch { /* no command translations */ }
+    for (const file of commandFiles) {
+        const locale = path.basename(file, '.json');
+        const cat = catalogues.get(locale);
+        if (!cat) continue;
+        try {
+            const raw = JSON.parse(readFileSync(path.join(LOCALES_DIR, 'commands', file), 'utf8'));
+            for (const [key, value] of Object.entries(raw)) {
+                if (!key.startsWith('_') && typeof value === 'string') cat[`commands.${key}`] = value;
+            }
+        } catch (error) {
+            logger.error(`[i18n] Failed to load command translations "${locale}": ${error.message}`);
         }
     }
 

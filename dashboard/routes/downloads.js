@@ -7,7 +7,8 @@
  *
  * Files live outside git in STUDIO_DOWNLOADS_DIR (default /home/death/certifried-downloads/studio). Only names on
  * the whitelist below are served: latest.yml, SHA256SUMS.txt, CertiFried-Studio-Setup-<semver>.exe (+ .blockmap)
- * and CertiFried-Studio-Portable-<semver>.exe. Nothing from the request reaches the file system except a name
+ * CertiFried-Studio-Portable-<semver>.exe and the Stream Deck plugin CertiFried-StreamDeck-<semver>.streamDeckPlugin (Phase 5;
+ * shown on the page when one with Studio's version is there). Nothing from the request reaches the file system except a name
  * that matched the whitelist.
  *
  * The page reads the version and release date from latest.yml and the SHA-256 of each build from SHA256SUMS.txt
@@ -34,6 +35,7 @@ const FILES = [
     { re: new RegExp(`^CertiFried-Studio-Setup-${SEMVER}\\.exe$`), type: 'application/vnd.microsoft.portable-executable', download: true },
     { re: new RegExp(`^CertiFried-Studio-Setup-${SEMVER}\\.exe\\.blockmap$`), type: 'application/octet-stream' },
     { re: new RegExp(`^CertiFried-Studio-Portable-${SEMVER}\\.exe$`), type: 'application/vnd.microsoft.portable-executable', download: true },
+    { re: new RegExp(`^CertiFried-StreamDeck-${SEMVER}\\.streamDeckPlugin$`), type: 'application/octet-stream', download: true },
 ];
 
 /** The whitelist entry for a requested name, or null. */
@@ -98,7 +100,17 @@ export async function release(dir = downloadsDir()) {
         builds.push({ kind, label, file: name, size: st.size, sha256 });
     }
     if (!builds.length) return null;
-    return { version: latest.version, releaseDate: latest.releaseDate ? new Date(latest.releaseDate).toISOString() : null, builds, sums: hasSums };
+    // The Stream Deck plugin (Phase 5) that goes with this Studio version, when it was published.
+    let streamdeck = null;
+    {
+        const name = `CertiFried-StreamDeck-${latest.version}.streamDeckPlugin`;
+        const file = path.join(dir, name);
+        try {
+            const st = await fsp.stat(file);
+            if (st.isFile()) streamdeck = { file: name, size: st.size, sha256: sums.get(name) || await sha256Of(file, st).catch(() => null) };
+        } catch { /* not published with this version */ }
+    }
+    return { version: latest.version, releaseDate: latest.releaseDate ? new Date(latest.releaseDate).toISOString() : null, builds, sums: hasSums, streamdeck };
 }
 
 router.get('/downloads/studio', async (req, res) => {

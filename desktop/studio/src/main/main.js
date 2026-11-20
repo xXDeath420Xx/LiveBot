@@ -6,6 +6,10 @@
  *   obs.js            OBS WebSocket v5          router.js   action → OBS / sound / key press
  *   sound.js          play queue + library      hotkeys.js  global hotkeys and key sending
  *   updater.js        electron-updater feed     logger.js   rotating, redacted log
+ *   lights/           Phase 5: Govee LAN, Hue, LIFX, Nanoleaf, Elgato, Litra (found on the LAN / USB only after Find lights)
+ *   voicemeeter.js    Phase 5: Voicemeeter Remote API (off until turned on)
+ *   bridge-server.js  Phase 5: the Stream Deck plugin's connection, 127.0.0.1 only (off until turned on)
+ *   sandbox.js        tests: CF_STUDIO_DEVICE_SANDBOX points every device at 127.0.0.1 mocks (never the real LAN or USB)
  *
  * Windows: the main window (src/renderer/index.html) and a hidden audio window (src/renderer/audio.html) that plays
  * sounds with setSinkId. Closing the main window hides it to the tray; Quit is in the tray menu.
@@ -38,9 +42,15 @@ const { SITE, PAGES, SOURCE } = require('./site');
 const { obsDir, locateDockConfig, readDocks, isObsRunning, addDocks, backupProfileIni, DOCK_PATH } = require('./obs-docks');
 const { themesDirFor, themeInstalled, installTheme, planStarterScenes, createStarterScenes, STARTER_SCENES } = require('./obs-setup');
 const { cleanOverlays, browserInputs, planOverlay, addOverlay } = require('./obs-overlays');
+const { sourceHandlers } = require('./obs-sources');
 const { createVoice } = require('./voice');
 const { createVodSafe } = require('./vod-safe');
 const { parseKeys } = require('./hotkeys');
+const { createLights } = require('./lights');
+const { loadSandbox, fakeHid } = require('./sandbox');
+const { createVoicemeeter, fakeVoicemeeterBinding } = require('./voicemeeter');
+const { createBridgeServer, generateBridgeToken } = require('./bridge-server');
+const { SD_PLUGIN_FILE } = require('./site');
 const SECURE_STORAGE_NOTICE = "Windows couldn't protect saved passwords on this PC, so you'll need to re-enter them each time the app starts.";
 const LOCAL_KEY_NOTE = "Saved with a key stored in your Windows profile, because Windows' own password protection isn't working on this PC right now. It switches over automatically once it works again.";
 const isPortable = !!process.env.PORTABLE_EXECUTABLE_DIR;
@@ -118,6 +128,9 @@ function uiState() {
         voice: voiceView(),
         vod: vodSafe ? { ...vodSafe.status(), kickMusic: s.music.kickMusic } : null,
         docks: { ready: !!dockUrls, titles: DOCKS.map((d) => d.title) },
+        lights: lightsView(),
+        voicemeeter: vmView(),
+        streamdeck: streamdeckView(),
         activity: activity.slice(-150),
         logFile: log.file,
     };
@@ -151,7 +164,9 @@ function fitState(obsSnap, sounds) {
         // The engine only sends songs while this says vodSafe: true (VOD-safe music).
         state.music = { vodSafe: !!v.vodSafe, reason: v.reason || null, vodTrack: v.vodTrack || null, liveTrack: v.liveTrack || null, sourceReady: !!v.sourceReady, live: !!v.live, checkedAt: v.checkedAt || null };
     }
+    state.devices = devicesReport();
     const size = () => Buffer.byteLength(JSON.stringify(state));
+    if (size() > 58000) for (const l of state.devices.lights) { l.caps.scenes = []; l.caps.effects = []; }
     if (size() > 58000) state.obs.filters = {};
     if (size() > 58000) for (const k of Object.keys(state.obs.sources)) state.obs.sources[k] = state.obs.sources[k].slice(0, 40);
     if (size() > 58000) state.obs.inputs = state.obs.inputs.slice(0, 150);
@@ -213,6 +228,10 @@ async function refreshAutomations() {
     if (!engine?.supports('request')) return automations;
     const r = await engine.request('automations.list', {});
     automations = (r?.automations || []).map((a) => ({ id: Number(a.id), name: String(a.name || ''), enabled: !!a.enabled })).filter((a) => a.id > 0);
+    // 0.2.6: VOD-safe music only while song requests are on. A server older than that sends no flag: keep its behaviour.
+    const songRequests = typeof r?.songRequests === 'boolean' ? r.songRequests : true;
+    if (config.get().music.songRequests !== songRequests) config.update({ music: { songRequests } });
+    if (vodSafe && vodSafe.setEnforced(songRequests)) addActivity({ kind: 'info', title: songRequests ? 'Song requests are on: Studio keeps music off the Twitch VOD track' : 'Song requests are off: Studio leaves your OBS audio tracks alone', ok: true });
     pushState();
     return automations;
 }
@@ -307,10 +326,183 @@ function setupStatus() {
     };
 }
 
+// ── lights, Voicemeeter and the Stream Deck (Phase 5) ────────────────────────────────────────────
+let sandbox = null;
+let lights = null;
+let lightsBusy = null;     // 'finding' | 'pairing' while one runs
+let voicemeeter = null;
+let vmInfo = null;         // the last detect()
+let bridge = null;
+let bridgeError = null;
+
+/** What the engine is told: names and capabilities, never addresses, serials or tokens. */
+function devicesReport() {
+    const s = config.get();
+    const lightList = s.lights.enabled && lights ? lights.list() : [];
+    return {
+        lights: lightList.slice(0, 200).map((d) => ({ id: d.id, driver: d.driver, name: d.name, model: d.model || null, online: !!d.online, needsPairing: !!d.needsPairing, kind: d.kind || 'light',
+            caps: { power: d.caps?.power !== false, brightness: !!d.caps?.brightness, color: !!d.caps?.color, white: d.caps?.white || null, scenes: (d.caps?.scenes || []).slice(0, 100), effects: (d.caps?.effects || []).slice(0, 100) } })),
+        voicemeeter: { enabled: !!s.voicemeeter.enabled, installed: !!vmInfo?.installed, running: !!vmInfo?.running, type: vmInfo?.type || null, version: vmInfo?.version || null,
+            strips: (vmInfo?.strips || []).map((x) => ({ index: x.index, label: x.label || '' })), buses: (vmInfo?.buses || []).map((x) => ({ index: x.index, label: x.label || '' })),
+            macroButtons: !!vmInfo?.macroButtons, profiles: vmInfo?.profiles || [] },
+        streamdeck: { enabled: !!s.streamdeck.enabled, clients: bridge ? bridge.status().clients : 0 },
+    };
+}
+
+function lightsView() {
+    const s = config.get().lights;
+    return { enabled: !!s.enabled, drivers: s.drivers, busy: lightsBusy, devices: lights ? lights.list() : [], notes: lights ? lights.notes() : [], sandbox: !!sandbox };
+}
+function vmView() {
+    return { settings: config.get().voicemeeter, info: vmInfo ? { installed: vmInfo.installed, running: vmInfo.running, type: vmInfo.type, version: vmInfo.version, strips: vmInfo.strips, buses: vmInfo.buses, macroButtons: vmInfo.macroButtons, profiles: vmInfo.profiles } : null };
+}
+function streamdeckView() {
+    const s = config.get().streamdeck;
+    const st = bridge ? bridge.status() : null;
+    return { settings: s, running: !!st?.running, clients: st?.clients || 0, clientList: st?.clientList || [], error: bridgeError, hasToken: config.hasSecret('streamdeckToken'), pluginBundled: fs.existsSync(sdPluginPath()) };
+}
+
+function lightsChanged() { reportState(); pushState(); }
+
+async function findLights() {
+    if (lightsBusy) throw new Error('Studio is already looking for lights.');
+    lightsBusy = 'finding';
+    pushState();
+    try {
+        const list = await lights.discover({ timeoutMs: 4000 });
+        log.info('lights found', { count: list.length });
+        return list;
+    } finally { lightsBusy = null; lightsChanged(); }
+}
+
+async function detectVoicemeeter() {
+    try { vmInfo = await voicemeeter.detect(); } catch (e) { vmInfo = { installed: false, running: false, error: e.code || e.message }; }
+    log.info('Voicemeeter checked', { installed: !!vmInfo.installed, running: !!vmInfo.running, type: vmInfo.type || null });
+    reportState();
+    pushState();
+    return vmInfo;
+}
+
+/** The light actions: refused with lights_off until the person turns lights on (Find lights). */
+function lightHandlers() {
+    const out = {};
+    for (const type of ['light.set', 'light.color', 'light.white', 'light.brightness', 'light.power', 'light.scene', 'light.flash', 'light.preset']) {
+        out[type] = async (p) => {
+            if (!config.get().lights.enabled) throw Object.assign(new Error('Lights are turned off in CertiFried Studio (Lights, Find lights)'), { code: 'lights_off' });
+            const r = await lights.run(type, p);
+            return { applied: r.applied.length, skipped: r.skipped.map((x) => `${x.id}: ${x.reason}`).slice(0, 10), notes: r.notes.map((x) => `${x.id}: ${x.reason}`).slice(0, 10) };
+        };
+    }
+    return out;
+}
+
+// The Stream Deck plugin's connection (bridge-server.js): what each method does here.
+const sdName = (v) => String(v ?? '').slice(0, 256);
+function bridgeHandlers() {
+    const need = (ok, code, message) => { if (!ok) throw Object.assign(new Error(message), { code }); };
+    const engineCall = async (method, params) => {
+        need(engine?.supports('request'), 'not_connected', 'Studio is not connected to CertiFried');
+        return engine.request(method, params, 15000);
+    };
+    const obsCall = async (type, data) => { need(obs.connected, 'obs_off', 'OBS is not connected'); return obs.call(type, data); };
+    return {
+        status: async () => ({ studio: app.getVersion(), engine: engine?.status || 'idle', obs: { connected: obs.connected, currentScene: obs.snapshot().currentScene || null } }),
+        'automations.list': async () => ({ automations: (automations.length ? automations : await refreshAutomations().catch(() => [])).filter((a) => a.enabled).map((a) => ({ id: a.id, name: a.name })) }),
+        'automations.run': async (p) => {
+            const id = Number(p?.automationId);
+            need(Number.isInteger(id) && id > 0, 'bad_params', 'automationId is required');
+            const r = await engineCall('automations.run', { automationId: id });
+            addActivity({ kind: 'info', title: `Stream Deck: run ${automations.find((a) => a.id === id)?.name || `automation ${id}`}`, detail: r?.status ? `run ${r.status}` : '', ok: true });
+            return { status: r?.status || null };
+        },
+        'obs.scenes': async () => { const snap = obs.snapshot(); return { current: snap.currentScene || null, scenes: snap.scenes || [] }; },
+        'obs.scene': async (p) => { const r = await router.run('obs.scene', { scene: sdName(p?.scene) }); need(r.ok, r.error, r.error); return {}; },
+        'obs.sources': async (p) => { const snap = obs.snapshot(); const scene = sdName(p?.scene) || snap.currentScene; return { scene, sources: (snap.sources || {})[scene] || [] }; },
+        'obs.source': async (p) => {
+            const state = ['show', 'hide', 'toggle'].includes(p?.state) ? p.state : 'toggle';
+            const r = await router.run('obs.source', { scene: sdName(p?.scene), source: sdName(p?.source), visible: state });
+            need(r.ok, r.error, r.error);
+            return { visible: typeof r.result?.visible === 'boolean' ? r.result.visible : null };
+        },
+        'obs.sourceState': async (p) => {
+            const scene = sdName(p?.scene) || obs.snapshot().currentScene;
+            const { sceneItemId } = await obsCall('GetSceneItemId', { sceneName: scene, sourceName: sdName(p?.source) });
+            const { sceneItemEnabled } = await obsCall('GetSceneItemEnabled', { sceneName: scene, sceneItemId });
+            return { visible: !!sceneItemEnabled };
+        },
+        'obs.inputs': async () => ({ inputs: (obs.snapshot().inputs || []).map((i) => i.name) }),
+        'obs.mute': async (p) => {
+            const state = ['mute', 'unmute', 'toggle'].includes(p?.state) ? p.state : 'toggle';
+            const r = await router.run('obs.mute', { input: sdName(p?.input), state });
+            need(r.ok, r.error, r.error);
+            const { inputMuted } = await obsCall('GetInputMute', { inputName: sdName(p?.input) });
+            return { muted: !!inputMuted };
+        },
+        'obs.muteState': async (p) => ({ muted: !!(await obsCall('GetInputMute', { inputName: sdName(p?.input) })).inputMuted }),
+        'counters.list': async () => ({ counters: ((await engineCall('counters.list', {}))?.counters || []).map((c) => ({ name: c.key, value: c.value })) }),
+        'counters.add': async (p) => {
+            const r = await engineCall('counters.add', { key: String(p?.counter ?? p?.key ?? ''), by: Number(p?.amount ?? p?.by ?? 1) });
+            bridge?.broadcast({ type: 'state', counter: { name: r.key, value: String(r.value) } });
+            return { value: r.value };
+        },
+        'sounds.list': async () => ({ sounds: library.list().map((x) => x.name) }),
+        'sound.play': async (p) => { const r = await router.run('sound.play', { sound: sdName(p?.sound), volume: Number.isFinite(Number(p?.volume)) ? Number(p.volume) : 100 }); need(r.ok, r.error, r.error); return {}; },
+        'lights.presets': async () => ({ presets: ((await engineCall('lights.presets', {}))?.presets || []).map((x) => ({ id: x.id, name: x.name })) }),
+        'lights.apply': async (p) => {
+            const r = await engineCall('lights.apply', { presetId: String(p?.preset ?? p?.presetId ?? '') });
+            need(r?.status !== 'failed', 'failed', r?.detail || 'The preset did not apply');
+            return { status: r?.status || null };
+        },
+    };
+}
+const BRIDGE_OBS_EVENTS = new Set(['CurrentProgramSceneChanged', 'InputMuteStateChanged', 'SceneItemEnableStateChanged']);
+const sceneItemNames = new Map();   // `${scene}:${id}` -> source name, for SceneItemEnableStateChanged pushes
+
+async function applyStreamdeck() {
+    const s = config.get().streamdeck;
+    if (bridge) { const b = bridge; bridge = null; await b.stop().catch(() => {}); }
+    bridgeError = null;
+    if (s.enabled) {
+        if (!config.hasSecret('streamdeckToken')) config.setSecret('streamdeckToken', generateBridgeToken());
+        bridge = createBridgeServer({ logger: log, port: s.port, getToken: () => config.getSecret('streamdeckToken'), handlers: bridgeHandlers(), version: app.getVersion() });
+        try {
+            await bridge.start();
+            log.info('Stream Deck connection on', { port: s.port });
+        } catch (e) {
+            bridgeError = e.code === 'port_in_use' ? `Port ${s.port} is in use by another program. Pick another port.` : 'The Stream Deck connection could not start.';
+            log.warn('Stream Deck connection could not start', { code: e.code || null });
+            bridge = null;
+        }
+    }
+    reportState();
+    pushState();
+}
+
+function sdPluginPath() {
+    // Packaged: resources\streamdeck\<file>; from source: the plugin's own dist folder (desktop/streamdeck-plugin).
+    return app.isPackaged ? path.join(process.resourcesPath, 'streamdeck', SD_PLUGIN_FILE) : path.join(ROOT, '..', 'streamdeck-plugin', 'dist', SD_PLUGIN_FILE);
+}
+
 // ── voice commands ─────────────────────────────────────────────────────────────────────────────
 let vodSafe = null;
 let musicUrl = null;
 let overlayCache = new Map();   // overlay id -> { url, sourceName, … } from the last overlays:list (addresses stay in the main process)
+
+/**
+ * A CertiFried overlay's address by id, for obs.add_browser_source (0.2.7): always asked fresh from the server
+ * (overlays.list, so a new key is picked up) and cleaned like the Set up OBS list, so only CertiFried overlay addresses
+ * are ever put into OBS; the last list is the fallback when the server does not answer.
+ */
+async function resolveOverlay(id) {
+    try {
+        const r = await engine.request('overlays.list', {}, 10000);
+        const list = cleanOverlays(r?.overlays, { origin: checkServer(config.get().server), siteHost: new URL(SITE).hostname });
+        overlayCache = new Map(list.map((o) => [o.id, o]));
+    } catch (e) {
+        log.info('overlays.list failed for a source add', { error: e?.code || e?.message });
+    }
+    return overlayCache.get(Number(id)) || null;
+}
 
 /** The music player page for the CertiFried Music source, from the server once it offers one (music.overlay). */
 async function getMusicUrl() {
@@ -746,6 +938,82 @@ function registerIpc() {
         return {};
     });
 
+    handle('vod:removeSource', async () => {
+        const v = await vodSafe.removeSource();
+        addActivity({ kind: 'info', title: 'Removed the CertiFried Music source from OBS', ok: true });
+        pushState();
+        return { vod: v };
+    });
+
+    // Lights, Voicemeeter, Stream Deck (Phase 5)
+    handle('lights:find', async () => {
+        if (!config.get().lights.enabled) { config.update({ lights: { enabled: true } }); log.info('lights turned on'); }
+        const list = await findLights();
+        return { count: list.length };
+    });
+    handle('lights:off', async () => { config.update({ lights: { enabled: false } }); lightsChanged(); return {}; });
+    handle('lights:drivers', async ({ drivers }) => {
+        const patch = {};
+        for (const k of ['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra']) if (drivers && typeof drivers[k] === 'boolean') patch[k] = drivers[k];
+        config.update({ lights: { drivers: patch } });
+        lightsChanged();
+        return {};
+    });
+    handle('lights:add', async ({ driver, address }) => {
+        const added = await lights.addManual({ driver: String(driver || ''), address: String(address || '').trim().slice(0, 60) });
+        config.update({ lights: { enabled: true } });
+        lightsChanged();
+        return { count: added.length };
+    });
+    handle('lights:pair', async ({ id }) => {
+        lightsBusy = 'pairing';
+        pushState();
+        try {
+            const r = await lights.pair(String(id || ''));
+            addActivity({ kind: 'info', title: r.ok ? 'Light paired' : 'Pairing did not finish', detail: r.message || '', ok: !!r.ok });
+            return { result: r };
+        } finally { lightsBusy = null; lightsChanged(); }
+    });
+    handle('lights:forget', async ({ id }) => { lights.forget(String(id || '')); lightsChanged(); return {}; });
+    handle('lights:test', async ({ id }) => { await lights.test(String(id || '')); return {}; });
+
+    handle('voicemeeter:settings', async ({ enabled }) => {
+        config.update({ voicemeeter: { enabled: !!enabled } });
+        await voicemeeter.configure({ enabled: !!enabled });
+        if (enabled) await detectVoicemeeter(); else { reportState(); pushState(); }
+        return {};
+    });
+    handle('voicemeeter:detect', async () => ({ info: await detectVoicemeeter() }));
+
+    handle('streamdeck:settings', async ({ enabled, port }) => {
+        const patch = {};
+        if (enabled !== undefined) patch.enabled = !!enabled;
+        if (port !== undefined) {
+            const p = Number(port);
+            if (!Number.isInteger(p) || p < 1024 || p > 65535) throw new Error('The port is a number from 1024 to 65535.');
+            patch.port = p;
+        }
+        config.update({ streamdeck: patch });
+        await applyStreamdeck();
+        return {};
+    });
+    // The token is shown only when asked for (never in the pushed state); Regenerate disconnects every key pad.
+    handle('streamdeck:token', async ({ regenerate }) => {
+        if (regenerate || !config.hasSecret('streamdeckToken')) {
+            config.setSecret('streamdeckToken', generateBridgeToken());
+            bridge?.dropClients();
+            if (regenerate) addActivity({ kind: 'info', title: 'New Stream Deck token: paste it into the plugin again', ok: true });
+        }
+        return { token: config.getSecret('streamdeckToken') };
+    });
+    handle('streamdeck:install', async () => {
+        const file = sdPluginPath();
+        if (!fs.existsSync(file)) throw new Error('The Stream Deck plugin is not included in this copy of Studio. Download it from the download page.');
+        const err = await shell.openPath(file);
+        if (err) throw new Error('Windows could not open the plugin file. Is the Elgato Stream Deck app installed?');
+        return {};
+    });
+
     // OBS setup checklist
     handle('setup:status', async () => ({ setup: setupStatus() }));
     handle('docks:prepare', async ({ regenerate }) => ({ urls: await prepareDocks(!!regenerate) }));
@@ -889,7 +1157,16 @@ app.whenReady().then(() => {
     sound = createSoundPlayer({ backend: soundBackend, getSettings: () => config.get().sound, logger: log });
     keys = createKeySender({ logger: log });
     obs = createObs({ logger: log, getPassword: () => config.getSecret('obsPassword') });
+    // Phase 5 devices. Tests and packaged test launches point every device at 127.0.0.1 mocks (sandbox.js).
+    step('device sandbox', () => { sandbox = loadSandbox(process.env, { logger: log }); if (sandbox) log.warn('device sandbox in use: lights, Litra and Voicemeeter are mocks'); });
+    lights = createLights({ config, logger: log, sandbox, hid: sandbox ? fakeHid(sandbox.record) : null });
+    lights.onChange(() => lightsChanged());
+    voicemeeter = createVoicemeeter({ logger: log, binding: sandbox ? fakeVoicemeeterBinding(sandbox.record) : null, record: sandbox ? sandbox.record : null,
+        // In the sandbox the settings-file list comes from a folder in the scratch data folder, never the real Documents.
+        documentsDir: sandbox ? path.join(userData, 'sandbox-documents') : app.getPath('documents'), enabled: false });
     vodSafe = createVodSafe({
+        // Song requests on (the server's automations.list says so) before VOD protection touches OBS; null = not told yet.
+        enforced: config.get().music.songRequests === true,
         obs, logger: log, getSettings: () => config.get().music, saveSettings: (p) => config.update({ music: p }), getMusicUrl,
         backupProfile: async () => {
             const pl = await obs.call('GetProfileList');
@@ -897,7 +1174,22 @@ app.whenReady().then(() => {
         },
     });
     vodSafe.onChange(onVodChange);
-    router = createRouter({ extra: { 'music.prepare': () => vodSafe.prepare() }, obs, sound, library, keys, screenshotDir: process.env.CF_STUDIO_USER_DATA ? path.join(userData, 'Screenshots') : path.join(app.getPath('pictures'), 'CertiFried Studio'), logger: log, defaultSoundMode: () => config.get().sound.defaultMode });
+    router = createRouter({ extra: {
+        'music.prepare': () => vodSafe.prepare(),
+        ...lightHandlers(),
+        ...voicemeeter.handlers(),
+        // 0.2.7: add CertiFried overlays next to the sources they replace (hidden), show / hide for the switchover, and
+        // close Firebot / Streamer.bot when the streamer ticks it (obs-sources.js).
+        ...sourceHandlers(obs, { resolveOverlay }),
+        // The dashboard's "Ask Studio to look again" (Devices): look for lights and Voicemeeter once more and report.
+        'devices.check': async () => {
+            const s = config.get();
+            const found = s.lights.enabled ? (await findLights().catch(() => lights.list())).length : null;
+            const vm = s.voicemeeter.enabled ? await detectVoicemeeter() : null;
+            reportState();
+            return { lights: found, lightsOn: !!s.lights.enabled, voicemeeter: vm ? (vm.running ? vm.type : vm.installed ? 'not_running' : 'not_installed') : 'off' };
+        },
+    }, obs, sound, library, keys, screenshotDir: process.env.CF_STUDIO_USER_DATA ? path.join(userData, 'Screenshots') : path.join(app.getPath('pictures'), 'CertiFried Studio'), logger: log, defaultSoundMode: () => config.get().sound.defaultMode });
     hotkeys = createHotkeys({ globalShortcut, onTrigger: triggerBinding, logger: log });
     voice = createVoice({
         // The helper script must be a real file for PowerShell: it is unpacked next to app.asar in the installed app.
@@ -920,7 +1212,22 @@ app.whenReady().then(() => {
         reportState();
     });
     obs.on('state', () => { reportState(); pushState(); });
-    obs.on('obs-event', (name, data) => vodSafe.onObsEvent(name, data));
+    obs.on('obs-event', (name, data) => {
+        vodSafe.onObsEvent(name, data);
+        if (bridge && BRIDGE_OBS_EVENTS.has(name)) {
+            if (name === 'SceneItemEnableStateChanged') {
+                // OBS names the item by id only; look its source name up for the plugin (cached).
+                const key = `${data?.sceneName}:${data?.sceneItemId}`;
+                const send = (sourceName) => bridge?.broadcast({ type: 'obs', event: name, data: { sceneName: data?.sceneName, sceneItemId: data?.sceneItemId, sceneItemEnabled: !!data?.sceneItemEnabled, sourceName } });
+                if (sceneItemNames.has(key)) send(sceneItemNames.get(key));
+                else obs.call('GetSceneItemList', { sceneName: data?.sceneName }).then((r) => {
+                    for (const it of r?.sceneItems || []) sceneItemNames.set(`${data?.sceneName}:${it.sceneItemId}`, it.sourceName);
+                    if (sceneItemNames.size > 5000) sceneItemNames.clear();
+                    send(sceneItemNames.get(key) || null);
+                }).catch(() => send(null));
+            } else bridge.broadcast({ type: 'obs', event: name, data });
+        }
+    });
     obs.on('event', (ev) => {
         addActivity({ kind: 'event', title: EVENT_LABELS[ev.type] || ev.type, detail: ev.metadata?.scene || ev.metadata?.file || '', ok: true });
         engine?.sendEvent(ev);
@@ -943,6 +1250,9 @@ app.whenReady().then(() => {
     step('OBS', () => obs.configure(config.get().obs));
     step('hotkeys', applyHotkeys);
     step('CertiFried connection', buildEngine);
+    step('lights', () => { if (config.get().lights.enabled) findLights().catch((e) => log.warn('lights could not be found', { error: e.message })); });
+    step('Voicemeeter', () => { if (config.get().voicemeeter.enabled) Promise.resolve(voicemeeter.configure({ enabled: true })).then(() => detectVoicemeeter()).catch(() => {}); });
+    step('Stream Deck', () => { if (config.get().streamdeck.enabled) applyStreamdeck().catch(() => {}); });
     step('pairing links', () => { if (isInstalled && !app.isDefaultProtocolClient('certifried-studio')) app.setAsDefaultProtocolClient('certifried-studio'); });
     step('updates', () => { if (config.get().app.checkUpdates) updater.start(); });
     step('deep link', () => { const link = argvDeepLink(process.argv); if (link) handleDeepLink(link); });
@@ -963,15 +1273,15 @@ app.whenReady().then(() => {
                         importCheck = { statusBefore: 'auth_failed', offered, answer, obsStatus: obs.status, port: config.get().obs.port };
                     }
                     const shown =await mainWindow.webContents.executeJavaScript("({ banner: document.getElementById('storage-banner').hidden ? null : document.getElementById('storage-banner').textContent, note: document.getElementById('storage-note').hidden ? null : document.getElementById('storage-note').textContent, pairShown: !document.getElementById('pair-card').hidden })");
-                    fs.writeFileSync(process.env.CF_STUDIO_SMOKE, JSON.stringify({ started: true, secureStorage: config.secureStorageAvailable(), storageMode: config.storageMode(), paired: config.hasSecret('deviceToken'), hasObsPassword: config.hasSecret('obsPassword'), keyFile: fs.existsSync(config.paths.keyFile), keySending: keys.available, importCheck, ...shown }));
+                    fs.writeFileSync(process.env.CF_STUDIO_SMOKE, JSON.stringify({ started: true, lights: lights ? lights.list().length : null, secureStorage: config.secureStorageAvailable(), storageMode: config.storageMode(), paired: config.hasSecret('deviceToken'), hasObsPassword: config.hasSecret('obsPassword'), keyFile: fs.existsSync(config.paths.keyFile), keySending: keys.available, importCheck, ...shown }));
                 }
             } catch (e) { log.error('capture failed', { error: e.message }); }
             quitting = true;
             app.quit();
         }, Number(process.env.CF_STUDIO_CAPTURE_WAIT || 3000)));
     }
-    // While idle, keep VOD-safe music checked every minute (OBS settings can change without an event).
-    setInterval(() => { if (obs.connected) vodSafe.ensure('timer').catch(() => {}); }, 60 * 1000).unref?.();
+    // While idle and song requests are on, keep VOD-safe music checked every minute (OBS settings can change without an event).
+    setInterval(() => { if (obs.connected && vodSafe.enforced()) vodSafe.ensure('timer').catch(() => {}); }, 60 * 1000).unref?.();
     // Keep the dashboard's lists fresh: automations every 5 minutes, sounds every 15.
     setInterval(() => { refreshAutomations().catch(() => {}); refreshVoicePhrases().catch(() => {}); }, 5 * 60 * 1000).unref?.();
     setInterval(() => { if (config.get().sound.syncDashboard) syncSounds().catch(() => {}); }, 15 * 60 * 1000).unref?.();
@@ -989,5 +1299,8 @@ app.on('will-quit', () => {
     try { globalShortcut.unregisterAll(); } catch { /* ignore */ }
     try { engine?.stop(); } catch { /* ignore */ }
     try { obs?.stop(); } catch { /* ignore */ }
+    try { lights?.close(); } catch { /* ignore */ }
+    try { voicemeeter?.close(); } catch { /* ignore */ }
+    try { bridge?.stop(); } catch { /* ignore */ }
     log?.info('CertiFried Studio closed');
 });

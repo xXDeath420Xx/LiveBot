@@ -5,6 +5,7 @@ import fetch from 'node-fetch';
 import logger from '../../utils/logger.js';
 import { encryptToken, hashForLogging } from '../../utils/token-encryption.js';
 import { logSessionEvent } from '../config/session.js';
+import { KICK_CHANNEL_BOT_SCOPES } from '../../core/stream-bot/kick-scopes.js';
 
 const router = express.Router();
 
@@ -21,10 +22,13 @@ const TWITCH_SCOPES = ['user:read:email', 'chat:read', 'chat:edit'].join(' ');
 const KICK_CLIENT_ID = process.env.KICK_BOT_CLIENT_ID || process.env.KICK_CLIENT_ID;
 const KICK_CLIENT_SECRET = process.env.KICK_BOT_CLIENT_SECRET || process.env.KICK_CLIENT_SECRET;
 const KICK_REDIRECT_URI = `${BASE_URL}/tokes-bot/auth/kick/callback`;
-const KICK_SCOPES = ['user:read', 'chat:write', 'events:subscribe', 'channel:read', 'moderation:ban', 'moderation:chat_message:manage'].join(' ');
+// The list lives in core/stream-bot/kick-scopes.js so Stream bot > Connections can say which are missing (H-787).
+// channel:write: stream bot title/category (H-749; enabled on the Kick app 2026-11-19)
+const KICK_SCOPES = KICK_CHANNEL_BOT_SCOPES.join(' ');
 
 // Allowed return paths (prevent open redirect)
-const ALLOWED_RETURN_PATHS = ['/kick'];
+// /stream/bot/connections: its "Kick channel bot" row signs in here (H-787). Same-origin paths only (sanitizeReturnTo).
+const ALLOWED_RETURN_PATHS = ['/kick', '/stream/bot/connections'];
 // The legacy /tokes-bot dashboard is hidden; the Kick bot lives at /kick.
 const DEFAULT_RETURN_PATH = '/kick';
 
@@ -40,7 +44,7 @@ function generatePKCE() {
 /**
  * Validate and sanitize returnTo parameter
  */
-function sanitizeReturnTo(returnTo) {
+export function sanitizeReturnTo(returnTo) {
     if (!returnTo || typeof returnTo !== 'string') {
         return DEFAULT_RETURN_PATH;
     }
@@ -263,8 +267,9 @@ router.get('/tokes-bot/auth/kick', (req, res) => {
 router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
     const { code, error, state } = req.query;
 
-    // Auth errors go back to /kick, the only page that still signs in through here.
-    const errorBase = '/kick';
+    // Auth errors go back to /kick, or to Stream bot > Connections when the sign-in started there (its "Kick channel
+    // bot" row; dashboard/services/stream-bot-view.js CONNECTION_MESSAGES explains these codes there).
+    const errorBase = sanitizeReturnTo(req.session?.tokesReturnTo).startsWith('/stream/bot/connections') ? '/stream/bot/connections' : '/kick';
 
     if (!state || state !== req.session?.kickOAuthState) {
         logger.warn('[Tokes Bot Auth] Invalid Kick OAuth state');

@@ -1,0 +1,148 @@
+<%#
+  Devices page, Phase 5: Lights, Audio (Voicemeeter) and Stream Deck. Included by stream-bot/devices.ejs.
+  Locals: hardware (core/stream-bot/devices/service.js pageData()): { studio: { live, name, reported, reportedAt },
+  lights: [{ id, driver, driverLabel, name, model, online, needsPairing, kind, caps }], cloud: [{ provider, label, connected, keyHint,
+  status, lastError, devices[], checkedAt }], presets: [{ id, name, lights[] }], voicemeeter: {...} | null, streamdeck: {...} | null }.
+  Buttons are wired by /js/stream-bot-devices.js; nothing secret is ever rendered (cloud keys show their last 4 characters only).
+%>
+<link rel="stylesheet" href="/css/stream-bot-devices.css">
+<%
+  const hw = hardware;
+  const _ago = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _caps = (c) => [c.color ? 'Colour' : null, c.white ? `White ${c.white.min}-${c.white.max} K` : null, c.brightness ? 'Brightness' : null, (c.scenes || []).length ? `${c.scenes.length} scene${c.scenes.length === 1 ? '' : 's'}` : null, (c.effects || []).length ? `${c.effects.length} effect${c.effects.length === 1 ? '' : 's'}` : null].filter(Boolean);
+  const _vmType = { basic: 'Voicemeeter', banana: 'Voicemeeter Banana', potato: 'Voicemeeter Potato' };
+  const _cloudHelp = { govee: 'Govee Home app: Profile, Settings (gear), Apply for API key. Govee emails the key.', lifx: 'cloud.lifx.com, Settings, Personal access tokens, Generate new token.' };
+  const _status = { ok: ['is-ok', 'Connected'], bad_key: ['is-bad', 'Key refused'], error: ['is-warn', 'Could not reach the service'], unchecked: ['', 'Not checked yet'] };
+%>
+<section class="cf-section" aria-labelledby="sb-lights-title" id="lights">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-lights-title">Lights</h2>
+        <p class="cf-section-desc">Lights on your network (Govee with LAN control on, Philips Hue, LIFX, Nanoleaf, Elgato Key Light and Light Strip) and Logitech Litra over USB are found by CertiFried Studio on your PC; their pairing tokens stay on the PC. Govee and LIFX can also work through their cloud with your own key, without Studio. Use them in automations with the Lights actions.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-hw-status" role="status" aria-live="polite"></span><button type="button" class="btn btn-secondary btn-sm" data-hw-check>Ask Studio to look again</button></div></header>
+    <div class="cf-rows">
+        <h3 class="sb-subhead">From CertiFried Studio<% if (hw.studio.name) { %> on <%= hw.studio.name %><% } %></h3>
+        <% if (!hw.lights.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title"><%= hw.studio.live ? 'Studio has not found any lights yet.' : 'No lights reported yet.' %></p>
+            <p class="cf-state-desc">In CertiFried Studio 0.2.6 or later open Lights and choose Find lights. Hue bridges and Nanoleaf panels are paired there with their button.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% hw.lights.forEach((l) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= l.name %>
+                        <% if (l.needsPairing) { %><span class="cf-pill is-warn">Pair in Studio</span><% } else if (l.online) { %><span class="cf-pill is-ok">Online</span><% } else { %><span class="cf-pill">Offline</span><% } %></p>
+                    <p class="cf-list-meta"><span><%= l.driverLabel %><%= l.kind === 'group' ? ', room or zone' : l.kind === 'bridge' ? ', bridge' : '' %></span><% if (l.model) { %><span><%= l.model %></span><% } %><% _caps(l.caps).forEach((c) => { %><span><%= c %></span><% }) %></p>
+                </div>
+                <div class="cf-list-actions"><% if (!l.needsPairing && l.kind !== 'bridge') { %><button type="button" class="btn btn-secondary btn-sm" data-light-test="<%= l.id %>" data-name="<%= l.name %>">Test</button><% } %></div>
+            </div>
+            <% }) %>
+        </div>
+        <% if (!hw.studio.live && hw.studio.reportedAt) { %><p class="cf-muted">Last reported <time datetime="<%= hw.studio.reportedAt %>"><%= _ago(hw.studio.reportedAt) %></time>. Studio is offline, so tests will not reach these lights.</p><% } %>
+        <% } %>
+
+        <h3 class="sb-subhead">Cloud</h3>
+        <div class="cf-list">
+            <% hw.cloud.forEach((c) => { const st = _status[c.status] || ['', c.status || '']; %>
+            <div class="cf-list-item cf-list-item--multi" data-cloud="<%= c.provider %>">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= c.label %> cloud <% if (c.connected) { %><span class="cf-pill <%= st[0] %>"><%= st[1] %></span><% } else { %><span class="cf-pill">Not connected</span><% } %></p>
+                    <% if (c.connected) { %>
+                    <p class="cf-list-meta"><span>Key ending <code><%= c.keyHint %></code></span><span><%= c.devices.length %> light<%= c.devices.length === 1 ? '' : 's' %></span><% if (c.checkedAt) { %><span>Checked <time datetime="<%= c.checkedAt %>"><%= _ago(c.checkedAt) %></time></span><% } %></p>
+                    <% if (c.lastError) { %><p class="cf-list-meta"><span><%= c.lastError %></span></p><% } %>
+                    <% if (c.devices.length) { %><ul class="cf-chips" aria-label="<%= c.label %> lights"><% c.devices.slice(0, 40).forEach((d) => { %><li class="cf-chip"><span><%= d.name %></span><button type="button" class="sb-chip-btn" data-light-test="<%= d.id %>" data-name="<%= d.name %>" aria-label="Test <%= d.name %>">Test</button></li><% }) %></ul><% } %>
+                    <% } else { %><p class="cf-list-meta"><span><%= _cloudHelp[c.provider] %></span></p><% } %>
+                    <form class="sb-cloud-form" data-cloud-form="<%= c.provider %>" novalidate <%= c.connected ? 'hidden' : '' %>>
+                        <label class="cf-row-label" for="sb-cloud-<%= c.provider %>"><%= c.provider === 'govee' ? 'Govee API key' : 'LIFX personal access token' %></label>
+                        <div class="cf-input-group"><input type="password" id="sb-cloud-<%= c.provider %>" autocomplete="off" spellcheck="false" maxlength="200"><button type="submit" class="btn btn-primary btn-sm">Save and check</button></div>
+                        <p class="cf-muted">Stored encrypted on CertiFried and used only to change your lights. Remove it here at any time.</p>
+                    </form>
+                </div>
+                <div class="cf-list-actions">
+                    <% if (c.connected) { %>
+                    <button type="button" class="btn btn-secondary btn-sm" data-cloud-refresh="<%= c.provider %>">Check again</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-cloud-edit="<%= c.provider %>">Replace key</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-cloud-remove="<%= c.provider %>" data-name="<%= c.label %>">Remove</button>
+                    <% } %>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-presets-title" id="light-presets">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-presets-title">Light presets</h2>
+        <p class="cf-section-desc">A preset sets several lights at once, such as Live (warm white key lights, green strips) or BRB (lights dimmed). Apply one from an automation, a Stream Deck key or here.</p></div>
+        <div class="cf-section-actions"><button type="button" class="btn btn-secondary btn-sm" data-preset-new>New preset</button></div></header>
+    <div class="cf-rows">
+        <% if (!hw.presets.length) { %><div class="cf-state cf-state--compact" id="sb-presets-empty"><p class="cf-state-title">No presets yet.</p></div><% } %>
+        <div class="cf-list" id="sb-presets">
+            <% hw.presets.forEach((p) => { %>
+            <div class="cf-list-item" data-preset="<%= p.id %>">
+                <div class="cf-list-main"><p class="cf-list-title"><%= p.name %></p><p class="cf-list-meta"><span><%= p.lights.length %> light<%= p.lights.length === 1 ? '' : 's' %></span></p></div>
+                <div class="cf-list-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" data-preset-apply="<%= p.id %>">Apply</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-preset-edit="<%= p.id %>">Edit</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-preset-delete="<%= p.id %>" data-name="<%= p.name %>">Delete</button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <script type="application/json" id="sb-presets-data"><%- JSON.stringify(Object.fromEntries(hw.presets.map((p) => [p.id, p]))).replace(/</g, '\\u003c') %></script>
+        <form class="sb-preset-form" id="sb-preset-form" novalidate hidden>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-preset-name">Preset name</label></div>
+                <div class="cf-row-control"><input type="text" id="sb-preset-name" maxlength="60" autocomplete="off"></div>
+            </div>
+            <div id="sb-preset-rows" class="sb-preset-rows"></div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-preset-status" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary btn-sm" data-preset-addrow>Add a light</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-preset-cancel>Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm">Save preset</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-audio-title" id="audio">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-audio-title">Audio: Voicemeeter</h2>
+        <p class="cf-section-desc">CertiFried Studio can mute and unmute strips and buses, change their gain, load a saved Voicemeeter settings file and press Macro Buttons. It is off until you turn it on in Studio (Audio), and it never starts Voicemeeter for you.</p></div></header>
+    <div class="cf-rows">
+        <% const vm = hw.voicemeeter; %>
+        <% if (!vm) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">Not reported yet.</p><p class="cf-state-desc">Open CertiFried Studio 0.2.6 or later, go to Audio and turn on Voicemeeter control.</p></div>
+        <% } else if (!vm.enabled) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">Voicemeeter control is off in Studio.</p><p class="cf-state-desc"><%= vm.installed ? 'Voicemeeter is installed on that PC.' : 'Voicemeeter was not found on that PC.' %> Turn it on in Studio under Audio.</p></div>
+        <% } else if (!vm.installed) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">Voicemeeter is not installed on that PC.</p><p class="cf-state-desc">Install it from vb-audio.com, then choose Ask Studio to look again above.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= _vmType[vm.type] || 'Voicemeeter' %><%= vm.version ? ' ' + vm.version : '' %> <% if (vm.running) { %><span class="cf-pill is-ok">Running</span><% } else { %><span class="cf-pill is-warn">Not running</span><% } %></p>
+                    <p class="cf-list-meta"><span><%= vm.strips.length %> strips</span><span><%= vm.buses.length %> buses</span><span><%= vm.profiles.length %> settings file<%= vm.profiles.length === 1 ? '' : 's' %> in Documents\Voicemeeter</span><span>Macro Buttons <%= vm.macroButtons ? 'available' : 'not available' %></span></p>
+                    <% if (vm.strips.length || vm.buses.length) { %><ul class="cf-chips" aria-label="Strips and buses"><% vm.strips.forEach((s) => { %><li class="cf-chip"><span>Strip <%= s.index + 1 %><%= s.label ? ': ' + s.label : '' %></span></li><% }) %><% vm.buses.forEach((b) => { %><li class="cf-chip"><span>Bus <%= b.index + 1 %><%= b.label ? ': ' + b.label : '' %></span></li><% }) %></ul><% } %>
+                </div>
+            </div>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-sd-title" id="stream-deck">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-sd-title">Stream Deck</h2>
+        <p class="cf-section-desc">The CertiFried plugin for the Elgato Stream Deck app adds keys to run an automation, switch scene, show or hide a source, mute an input, change a counter, play a sound and apply a light preset. It talks only to CertiFried Studio on the same PC (127.0.0.1), with a pairing token Studio shows you.</p></div></header>
+    <div class="cf-rows">
+        <% const sd = hw.streamdeck; %>
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label">Status</p>
+                <p class="cf-row-desc"><% if (!sd) { %>Not reported yet. Studio 0.2.6 or later reports it.<% } else if (!sd.enabled) { %>Off in Studio. Turn on Stream Deck in Studio's Settings to let the plugin connect.<% } else { %>On in Studio, <%= sd.clients %> plugin connection<%= sd.clients === 1 ? '' : 's' %> now.<% } %></p></div>
+            <div class="cf-row-control"><% if (sd && sd.enabled) { %><span class="cf-pill <%= sd.clients ? 'is-ok' : '' %>"><%= sd.clients ? 'Connected' : 'Waiting for the plugin' %></span><% } else { %><span class="cf-pill">Off</span><% } %></div>
+        </div>
+        <ol class="sb-steps-list">
+            <li>In CertiFried Studio open Settings, Stream Deck, and turn it on. Studio shows a pairing token.</li>
+            <li>Choose Install the Stream Deck plugin in Studio (or <a href="/downloads/studio#stream-deck">download it</a> and open the file). The Stream Deck app installs it.</li>
+            <li>Drag a CertiFried key onto your Stream Deck, paste the token once, and pick what the key does.</li>
+        </ol>
+    </div>
+</section>

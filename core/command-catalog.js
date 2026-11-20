@@ -27,7 +27,7 @@ import { PermissionsBitField } from 'discord.js';
 import { DEFAULT_PREFIXES, listCommandPaths, getGroups, _internals, describePath, SLASH_TEXT_PREFIX } from './universal-commands.js';
 import { commandType } from './command-registration.js';
 import { getAllCommands } from './prefix-command-registry.js';
-import { _internals as owoInternals } from './owo-natural-prefix.js';
+import { _internals as owoInternals } from './critters-natural-prefix.js';
 import logger from '../utils/logger.js';
 import { MOUNTS, slashPath, isContainer } from './command-mounts.js';
 

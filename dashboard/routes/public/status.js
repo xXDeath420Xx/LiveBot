@@ -16,6 +16,8 @@ import rateLimit from 'express-rate-limit';
 import https from 'node:https';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { sendFramed } from '../../services/site-frame.js';
+import { stylesheetTag } from '../../services/framed-assets.js';
 
 const router = express.Router();
 const LOG = '[PublicStatus]';
@@ -144,85 +146,49 @@ router.get('/overview', limiter, async (req, res) => {
 });
 
 // ─── HTML page ──────────────────────────────────────────────────────────────
-// Self-contained — no external CSS/JS. Fetches /api/status/public/overview and renders.
-// Pro/Linear-Stripe restraint per project style memory: no gradients, no emoji icons, no hype.
-// All dynamic DOM updates use textContent / dataset-driven classes — no innerHTML string
-// concatenation anywhere.
-const PAGE = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<meta name="robots" content="index,follow" />
-<title>CertiFried · Status</title>
-<meta name="description" content="Live operational status for CertiFried: Discord bot, dashboard, and third-party API health." />
-<style>
-  :root { color-scheme: light dark; --bg:#0b0d10; --fg:#e8ecef; --muted:#8a929b; --card:#15181c; --line:#242830; --ok:#2fbe6a; --warn:#e2b23a; --err:#e35858; }
-  @media (prefers-color-scheme: light) { :root { --bg:#f6f7f9; --fg:#15181c; --muted:#5c6670; --card:#ffffff; --line:#e5e8ec; } }
-  html,body { background:var(--bg); color:var(--fg); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; margin:0; }
-  main { max-width:860px; margin:0 auto; padding:48px 20px 80px; }
-  header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
-  h1 { font-size:22px; font-weight:600; margin:0; letter-spacing:-0.01em; }
-  .lede { color:var(--muted); font-size:14px; margin:4px 0 0; }
-  .row { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line); gap:16px; }
-  .row:last-child { border-bottom:none; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; margin-bottom:16px; overflow:hidden; }
-  .card h2 { margin:0; padding:14px 18px; font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); border-bottom:1px solid var(--line); }
-  .label { font-size:14px; display:flex; align-items:center; }
-  .meta { font-size:13px; color:var(--muted); font-variant-numeric: tabular-nums; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:10px; background:var(--muted); flex-shrink:0; }
-  .dot.ok { background:var(--ok); } .dot.warn { background:var(--warn); } .dot.err { background:var(--err); }
-  .big { font-size:28px; font-weight:600; letter-spacing:-0.01em; font-variant-numeric: tabular-nums; }
-  .grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:1px; background:var(--line); }
-  .grid > div { background:var(--card); padding:16px 18px; }
-  .grid .tiny { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
-  footer { color:var(--muted); font-size:12px; margin-top:24px; text-align:center; }
-  footer a { color:inherit; }
-  .pulse { animation:p 1.6s infinite; }
-  @keyframes p { 0%,100%{opacity:0.5} 50%{opacity:1} }
-  @media (max-width:520px) { .grid { grid-template-columns:1fr; } }
-</style>
-</head>
-<body>
-<main>
-  <header>
-    <div>
-      <h1>CertiFried status</h1>
-      <p class="lede" id="checked">Loading current status…</p>
+// Rendered in the shared site frame (views/site-frame.ejs). Fetches /api/status/public/overview
+// every 20 s. All dynamic DOM updates use textContent and class names — no innerHTML anywhere.
+const PAGE_BODY = `
+<main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow pp-status">
+  <div class="cfs-pagehead">
+    <h1>CertiFried status</h1>
+    <p class="cfs-lede">The Discord bot, the dashboard and the services they depend on, checked live.</p>
+    <p class="cfs-meta" id="checked">Loading current status…</p>
+  </div>
+
+  <section class="cfs-section" aria-labelledby="ps-svc-h">
+    <h2 id="ps-svc-h">Services</h2>
+    <div class="cfs-rows">
+      <div class="cfs-row" id="svc-bot" data-name="Discord bot"><span class="cfs-dot is-pending" aria-hidden="true"></span><span class="cfs-row-main cfs-row-title">Discord bot</span><span class="cfs-row-end meta">Checking…</span></div>
+      <div class="cfs-row" id="svc-dash" data-name="Dashboard"><span class="cfs-dot is-pending" aria-hidden="true"></span><span class="cfs-row-main cfs-row-title">Dashboard</span><span class="cfs-row-end meta">Checking…</span></div>
     </div>
-    <div class="meta"><a href="/" style="color:inherit;text-decoration:none;">&larr; certifriedmultitool.com</a></div>
-  </header>
+  </section>
 
-  <div class="card">
-    <h2>Services</h2>
-    <div class="row" id="svc-bot"  data-name="Discord bot"><span class="label"><span class="dot pulse"></span><span class="name">Discord bot</span></span><span class="meta">…</span></div>
-    <div class="row" id="svc-dash" data-name="Dashboard"><span class="label"><span class="dot pulse"></span><span class="name">Dashboard</span></span><span class="meta">…</span></div>
-  </div>
-
-  <div class="card">
-    <h2>Upstream APIs</h2>
-    <div class="row" id="ext-discord" data-name="Discord API"><span class="label"><span class="dot pulse"></span><span class="name">Discord API</span></span><span class="meta">…</span></div>
-    <div class="row" id="ext-twitch"  data-name="Twitch API"><span class="label"><span class="dot pulse"></span><span class="name">Twitch API</span></span><span class="meta">…</span></div>
-    <div class="row" id="ext-kick"    data-name="Kick"><span class="label"><span class="dot pulse"></span><span class="name">Kick</span></span><span class="meta">…</span></div>
-  </div>
-
-  <div class="card">
-    <h2>By the numbers</h2>
-    <div class="grid">
-      <div><div class="tiny">Discord servers</div><div class="big" id="n-guilds">—</div></div>
-      <div><div class="tiny">Scam domains blocked</div><div class="big" id="n-scams">—</div></div>
-      <div><div class="tiny">Branded bots in use</div><div class="big" id="n-brand">—</div></div>
-      <div><div class="tiny">Moderation actions</div><div class="big" id="n-mod">—</div></div>
+  <section class="cfs-section" aria-labelledby="ps-ext-h">
+    <h2 id="ps-ext-h">Upstream APIs</h2>
+    <div class="cfs-rows">
+      <div class="cfs-row" id="ext-discord" data-name="Discord API"><span class="cfs-dot is-pending" aria-hidden="true"></span><span class="cfs-row-main cfs-row-title">Discord API</span><span class="cfs-row-end meta">Checking…</span></div>
+      <div class="cfs-row" id="ext-twitch" data-name="Twitch API"><span class="cfs-dot is-pending" aria-hidden="true"></span><span class="cfs-row-main cfs-row-title">Twitch API</span><span class="cfs-row-end meta">Checking…</span></div>
+      <div class="cfs-row" id="ext-kick" data-name="Kick"><span class="cfs-dot is-pending" aria-hidden="true"></span><span class="cfs-row-main cfs-row-title">Kick</span><span class="cfs-row-end meta">Checking…</span></div>
     </div>
-  </div>
+  </section>
 
-  <footer>
-    Updates every 20 s · JSON at <a href="/api/status/public/overview">/api/status/public/overview</a>
-  </footer>
-</main>
-<script>
+  <section class="cfs-section" aria-labelledby="ps-num-h">
+    <h2 id="ps-num-h">By the numbers</h2>
+    <div class="cfs-stats">
+      <div class="cfs-stat"><b id="n-guilds">—</b><span>Discord servers</span></div>
+      <div class="cfs-stat"><b id="n-scams">—</b><span>Scam domains blocked</span></div>
+      <div class="cfs-stat"><b id="n-brand">—</b><span>Branded bots in use</span></div>
+      <div class="cfs-stat"><b id="n-mod">—</b><span>Moderation actions</span></div>
+    </div>
+  </section>
+
+  <p class="pp-meta">Updates every 20 seconds. JSON at <a href="/api/status/public/overview">/api/status/public/overview</a>. Incidents and live streams: <a href="/status">status page</a>.</p>
+</main>`;
+
+const PAGE_SCRIPT = `<script>
 (function () {
-  function fmt(n) { try { return new Intl.NumberFormat('en-US').format(n); } catch { return String(n); } }
+  function fmt(n) { try { return new Intl.NumberFormat('en-US').format(n); } catch (e) { return String(n); } }
   function fmtMs(n) { return n == null ? '—' : (n + ' ms'); }
   function fmtDur(s) {
     if (!Number.isFinite(s)) return '—';
@@ -231,12 +197,11 @@ const PAGE = `<!doctype html>
     if (h) return h + 'h ' + m + 'm';
     return m + 'm';
   }
-  // Safe DOM update — no innerHTML, no string-built HTML. Row structure is already
-  // static; we only toggle the dot class and swap textContent values.
-  function set(id, dotClass, metaText) {
+  // Safe DOM update: the rows are static markup; only the dot's class and the text change.
+  function set(id, ok, metaText) {
     var el = document.getElementById(id); if (!el) return;
-    var dot = el.querySelector('.label .dot');
-    if (dot) dot.className = 'dot ' + dotClass;
+    var dot = el.querySelector('.cfs-dot');
+    if (dot) dot.className = 'cfs-dot ' + (ok ? 'cfs-dot--ok' : 'cfs-dot--bad');
     var meta = el.querySelector('.meta');
     if (meta) meta.textContent = metaText;
   }
@@ -245,44 +210,50 @@ const PAGE = `<!doctype html>
     el.textContent = fmt(value);
   }
   async function tick() {
+    var checked = document.getElementById('checked');
     try {
       var r = await fetch('/api/status/public/overview', { cache: 'no-store' });
       var d = await r.json();
-      set('svc-bot',
-          d.bot.status === 'online' ? 'ok' : 'err',
-          d.bot.status === 'online'
-            ? ('Online · ' + fmtMs(d.bot.gateway_ping_ms) + ' · up ' + fmtDur(d.bot.uptime_seconds))
-            : 'Offline');
-      set('svc-dash', 'ok', 'Online');
-      ['discord','twitch','kick'].forEach(function (k) {
+      var up = d.bot.status === 'online';
+      set('svc-bot', up, up ? ('Online · ' + fmtMs(d.bot.gateway_ping_ms) + ' · up ' + fmtDur(d.bot.uptime_seconds)) : 'Offline');
+      set('svc-dash', true, 'Online');
+      ['discord', 'twitch', 'kick'].forEach(function (k) {
         var e = d.external_apis[k];
-        set('ext-' + k,
-            e.status === 'online' ? 'ok' : 'err',
-            e.status === 'online' ? ('Online · ' + fmtMs(e.latency_ms)) : 'Offline');
+        set('ext-' + k, e.status === 'online', e.status === 'online' ? ('Online · ' + fmtMs(e.latency_ms)) : 'Offline');
       });
       if (d.metrics) {
         setNumber('n-guilds', d.metrics.live_guilds);
-        setNumber('n-scams',  d.metrics.scam_domains_blocked);
-        setNumber('n-brand',  d.metrics.branded_bots);
-        setNumber('n-mod',    d.metrics.infractions_logged);
+        setNumber('n-scams', d.metrics.scam_domains_blocked);
+        setNumber('n-brand', d.metrics.branded_bots);
+        setNumber('n-mod', d.metrics.infractions_logged);
       }
-      var checked = document.getElementById('checked');
       if (checked) checked.textContent = 'Checked ' + new Date(d.checked_at).toLocaleTimeString();
     } catch (e) {
-      var checked = document.getElementById('checked');
-      if (checked) checked.textContent = 'Could not reach status endpoint. Retrying…';
+      if (checked) checked.textContent = 'Could not reach the status endpoint. Retrying…';
     }
   }
   tick(); setInterval(tick, 20000);
 })();
-</script>
-</body>
-</html>`;
+</script>`;
 
-router.get('/page', (_req, res) => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=60');
-    res.send(PAGE);
+/** The page's site-frame locals (views/site-frame.ejs). Pure: scripts/theme-audit renders it too. */
+export function publicStatusPage() {
+    return {
+        title: 'Service status · CertiFried',
+        description: 'Live operational status for CertiFried: the Discord bot, the dashboard and the health of the Discord, Twitch and Kick APIs.',
+        path: '/api/status/public/page',
+        headHtml: stylesheetTag('/css/cf-public-pages.css'),
+        bodyHtml: PAGE_BODY,
+        scriptsHtml: PAGE_SCRIPT,
+    };
+}
+
+router.get('/page', async (req, res, next) => {
+    try {
+        // private: the site header can carry the signed-in user's name and avatar.
+        res.setHeader('Cache-Control', 'private, max-age=60');
+        await sendFramed(req, res, publicStatusPage());
+    } catch (err) { next(err); }
 });
 
 export default router;

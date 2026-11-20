@@ -1,4 +1,4 @@
-<%- include('_head', { pageTitle: 'Connected accounts', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Connected accounts', csrfToken, kickUser: user, kickTab: 'admin', isManager: true, isAdmin: true }) %>
 <% var expiredCount = accounts.filter(function (a) { return a.tokenExpired; }).length; %>
 
   <div class="pagehead">
@@ -8,7 +8,6 @@
       <p class="sub">Who is connected, their channels, permissions and token health.</p>
     </div>
   </div>
-  <%- include('_tabs', { active: 'admin', isManager: true, isAdmin: true }) %>
 
   <dl class="cf-kpis">
     <div class="cf-kpi"><dt>Connected accounts</dt><dd><%= totals.accounts %></dd></div>

@@ -3,7 +3,8 @@
  * copied (migration 456). One table and one minute job serve both kinds of timer:
  *
  *   Kick channel page timers   channel_id → tokes_channels (Kick), as before; they post on that channel
- *   stream bot timers          profile_id → stream_bot_profiles; they post on the profile's linked Twitch and/or Kick channels
+ *   stream bot timers          profile_id → stream_bot_profiles; they post on the profile's linked Twitch and/or Kick channels,
+ *                              and on YouTube when the streamer picks it (platforms 'youtube' or 'everywhere'; design §13.10)
  *
  * New options for both: more than one message (rotate or random), "only while live", "only after N chat lines
  * since the last post", running a stream bot automation instead of a message (stream bot timers only), and the
@@ -24,7 +25,31 @@ import { renderTemplate } from '../custom-command-vars.js';
 import { streamValues } from './stream-info.js';
 
 export const TIMER_LIMITS = Object.freeze({ perProfile: 50, messages: 10, messageMax: 500, intervalMin: 1, intervalMax: 1440, linesMax: 1000, nameMax: 100 });
-export const TIMER_PLATFORMS = Object.freeze(['twitch', 'kick', 'all']);
+/**
+ * Where a stream bot timer posts. 'all' stays Twitch and Kick (timers made before YouTube existed must not start spending
+ * YouTube quota); 'youtube' and 'everywhere' (Twitch, Kick and YouTube) need YouTube set up on the server (youtube/config.js).
+ */
+export const TIMER_PLATFORMS = Object.freeze(['twitch', 'kick', 'all', 'youtube', 'everywhere']);
+export const TIMER_WHERE = Object.freeze({ all: 'Twitch and Kick', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', everywhere: 'Twitch, Kick and YouTube' });
+const PLATFORM_NAME = Object.freeze({ twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' });
+/** Quota guard levels (youtube/quota.js) at which timers stop posting on YouTube: reading chat matters more than a timed message. */
+export const YOUTUBE_TIMER_HOLD = Object.freeze(['critical', 'exhausted']);
+
+/**
+ * The linked channels a stream bot timer posts in.
+ * @param {string|null} platforms  the timer's platforms column
+ * @param {object[]} channels       stream_bot_channels rows ({ platform, platform_user_id, login })
+ * @param {object} opts             { youtube: YouTube is set up, youtubeLevel: the quota guard's level now }
+ */
+export function timerTargets(platforms, channels, { youtube = false, youtubeLevel = 'normal' } = {}) {
+    const p = platforms || 'all';
+    const wanted = (c) => {
+        if (c.platform === 'youtube') return !!youtube && (p === 'youtube' || p === 'everywhere') && !YOUTUBE_TIMER_HOLD.includes(youtubeLevel);
+        if (c.platform !== 'twitch' && c.platform !== 'kick') return false;
+        return p === 'all' || p === 'everywhere' || p === c.platform;
+    };
+    return (channels || []).filter(wanted).map((c) => ({ platform: c.platform, channelId: String(c.platform_user_id), login: c.login || '' }));
+}
 
 // ── chat line counts ─────────────────────────────────────────────────────────────────────────
 
@@ -48,7 +73,8 @@ const int = (v, lo, hi) => {
 
 /**
  * @param {object} b    the form body
- * @param {object} ctx  { automationIds: Set<number>, kickPage: boolean (a Kick channel page timer: no platforms, no automation) }
+ * @param {object} ctx  { automationIds: Set<number>, kickPage: boolean (a Kick channel page timer: no platforms, no automation),
+ *                       linkedPlatforms: string[], youtube: boolean (YouTube is set up on this server) }
  */
 export function validateTimer(b = {}, ctx = {}) {
     const errors = [];
@@ -69,7 +95,12 @@ export function validateTimer(b = {}, ctx = {}) {
     const lines = b.minChatLines === '' || b.minChatLines == null ? 0 : int(b.minChatLines, 0, TIMER_LIMITS.linesMax);
     if (lines == null) errors.push(`Chat lines is a whole number from 0 to ${TIMER_LIMITS.linesMax}.`);
     const platforms = kickPage ? null : (TIMER_PLATFORMS.includes(b.platforms) ? b.platforms : 'all');
-    if (!kickPage && ctx.linkedPlatforms && platforms !== 'all' && !ctx.linkedPlatforms.includes(platforms)) errors.push(`Link a ${platforms === 'twitch' ? 'Twitch' : 'Kick'} channel first (Connections).`);
+    const onYouTube = platforms === 'youtube' || platforms === 'everywhere';
+    if (!kickPage && onYouTube && !ctx.youtube) errors.push('YouTube is not set up on this server yet, so timers cannot post there.');
+    else if (!kickPage && ctx.linkedPlatforms) {
+        const need = platforms === 'all' ? [] : platforms === 'everywhere' ? ['youtube'] : [platforms];
+        for (const p of need) if (!ctx.linkedPlatforms.includes(p)) errors.push(`Link a ${PLATFORM_NAME[p]} channel first (Connections).`);
+    }
     const value = {
         name: name || null,
         message: messages[0] ? messages[0].slice(0, TIMER_LIMITS.messageMax) : '',
@@ -259,4 +290,4 @@ export function createTimerStore({ db, table = 'tokes_timers', channelsTable = '
     };
 }
 
-export default { TIMER_LIMITS, TIMER_PLATFORMS, noteChatLine, chatLinesSince, resetChatLines, validateTimer, timerMessages, pickMessage, fireTimer, renderPlain, legacyTokens, timerView, createTimerStore };
+export default { TIMER_LIMITS, TIMER_PLATFORMS, TIMER_WHERE, YOUTUBE_TIMER_HOLD, timerTargets, noteChatLine, chatLinesSince, resetChatLines, validateTimer, timerMessages, pickMessage, fireTimer, renderPlain, legacyTokens, timerView, createTimerStore };

@@ -4,7 +4,7 @@
  *   GET /auth/discord/linked-role/start    → redirect to Discord's OAuth consent (role_connections.write + identify)
  *   GET /auth/discord/linked-role/callback → exchange code, store encrypted tokens, push initial metadata
  *
- * On success the user sees a short confirmation page. From then on the daily
+ * On success the user sees a short confirmation page (in the shared site frame). From then on the daily
  * refresh job (jobs/linked-roles-pusher.js, follow-up) pushes updated metadata
  * when their Twitch subscriber/VIP/mod state changes.
  */
@@ -15,6 +15,11 @@ import pool from '../../utils/db.js';
 import encryption from '../../utils/encryption.js';
 import logger from '../../utils/logger.js';
 import { pushMetadata, deriveMetadata } from '../../core/discord-linked-roles.js';
+import { sendFramed } from '../services/site-frame.js';
+import { linkedRolePage, linkedRoleErrorPage } from '../services/linked-role-pages.js';
+
+const failPage = (req, res, status, message) => sendFramed(req, res, linkedRoleErrorPage(message), status)
+    .catch(() => res.status(status).type('text/plain').send(message));
 
 const router = express.Router();
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -47,10 +52,10 @@ router.get('/auth/discord/linked-role/start', (req, res) => {
 /** GET /auth/discord/linked-role/callback — exchange code, store tokens, push metadata. */
 router.get('/auth/discord/linked-role/callback', async (req, res) => {
     const { code, state, error } = req.query;
-    if (error) return res.status(400).send(`OAuth error: ${error}`);
-    if (!code || !state) return res.status(400).send('Missing code or state.');
+    if (error) return failPage(req, res, 400, `Discord answered with an error (${String(error).slice(0, 80)}). Nothing was linked.`);
+    if (!code || !state) return failPage(req, res, 400, 'The link from Discord was missing its code. Start again from your server.');
     if (!req.session?.linkedRoleState || req.session.linkedRoleState !== state) {
-        return res.status(400).send('State mismatch — please retry.');
+        return failPage(req, res, 400, 'This sign-in link was already used or has expired. Start again from your server.');
     }
     delete req.session.linkedRoleState;
 
@@ -68,14 +73,14 @@ router.get('/auth/discord/linked-role/callback', async (req, res) => {
             { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000, validateStatus: () => true });
         if (tokenRes.status >= 300) {
             logger.warn(`[linked-role] token exchange failed: ${tokenRes.status} ${JSON.stringify(tokenRes.data).slice(0, 200)}`);
-            return res.status(502).send('Failed to complete Discord OAuth. Try again.');
+            return failPage(req, res, 502, 'Discord did not accept the sign-in. Try again in a minute.');
         }
         const { access_token, refresh_token, expires_in, scope } = tokenRes.data;
 
         // 2. Who is this user?
         const meRes = await axios.get(`${DISCORD_API}/users/@me`, {
             headers: { Authorization: `Bearer ${access_token}` }, timeout: 10000, validateStatus: () => true });
-        if (meRes.status >= 300) return res.status(502).send('Could not read your Discord user.');
+        if (meRes.status >= 300) return failPage(req, res, 502, 'Discord did not tell us who you are. Try again in a minute.');
         const userId = String(meRes.data.id);
 
         // 3. Encrypt + persist tokens.
@@ -100,18 +105,10 @@ router.get('/auth/discord/linked-role/callback', async (req, res) => {
             await pool.execute('UPDATE user_linked_role_tokens SET last_pushed_at = NOW() WHERE discord_user_id = ?', [userId]);
         }
 
-        res.set('Content-Type', 'text/html; charset=utf-8');
-        res.send(`<!doctype html><html><head><meta charset="utf-8"><title>CertiFried · Linked</title>
-<style>body{font-family:system-ui,sans-serif;max-width:560px;margin:3rem auto;padding:0 1rem;background:#1e2124;color:#dcddde;}
-h1{color:#fff;}p{line-height:1.5;}a{color:#5865f2;}</style></head><body>
-<h1>Linked ✓</h1>
-<p>Your CertiFried connection is live on Discord. Servers that use CertiFried's Twitch Linked Roles will see your Subscriber / Partner / VIP / Mod status to gate access.</p>
-<p>${metadata ? `Pushed <strong>${Object.keys(metadata).length}</strong> metadata fields.` : 'No Twitch identity found yet — verify your Twitch on the dashboard, then your metadata updates automatically.'}</p>
-<p><a href="${BASE_URL}">Return to CertiFried</a></p>
-</body></html>`);
+        await sendFramed(req, res, linkedRolePage({ fieldCount: metadata ? Object.keys(metadata).length : 0 }));
     } catch (err) {
         logger.warn(`[linked-role] callback error: ${err.message}`);
-        res.status(500).send('Unexpected error. Try again or contact support.');
+        if (!res.headersSent) failPage(req, res, 500, 'Something went wrong on our side. Try again, or ask on the support server.');
     }
 });
 

@@ -13,7 +13,8 @@
  *   counters        stream bot channel values ({sdb:get:<name>}, stream_bot_variables owner 'server').
  *   rewards         definitions are kept with the import record; "Recreate under CertiFried" is the owner's choice.
  *   quotes, moderation word lists, hotkeys       reported (no home that would not change behaviour at once).
- *   viewer stats    only when asked: per-viewer stream bot values {db:watch_minutes} and {db:chat_messages}.
+ *   viewer stats    only when asked: viewer records on Viewers (core/stream-bot/viewers, H-747): Firebot watch time, messages,
+ *                   points, first and last seen, and its currency and rank settings; Streamer.bot names and last seen.
  * Everything is created switched off.
  *
  * Bundle (both parsers): { source, format, version, commands[], automations[], timers[], counters[], quotes[],
@@ -28,7 +29,9 @@
  * Tested in tests/stream-bot-import.test.js.
  */
 import { validateActions, countSteps, LIMITS as ACTION_LIMITS, registerActionType } from '../actions.js';
+import { registerYouTubeActions } from '../youtube/register.js';
 import { overlayActionDefs } from '../overlays/actions.js';
+import { LIGHT_ACTIONS } from '../devices/catalog.js';
 import { validateTrigger, validateConditions } from '../conditions.js';
 import { toChannelCommand } from './variables.js';
 import { gapInfo, INTEGRATIONS } from './catalog.js';
@@ -41,6 +44,10 @@ export const SOURCE_LABEL = Object.freeze({ firebot: 'Firebot', streamerbot: 'St
 // test validates imported steps without it, so register those two here (registerActionType leaves an existing type alone).
 // Both are client steps whose server side never runs; overlay.goal, which needs the running overlay service, is not touched.
 for (const def of overlayActionDefs()) if (def.type === 'overlay.text' || def.type === 'overlay.media') registerActionType(def);
+// The light steps (Phase 5, core/stream-bot/devices) likewise: client steps, registered here so a command-line re-run validates them.
+for (const def of LIGHT_ACTIONS) registerActionType({ ...def });
+// YouTube's Time out and Ban steps (H-741) register in the running bot (core/stream-bot/youtube); likewise here.
+registerYouTubeActions({ registerActionType });
 const CHANNEL_NAME = /^[a-z0-9_-]{1,50}$/;
 const RESERVED = new Set(['eval', 'exec', 'script', 'function', 'constructor', '__proto__']);
 const RESPONSE_MAX = 500;
@@ -218,7 +225,8 @@ export function buildPlan(bundles, ctx = {}) {
                 items.push({ ...base, status: 'skipped', why: [`Not supported yet: ${gapInfo(primary).label}. Its chat reply alone would say something happened when it did not`, ...why], gaps, target: null });
                 continue;
             }
-            const fit = channelCommandFit(cmd, ctx);
+            // A command that also answered on YouTube becomes an automation: CertiFried's channel bot does not serve YouTube (H-741).
+            const fit = cmd.platforms?.includes('youtube') ? { ok: false, reason: 'youtube', why: [] } : channelCommandFit(cmd, ctx);
             if (fit.ok) {
                 const allWhy = [...why, ...fit.why, ...gaps.map((g) => `Left out: ${gapInfo(g).label}`)];
                 const bots = ctx.channelBots.filter((c) => !cmd.platforms || cmd.platforms.includes(c.platform));
@@ -239,7 +247,8 @@ export function buildPlan(bundles, ctx = {}) {
                 conditions: commandConditions(cmd), actions: cmd.actions,
             };
             const allWhy = [...why, ...gaps.map((g) => `Left out: ${gapInfo(g).label}`)];
-            if (fit.reason && !['no channel bot'].includes(fit.reason)) allWhy.push(automationReason(fit.reason));
+            if (fit.reason && !['no channel bot', 'youtube'].includes(fit.reason)) allWhy.push(automationReason(fit.reason));
+            if (fit.reason === 'youtube') allWhy.push('It also answers on YouTube, where CertiFried\'s channel bot is not, so it is an automation');
             items.push({ ...base, status: allWhy.length ? 'changed' : 'as_is', why: uniq(allWhy), gaps: uniq(gaps), target: { system: 'automation', draft } });
             commandItems.push({ cmd, item: items[items.length - 1] });
         }
@@ -444,12 +453,23 @@ export function buildPlan(bundles, ctx = {}) {
         if (b.viewers?.count) {
             const rows = b.viewers.rows || [];
             if (ctx.wantViewers && rows.length) {
+                const why = b.source === 'firebot'
+                    ? ['Watch time, chat messages, points and first and last seen go to Viewers. Viewers not seen for over 400 days are left out (they would be deleted at once)']
+                    : ['Names and last-seen dates go to Viewers (Streamer.bot keeps no watch time or message counts)'];
+                if (b.viewers.settings) why.push('Your points name, earning and ranks are taken from Firebot unless you already saved Viewers settings');
+                why.push(...(b.viewers.notes || []), 'Viewers can see and delete their records through /privacy');
+                // A viewer the other upload saw more recently is kept even when this one last saw them long ago.
+                const elsewhere = new Map();
+                for (const ob of bundles) if (ob !== b) for (const r of ob.viewers?.rows || []) {
+                    const t = r.lastSeen ? new Date(r.lastSeen).getTime() : 0;
+                    if (t > (elsewhere.get(`${r.platform}:${r.id}`) || 0)) elsewhere.set(`${r.platform}:${r.id}`, t);
+                }
+                const out = elsewhere.size ? rows.map((r) => (elsewhere.has(`${r.platform}:${r.id}`) ? { ...r, seenElsewhere: elsewhere.get(`${r.platform}:${r.id}`) } : r)) : rows;
                 items.push({ category: 'viewers', source: b.source, kind: 'viewers', sourceId: 'viewers', name: `${rows.length} viewers`, status: 'changed',
-                    why: ['Stored per viewer as {db:get:watch_minutes} and {db:get:chat_messages}. Viewers can export or delete these through /privacy'], gaps: ['viewer.watchtime'],
-                    target: { system: 'viewer_values', rows } });
+                    why, gaps: [], target: { system: 'viewer_records', rows: out, settings: b.viewers.settings || null } });
             } else {
                 items.push({ category: 'viewers', source: b.source, kind: 'viewers', sourceId: 'viewers', name: `${b.viewers.count} viewers`, status: 'skipped',
-                    why: [rows.length || b.source === 'firebot' ? 'Not imported unless you tick Viewer stats' : 'Streamer.bot keeps names and last-seen dates only; nothing to import'], gaps: [], target: null });
+                    why: ['Not imported unless you tick Viewer stats'], gaps: [], target: null });
             }
         }
         for (const m2 of b.media || []) media.push({ ...m2, source: b.source });

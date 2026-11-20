@@ -3,6 +3,7 @@ import axios from 'axios';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { themeColor } from '../../core/guild-theme.js';
+import { awardAchievement } from '../../core/achievement-hooks.js';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
@@ -194,7 +195,10 @@ export async function handleSearch(interaction) {
     .setImage(selectedImage.url)
     .setFooter({ text: `${typeIcon} ${selectedImage.source} | Viewed ${seenImages.length}x${uniqueOnly ? ' | 🆕 New!' : ''}` });
 
-  return interaction.editReply({ embeds: [embed] });
+  const sent = await interaction.editReply({ embeds: [embed] });
+  // Animal Lover: pictures this member has viewed in this server (animal_image_history), H-817
+  awardAchievement(interaction, 'animal_lover', { total: () => pool.execute('SELECT COUNT(*) AS n FROM animal_image_history WHERE user_id = ? AND guild_id = ?', [interaction.user.id, interaction.guild.id]).then(([[r]]) => Number(r.n)) });
+  return sent;
 }
 
 export async function handleStats(interaction) {

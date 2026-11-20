@@ -110,16 +110,21 @@ export async function deriveMetadata(discordUserId) {
 
     // Partner/affiliate flags live on the Helix user — we may not have them cached locally.
     // Subscriber / VIP / mod status is readable from twitch_role_sync_members where it exists.
+    // The table has is_sub / is_vip / is_mod and no tier column. The aliases avoid reserved words:
+    // MOD is reserved in MariaDB, so `AS mod` was a syntax error that the old silent catch hid.
     const [[sub]]  = await pool.execute(
-        `SELECT MAX(is_subscriber) AS sub, MAX(sub_tier) AS tier, MAX(is_vip) AS vip, MAX(is_mod) AS mod
-           FROM twitch_role_sync_members WHERE twitch_user_id = ?`, [twitchId]).catch(() => [[{}]]);
+        `SELECT MAX(is_sub) AS sub_flag, MAX(is_vip) AS vip_flag, MAX(is_mod) AS mod_flag
+           FROM twitch_role_sync_members WHERE twitch_user_id = ?`, [twitchId]).catch((err) => {
+        logger.warn(`${LOG} role lookup failed: ${err.message}`);
+        return [[{}]];
+    });
     return {
         platform_username: identity.twitch_username,
-        is_subscriber:  !!Number(sub?.sub || 0),
-        follower_tier:  Number(sub?.tier || 0),
+        is_subscriber:  !!Number(sub?.sub_flag || 0),
+        follower_tier:  0,      // no sub tier is stored locally (twitch_role_sync_members has no tier column)
         is_partner:     false,  // enrich via Helix GET /users 'broadcaster_type' when we add that call
-        is_vip:         !!Number(sub?.vip || 0),
-        is_mod:         !!Number(sub?.mod || 0),
+        is_vip:         !!Number(sub?.vip_flag || 0),
+        is_mod:         !!Number(sub?.mod_flag || 0),
     };
 }
 

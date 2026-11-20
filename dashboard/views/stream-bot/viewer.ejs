@@ -1,0 +1,115 @@
+<%#
+  GET /stream/bot/viewers/:id (dashboard/routes/stream-bot-viewers.js). Locals: viewer (personView: the person, both linked accounts,
+  totals, support tallies, history). Edit points, link, unlink and delete run in /js/stream-bot-viewers.js (createElement and
+  textContent only); the page data is in #sbv-data.
+%>
+<%- include('_head', { pageTitle: viewer.name, active: 'viewers', sbPage: 'viewer' }) %>
+<% const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c'); %>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title"><%= viewer.name %></h1>
+        <p class="cf-page-sub"><% viewer.accounts.forEach((a, i) => { %><%= i ? ' and ' : '' %><%= a.platformLabel %><% if (a.login && a.login !== a.name.toLowerCase()) { %> (<%= a.login %>)<% } %><% }) %>. First seen <time datetime="<%= viewer.firstSeen %>"><%= viewer.firstSeenText %></time>, last seen <time datetime="<%= viewer.lastSeen %>"><%= viewer.lastSeenText %></time>.</p>
+    </div>
+    <div class="cf-page-actions"><a class="btn btn-secondary btn-sm" href="/stream/bot/viewers">All viewers</a></div>
+</div>
+<%- include('_tabs', { active: 'viewers' }) %>
+
+<div class="cf-notice" id="sbv-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbv-msg-text"></div></div>
+
+<dl class="cf-kpis" aria-label="Totals">
+    <div class="cf-kpi"><dt><%= viewer.currency.charAt(0).toUpperCase() + viewer.currency.slice(1) %></dt><dd class="cf-kpi-value" id="sbv-points"><%= viewer.points %></dd></div>
+    <div class="cf-kpi"><dt>Watched</dt><dd class="cf-kpi-value"><%= viewer.watch %></dd></div>
+    <div class="cf-kpi"><dt>Messages</dt><dd class="cf-kpi-value"><%= viewer.messages %></dd></div>
+    <div class="cf-kpi"><dt>Rank</dt><dd class="cf-kpi-value"><%= viewer.rank || 'None' %></dd></div>
+</dl>
+
+<section class="cf-section" aria-labelledby="sbv-points-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-points-title">Change <%= viewer.currency %></h2>
+        <p class="cf-section-desc">The change and your note go into the history below.</p></div></header>
+    <form id="sbv-points-form" novalidate>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbv-mode">Do</label></div>
+                <div class="cf-row-control"><select id="sbv-mode"><option value="add">Add</option><option value="remove">Remove</option><option value="set">Set to</option></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbv-amount">Amount</label></div>
+                <div class="cf-row-control"><input type="number" id="sbv-amount" min="0" max="999999999999" step="1" inputmode="numeric" required></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbv-note">Note</label><p class="cf-row-desc">Optional, such as "Giveaway prize".</p></div>
+                <div class="cf-row-control"><input type="text" id="sbv-note" maxlength="150" autocomplete="off"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sbv-points-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </div>
+        </div>
+    </form>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-acc-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-acc-title">Accounts</h2>
+        <p class="cf-section-desc"><% if (viewer.linkable) { %>If this person also watches on <%= viewer.otherPlatform === 'kick' ? 'Kick' : 'Twitch' %>, link the two accounts: their <%= viewer.currency %> are added together and their watch time and messages are shown as one. Only link accounts you know belong to the same person.<% } else { %>You linked these accounts as one person: their <%= viewer.currency %> are kept on the first one, and watch time and messages are added up.<% } %></p></div></header>
+    <div class="cf-rows">
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">Account</th><th scope="col">ID</th><th scope="col">Watched</th><th scope="col">Messages</th><th scope="col">Imported from</th></tr></thead>
+                <tbody>
+                    <% viewer.accounts.forEach((a) => { %>
+                    <tr><td><%= a.name %> <span class="cf-cell-muted"><%= a.platformLabel %></span></td><td class="cf-cell-muted"><%= a.platformUserId %></td><td><%= a.watch %></td><td><%= a.messages %></td><td><%= a.importedFrom ? a.importedFrom.split(',').map((s) => s === 'firebot' ? 'Firebot' : s === 'streamerbot' ? 'Streamer.bot' : s).join(', ') : '' %></td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% if (viewer.linkable) { %>
+        <form id="sbv-link-form" class="cf-row" novalidate>
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-link-login">Link their <%= viewer.otherPlatform === 'kick' ? 'Kick' : 'Twitch' %> account</label><p class="cf-row-desc">Their name as it shows in chat. They must have been seen in your <%= viewer.otherPlatform === 'kick' ? 'Kick' : 'Twitch' %> chat.</p></div>
+            <div class="cf-row-control cf-input-group"><input type="text" id="sbv-link-login" maxlength="100" autocomplete="off"><button type="submit" class="btn btn-secondary btn-sm">Link</button></div>
+        </form>
+        <% } else { %>
+        <div class="cf-section-foot"><button type="button" class="btn btn-secondary btn-sm" id="sbv-unlink">Unlink the accounts</button></div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-sup-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-sup-title">Support</h2>
+        <p class="cf-section-desc">Counted from your events. CertiFried only receives notifications of these; it never handles money. Tips count when the name on the tip matches this viewer's name.</p></div></header>
+    <div class="cf-rows">
+        <% viewer.support.forEach(([label, value]) => { %>
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label"><%= label %></p></div><div class="cf-row-control"><span><%= value %></span></div></div>
+        <% }) %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-hist-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-hist-title">History</h2>
+        <p class="cf-section-desc">Bonuses, gifts, gambles, changes and rank-ups, newest first. Points earned for watch time are not listed one by one. Kept for 400 days.</p></div></header>
+    <div class="cf-rows">
+        <% if (!viewer.history.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">Nothing yet.</p></div>
+        <% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Change</th><th scope="col">Balance</th><th scope="col">Note</th><th scope="col">By</th></tr></thead>
+                <tbody>
+                    <% viewer.history.forEach((h) => { %>
+                    <tr><td class="cf-nowrap cf-cell-muted"><time datetime="<%= h.at %>"><%= h.atText %></time></td><td><%= h.kind %></td><td class="cf-nowrap"><%= h.change %></td><td class="cf-nowrap"><%= h.balance %></td><td class="sb-wrap"><%= h.note %></td><td><%= h.by %></td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-del-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-del-title">Delete this record</h2>
+        <p class="cf-section-desc">Removes their watch time, messages, <%= viewer.currency %> and history for good. If they come back they start again from zero.</p></div>
+        <div class="cf-section-actions"><button type="button" class="btn btn-secondary btn-sm" id="sbv-delete">Delete</button></div></header>
+</section>
+
+<script type="application/json" id="sbv-data"><%- _js({ page: 'viewer', id: viewer.id, accounts: viewer.accounts.map((a) => a.id), name: viewer.name }) %></script>
+<script src="/js/stream-bot-viewers.js" defer></script>
+<%- include('_foot') %>

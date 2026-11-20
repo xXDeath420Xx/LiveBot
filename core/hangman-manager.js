@@ -382,7 +382,9 @@ export async function updateHangmanStats(game, won) {
             if (economyConfig && economyConfig.enabled) {
                 const coinReward = Math.floor(score * 2);
 
-                await pool.execute(
+                // A member who never used the economy has no row: make it, so they are paid (H-807).
+                await pool.execute('INSERT IGNORE INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)', [game.guildId, game.userId]);
+                const [paid] = await pool.execute(
                     'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
                     [coinReward, coinReward, game.guildId, game.userId]
                 );
@@ -392,7 +394,7 @@ export async function updateHangmanStats(game, won) {
                     [game.guildId, game.userId]
                 );
 
-                if (userEconomy) {
+                if (userEconomy && paid?.affectedRows > 0) {
                     await pool.execute(
                         `INSERT INTO economy_transactions (guild_id, user_id, transaction_type, amount, balance_before, balance_after, description)
                          VALUES (?, ?, 'reward', ?, ?, ?, ?)`,

@@ -6,6 +6,8 @@ const CALLS = new Set([
     'state:get', 'pair', 'unpair', 'link:start', 'link:open', 'link:cancel', 'obs:import', 'app:copy', 'setup:status', 'docks:prepare', 'docks:add', 'theme:install', 'scenes:create', 'overlays:list', 'overlays:add', 'voice:settings', 'voice:devices', 'voice:refresh', 'vod:check', 'vod:keepOut', 'vod:record', 'vod:kick', 'server:set', 'engine:reconnect', 'obs:save', 'obs:reconnect',
     'sound:settings', 'sound:devices', 'sound:test', 'sound:stop', 'sound:openFolder', 'sound:sync',
     'hotkeys:save', 'hotkeys:pause', 'hotkeys:run', 'automations:refresh',
+    'vod:removeSource', 'lights:find', 'lights:off', 'lights:drivers', 'lights:add', 'lights:pair', 'lights:forget', 'lights:test',
+    'voicemeeter:settings', 'voicemeeter:detect', 'streamdeck:settings', 'streamdeck:token', 'streamdeck:install',
     'app:settings', 'app:checkUpdates', 'app:installUpdate', 'app:openLogs', 'app:openPage', 'app:registerLinks', 'app:quit',
 ]);
 const PUSHES = new Set(['state', 'activity', 'pair-code', 'voice-level']);

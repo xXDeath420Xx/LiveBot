@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<%/*
+  CertiFried's Discord Activity page (dashboard/routes/activities/index.js, docs/activities.md). It runs inside Discord's
+  frame on <app id>.discordsays.com, so every address is relative ("assets/...", "api/..."): Discord's URL mapping sends
+  "/" to /activity on this site. The script and styles come from frontend/activities (build.mjs); no inline script or
+  style (the page's CSP has neither). demoJson: the guide screenshots' invented data (scripts/site-shots), never set
+  for real visitors.
+*/%>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex">
+<meta name="cf-activity-app" content="<%= appId %>">
+<title>CertiFried</title>
+<link rel="stylesheet" href="<%= assetBase %>/<%= css %>">
+<script src="<%= assetBase %>/<%= js %>" defer></script>
+</head>
+<body>
+<div id="cf-activity" aria-live="polite"><p class="boot">Loading…</p></div>
+<% if (locals.demoJson) { %><script type="application/json" id="cf-activity-demo"><%- String(demoJson).replace(/</g, '\\u003c') %></script><% } %>
+<noscript><p>This Discord Activity needs JavaScript.</p></noscript>
+</body>
+</html>

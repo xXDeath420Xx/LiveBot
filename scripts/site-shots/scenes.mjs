@@ -3,9 +3,11 @@
  * follows what the bot really posts; the file each format comes from is named next to it.
  */
 import { discordScenes } from './scenes-discord.mjs';
+import { guideScenes } from './guide-scenes/index.mjs';
 
 export async function scenes({ manage, page, discord, image, ctx, demo }) {
     await discordScenes({ discord, image, page, ctx, demo });
+    await guideScenes({ manage, page, discord, image, ctx, demo });
     const { guild, roles, role, channels, channel, voiceChannels, categories, member: M, streamers: S, D } = demo;
     const u = (k) => M[k].id;
 
@@ -257,9 +259,29 @@ export async function scenes({ manage, page, discord, image, ctx, demo }) {
         alt: 'The automation editor with an If step that mutes the microphone on the Starting Soon, Be right back and Ending scenes and unmutes it otherwise, then Create a clip, a chat announcement with the clip link, and a title change on Twitch and Kick.',
         guides: ['stream-bot'], height: 1400,
     });
+    page('stream-bot-devices', sb['stream-bot-devices'].template, sb['stream-bot-devices'].locals, {
+        alt: 'The Devices page: lights CertiFried Studio found (an Elgato Key Light, Philips Hue lamp and room, a Govee strip, a Nanoleaf waiting to be paired and a Logitech Litra), the Govee cloud key with a floor lamp, light presets Live and Be right back, Voicemeeter Banana running with its strips and buses, and the Stream Deck plugin connected.',
+        guides: ['stream-bot'], height: 2700,
+    });
     page('stream-bot-timers', sb['stream-bot-timers'].template, sb['stream-bot-timers'].locals, {
         alt: 'The Timers page: a Socials timer with two messages taking turns every 20 minutes on Twitch and Kick, only while live and after 10 chat lines, a Stretch break timer that is off, and a timer from the Kick channel page.',
         guides: ['stream-bot'], height: 900,
+    });
+
+    // ── Stream bot Viewers (views/stream-bot/viewers.ejs, viewer.ejs, viewers-settings.ejs; locals from stream-bot-viewers-demo.mjs) ──
+    const { viewersDemo } = await import('./stream-bot-viewers-demo.mjs');
+    const vw = await viewersDemo({ root: ctx.root });
+    page('stream-bot-viewers', vw.list.template, vw.list.locals, {
+        alt: 'The Viewers tab: 1,223 viewers recorded, watch time counted for everyone in the Twitch chat and for Kick chatters, the last count while live, and the table of viewers sorted by Leaves with their watch time, messages, last seen and rank.',
+        guides: ['stream-bot'], height: 1050,
+    });
+    page('stream-bot-viewer', vw.viewer.template, vw.viewer.locals, {
+        alt: 'One viewer\'s page: MapleFan_88 with 18,420 Leaves, 248 hours watched and the rank Old growth, a form to add, remove or set Leaves with a note, their Twitch and linked Kick accounts, their subs, gift subs, Bits and tips, and the history of bonuses, gifts, gambles and rank-ups.',
+        guides: ['stream-bot'], height: 1700,
+    });
+    page('stream-bot-viewers-settings', vw.settings.template, vw.settings.locals, {
+        alt: 'Viewer settings: tracking on, the points named Leaves, 10 Leaves every 10 minutes while live, subscribers earn 1.5 times, bonuses for follows, subs, gift subs, Bits and raids, four ranks by hours watched, giving on and gambling off, and the six chat commands with their automations.',
+        guides: ['stream-bot'], height: 2300,
     });
 
     // ── Stream bot overlays (views/stream-bot/overlays.ejs, overlay-edit.ejs, overlay.ejs; locals and frames from stream-bot-overlays-demo.mjs) ──
@@ -299,4 +321,65 @@ export async function scenes({ manage, page, discord, image, ctx, demo }) {
         guides: ['stream-bot'], width: 1920, height: 1080, outWidth: 1200,
         prepare: { fn: feedOverlay, arg: liveFrames },
     });
+
+    await activityScenes({ manage, page, ctx, demo });
+}
+
+/**
+ * Discord Activities (docs/activities.md): the Activity page (views/activity.ejs) with its real built script and styles
+ * (frontend/activities/dist, copied in as demo assets) and invented demo data in the page (demo mode: no Discord, no
+ * network), and the Cinema settings page.
+ */
+async function activityScenes({ manage, page, ctx, demo }) {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const { FEATURE_SPECS } = await import(pathToFileURL(path.join(ctx.root, 'core/feature-config-spec.js')).href);
+    const dist = path.join(ctx.root, 'frontend/activities/dist');
+    let man = null;
+    try { man = JSON.parse(fs.readFileSync(path.join(dist, 'manifest.json'), 'utf8')); } catch { man = null; }
+    if (!man) throw new Error('frontend/activities is not built (node frontend/activities/build.mjs)');
+    const jsUrl = ctx.asset('activity-app.js', fs.readFileSync(path.join(dist, 'assets', man.js)));
+    ctx.asset('activity-app.css', fs.readFileSync(path.join(dist, 'assets', man.css)));
+    ctx.asset(man.font, fs.readFileSync(path.join(dist, 'assets', man.font)));
+    const M = demo.member;
+    const now = Date.UTC(2026, 10, 18, 20, 30);
+    const viewer = (k, extra = {}) => ({ id: M[k].id, name: M[k].displayName, avatar: null, buffering: false, controller: false, ...extra });
+    const film = { gen: 1, itemId: 'demo', name: 'The Lantern Keepers', label: 'The Lantern Keepers (2019)', type: 'Movie', runtimeSec: 6420, remux: true, src: '',
+        subtitles: [{ index: 3, label: 'English', language: 'eng', src: '' }, { index: 4, label: 'Français', language: 'fre', src: '' }], burnedSubtitle: null };
+    const state = {
+        id: 'demo', rev: 4, serverNow: now, ended: false, host: { id: M.thistle.id, name: M.thistle.displayName },
+        viewers: [viewer('thistle', { controller: true }), viewer('wren'), viewer('pip', { buffering: true }), viewer('hazel'), viewer('bramble')],
+        media: film, playback: { paused: false, position: 2735, at: now },
+        queue: [{ label: film.label, current: true }], queueIndex: 0, limits: { maxViewers: 25 },
+    };
+    const titles = [['The Lantern Keepers', 2019, 'Movie'], ['Copper Kettle Mysteries', 2021, 'Series'], ['Paper Moons Over Harbour', 2016, 'Movie'], ['Seven Quiet Rivers', 2022, 'Movie'],
+        ['Little Orchard', 2018, 'Series'], ['The Clockmaker\'s Garden', 2014, 'Movie'], ['Marsh Lights', 2020, 'Movie'], ['Northbound', 2023, 'Movie'], ['Saltwind', 2017, 'Series'],
+        ['Under the Pines', 2015, 'Movie'], ['The Long Field', 2012, 'Movie'], ['Harbour Lane', 2024, 'Series']];
+    const library = { items: titles.map(([name, year, type], i) => ({ id: `demo${i}`, type, name, year, image: null })), total: 48, page: 0, pages: 2 };
+    const locals = (data) => () => {
+        const assetBase = jsUrl().replace(/\/activity-app\.js$/, '');
+        return { appId: '100000000000000999', assetBase, js: 'activity-app.js', css: 'activity-app.css', demoJson: JSON.stringify(data), problem: null };
+    };
+    const user = { id: M.thistle.id, name: M.thistle.displayName, avatar: null };
+    page('activity-launcher', 'activity', locals({ view: 'launcher', user, me: { watch: { available: true, reason: null, active: true }, greenhouse: { available: true } } }), {
+        alt: 'The CertiFried Activity in a voice channel: Watch Together, with a film playing now, and Greenhouse Tycoon.', guides: ['greenhouse', 'watch-together'], width: 1000, height: 560,
+    });
+    page('watch-together-player', 'activity', locals({ view: 'watch', user, you: { canStart: true, canControl: true }, state, tab: 'people', library }), {
+        alt: 'Watch Together playing The Lantern Keepers, 45 minutes in: the player with its controls, and the People tab listing five people watching, with Thistle as host and one still loading.', guides: ['watch-together'], width: 1280, height: 720,
+    });
+    page('watch-together-library', 'activity', locals({ view: 'watch', user, you: { canStart: true, canControl: true }, state, tab: 'library', library }), {
+        alt: 'The Library tab in Watch Together: a search box, All, Films and Shows, and the server\'s films and shows in a grid.', guides: ['watch-together'], width: 1280, height: 720,
+    });
+    ctx.stub(/^\/api\/guilds\/\d+\/feature-config\/cinema$/, () => {
+        const s = FEATURE_SPECS.cinema;
+        const libs = [{ value: '', label: 'Every video library' }, { value: 'demo-films', label: 'Films' }, { value: 'demo-shows', label: 'Shows' }];
+        return {
+            success: true, rows: [],
+            config: { enabled: 1, control_role_id: null, default_vc_id: null, watch_mode: 'activity', jellyfin_library_id: 'demo-films' },
+            spec: { key: 'cinema', label: s.label, icon: s.icon, iconPack: s.iconPack || 'fas', colour: s.colour, blurb: s.blurb, commands: s.commands || [], category: s.category || null, note: s.note || null, unwired: null,
+                fields: s.fields.map((f) => ({ ...f, ...(f.key === 'jellyfin_library_id' ? { options: libs } : {}), wired: f.wired !== false })), hasList: false, listTitle: null, listLabels: null },
+        };
+    });
+    manage('watch-together-setup', 'cinema', {}, { alt: 'The Cinema page on the dashboard: Cinema on, How films play set to Watch Together (Discord Activity), and the Library the server watches from.', guides: ['watch-together'], height: 1040 });
 }

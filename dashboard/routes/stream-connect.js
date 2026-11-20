@@ -3,6 +3,8 @@
 //                                                  ?for=bot: the stream bot's Connections page links the channel
 //                                                  to the user's stream bot profile instead of adding a multicast
 //                                                  destination, and comes back to /stream/bot/connections
+//                                                  (YouTube for the bot asks only youtube.force-ssl and works once
+//                                                  GOOGLE_OAUTH_CLIENT_ID/_SECRET are set, whatever the multicast gate; H-741)
 //   GET    /stream/connect/:platform/callback   -> exchange code, save account, create destination
 //   GET    /stream/api/connections              -> list current user's connections
 //   DELETE /stream/api/connections/:platform    -> disconnect
@@ -12,6 +14,7 @@ import { query } from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { PLATFORM_META, getAdapter } from '../services/platforms/registry.js';
 import { accountStore } from '../services/platforms/accounts.js';
+import { youtubeBotConfig, BOT_SCOPES as YOUTUBE_BOT_SCOPES } from '../../core/stream-bot/youtube/config.js';
 
 const router = express.Router();
 const db = { query };
@@ -26,7 +29,9 @@ router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
   const meta = PLATFORM_META[req.params.platform];
   const back = req.query.for === 'bot' ? '/stream/bot/connections' : '/stream';
   if (!meta) return res.redirect(back + '?error=unknown_platform');
-  if (meta.reviewGated && !ENABLE_GATED) return res.redirect(back + '?error=platform_coming_soon');
+  const ytBot = req.query.for === 'bot' && meta.platform === 'youtube';
+  if (ytBot && !youtubeBotConfig().enabled) return res.redirect(back + '?error=youtube_off');
+  if (meta.reviewGated && !ENABLE_GATED && !ytBot) return res.redirect(back + '?error=platform_coming_soon');
   const state = crypto.randomBytes(16).toString('hex');
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
@@ -34,7 +39,7 @@ router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
   req.session.streamOAuthPlatform = meta.platform;
   req.session.streamOAuthVerifier = codeVerifier;
   if (req.query.for === 'bot') req.session.streamOAuthFor = 'bot'; else delete req.session.streamOAuthFor;
-  const authUrl = getAdapter(meta.platform).getAuthUrl(state, { codeChallenge });
+  const authUrl = getAdapter(meta.platform).getAuthUrl(state, { codeChallenge, ...(ytBot ? { scope: YOUTUBE_BOT_SCOPES.join(' ') } : {}) });
   // Log only non-secret context (no state/code_challenge/full URL).
   logger.info(`[stream-connect] initiate ${meta.platform} oauth (user ${req.user.id})`);
   res.redirect(authUrl);
@@ -69,18 +74,21 @@ router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req
 
     if (forBot) {
       // Stream bot: link the channel this sign-in proved, no multicast destination (core/stream-bot).
-      if (!['twitch', 'kick'].includes(platform) || !account?.platformUserId) return res.redirect(back + '?error=no_channel_id');
+      if (!['twitch', 'kick', 'youtube'].includes(platform) || !account?.platformUserId) return res.redirect(back + '?error=no_channel_id');
       const { getStreamBot } = await import('../../core/stream-bot/index.js');
       const sb = await getStreamBot();
       const profile = await sb.store.ensureProfile(req.user.id, req.user.global_name || req.user.username || null);
       const linked = await sb.store.linkChannel(profile.id, {
-        platform, platformUserId: account.platformUserId, login: String(account.platformUsername || '').toLowerCase() || null,
+        platform, platformUserId: account.platformUserId, login: (platform === 'youtube' && result.handle ? result.handle : String(account.platformUsername || '').toLowerCase()) || null,
         displayName: account.platformUsername || null, verifiedVia: 'stream_platform_accounts',
       });
       if (!linked.ok) return res.redirect(back + '?error=channel_taken');
       sb.ingest.invalidate(profile.id);
       sb.io.invalidate(profile.id);
-      if (platform === 'kick') {
+      if (platform === 'youtube') {
+        // YouTube Live (H-741): look for a live broadcast now (1 quota unit); afterwards every 10 minutes and on go-live hints.
+        sb.youtube?.service?.checkNow(profile.id).catch(err => logger.warn(`[stream-connect] youtube check after link failed: ${err.message}`));
+      } else if (platform === 'kick') {
         const { ensureSubscribed } = await import('../../services/certifried-bot/kick-event-subscriptions.js');
         ensureSubscribed(account.platformUserId).catch(err => logger.warn(`[stream-connect] kick webhook subscribe failed: ${err.message}`));
       } else {

@@ -105,7 +105,7 @@ function botDecision(meta) {
   };
   if (meta.feature === 'owo') return {
     key: 'owo', section: D, q: `OwO progress (${meta.name})`,
-    why: `You run ${meta.name}. We have our own OwO. We can carry levels, XP and balances over, start the whole `
+    why: `You run ${meta.name}. We have our own game for it (Critters, the /owo commands). We can carry levels, XP and balances over, start the whole `
        + `server fresh, or leave the real ${meta.name} alone.`,
     options: [
       { v: 'carry', label: 'Carry it all over', detail: 'Levels, XP, team and balance' },

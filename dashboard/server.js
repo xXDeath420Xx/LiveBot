@@ -24,6 +24,7 @@ import { csrfProtection, csrfToken } from '../utils/csrf-protection.js';
 import { cfxProxy, attachCfxUpgrade, cfxDiscordSession } from '../services/certifried-extension/integration/dashboard-proxy.js';
 import { oldGameRoutes } from '../services/cfx/integrations/cutover.js';
 import greenhouseRouter from './routes/greenhouse.js';
+import activitiesRouter from './routes/activities/index.js';
 import { allLocaleMeta, localeMeta, isSupportedLocale, setLocale, getStoredLocale } from '../utils/i18n.js';
 import { getTheme, setTheme, resetTheme, DEFAULT_THEME, THEME_SLOTS } from '../core/guild-theme.js';
 import { serverAccentCss } from '../core/accent-tint.js';
@@ -80,12 +81,14 @@ import spritesRouter from './routes/sprites.js';
 import steamLinkRouter from './routes/steam-link.js';
 import musicHealthRouter from './routes/music-health.js';
 import featureAdoptionRouter from './routes/feature-adoption.js';
+import serviceKeysRouter from './routes/service-keys.js';
 import commandUsageReportRouter from './routes/command-usage-report.js';
 import streamInternalRouter from './routes/stream-internal.js';
 import streamConnectRouter from './routes/stream-connect.js';
 import twitchAnalyticsPageRouter from './routes/twitch-analytics-page.js';
 import discordNativePageRouter from './routes/discord-native-page.js';
 import { GUIDES, AREAS, getGuide, guideImage, inline as guideInline } from './content/guides/index.js';
+import { createDocsSearch } from './services/docs-search.js';
 import apiOverviewPageRouter from './routes/api-overview-page.js';
 import { renderAuditBotPage, registerAuditBotRoutes } from './routes/audit-bot.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
@@ -291,6 +294,11 @@ function start(botClient) {
     // /game, /cfx and /cfx-api first: pages 301 to /greenhouse, API calls 410. Without the flag it only calls next().
     app.use(oldGameRoutes());
     app.use(cfxProxy());
+
+    // Discord Activities (Watch Together, Greenhouse Tycoon in Discord; docs/activities.md). Before the site's per-IP
+    // limiter, session and CSRF check: the Activity has no cookies, sends a bearer token, and everyone in it arrives
+    // from Discord's proxy addresses. The router sets its own CSP and rate limits.
+    app.use('/activity', activitiesRouter());
 
     // Global rate limiter - 200 requests per minute per IP (pages only)
     const globalLimiter = rateLimit({
@@ -590,6 +598,7 @@ function start(botClient) {
             '/stream/bot/overlay/counter/',
             '/stream/bot/overlay/nowplaying/',
             '/stream/bot/overlay/canvas/',
+            '/stream/bot/overlay/scene/',
             // OBS docks (no session, no cookie): the credential is the dock key in the X-Dock-Key header, scoped to read
             // the feed and run an automation, rate limited per key and IP (dashboard/routes/stream-bot-dock.js).
             '/stream/bot/dock/api/run',
@@ -1086,43 +1095,13 @@ function start(botClient) {
         const name = esc(username);
         const imgUrl = `/schedule/${encodeURIComponent(username)}.png`;
         const imgAbs = `https://certifriedmultitool.com${imgUrl}`;
-        res.set('Cache-Control', 'public, max-age=60');
-        res.send(`<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8">
-<title>${name}'s Streaming Schedule · CertiFried</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta property="og:title" content="${name}'s Streaming Schedule">
-<meta property="og:description" content="Live-generated from twitch.tv/${name}. Updates automatically when the streamer edits their Twitch schedule.">
-<meta property="og:image" content="${imgAbs}">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="${imgAbs}">
-<style>
-  body { font-family: -apple-system, Segoe UI, sans-serif; background: #2B1E16; color: #FFF8E6; margin: 0; padding: 0; min-height: 100vh; }
-  header { background: linear-gradient(180deg, #5E3B1E 0%, #3D2B1F 100%); padding: 24px 16px; text-align: center; border-bottom: 4px solid #F5C26B; }
-  header h1 { margin: 0; font-size: 28px; color: #F5C26B; }
-  header p { margin: 6px 0 0; color: #FFEFCE; font-size: 14px; }
-  main { max-width: 1700px; margin: 24px auto; padding: 0 16px; }
-  main img { width: 100%; height: auto; border-radius: 12px; box-shadow: 0 6px 32px rgba(0,0,0,0.4); display: block; }
-  .links { text-align: center; margin: 20px 0; }
-  .links a { color: #F5C26B; text-decoration: none; font-weight: 600; margin: 0 12px; }
-  .links a:hover { text-decoration: underline; }
-  footer { text-align: center; padding: 24px; color: #8F7E6B; font-size: 13px; }
-</style></head>
-<body>
-<header>
-  <h1>${name}'s Streaming Schedule</h1>
-  <p>Live-generated from <a href="https://twitch.tv/${name}" style="color:#F5C26B">twitch.tv/${name}</a> — updates automatically when the streamer edits their Twitch schedule</p>
-</header>
-<main>
-  <img src="${imgUrl}" alt="${name}'s streaming schedule" loading="eager">
-  <div class="links">
-    <a href="https://twitch.tv/${name}" target="_blank" rel="noopener">Watch on Twitch →</a>
-    <a href="${imgUrl}" target="_blank">Download image</a>
-  </div>
-</main>
-<footer>Schedule auto-refreshes every 10 minutes · Powered by CertiFried</footer>
-</body></html>`);
+        // Shared site frame (services/schedule-share-page.js + services/site-frame.js). private: the
+        // site header can carry the signed-in user's name and avatar.
+        res.set('Cache-Control', 'private, max-age=60');
+        try {
+            const [{ scheduleSharePage }, { sendFramed }] = await Promise.all([import('./services/schedule-share-page.js'), import('./services/site-frame.js')]);
+            return await sendFramed(req, res, scheduleSharePage(username));
+        } catch (err) { return next(err); }
     });
 
     // Root chooser: pick the Discord bot or the Kick (defender) bot.
@@ -2037,13 +2016,14 @@ function start(botClient) {
         try {
             const { guildId, kind, id } = req.params;
             if (!['ticket', 'modmail'].includes(kind)) return res.status(400).send('bad kind');
-            const { loadTranscript, renderTranscriptHtml } = await import('../core/ticket-transcripts.js');
+            const { loadTranscript, transcriptPage } = await import('../core/ticket-transcripts.js');
             const transcript = await loadTranscript(guildId, kind, id);
             if (!transcript) return res.status(404).send('Transcript not found or failed to decrypt.');
             const guildName = req.guildObject?.name || guildId;
-            const html = renderTranscriptHtml(transcript, { guildName, title: transcript.title || `${kind} #${id}` });
-            res.set('Content-Type', 'text/html; charset=utf-8');
-            res.send(html);
+            // Shared site frame (services/site-frame.js); the page parts come from core/ticket-transcripts.js.
+            const [{ sendFramed }, { stylesheetTag }] = await Promise.all([import('./services/site-frame.js'), import('./services/framed-assets.js')]);
+            res.set('Cache-Control', 'private, no-store');
+            await sendFramed(req, res, transcriptPage(transcript, { guildName, guildId, kind, title: transcript.title || `${kind === 'modmail' ? 'Modmail' : 'Ticket'} #${id}`, stylesheet: stylesheetTag('/css/cf-public-pages.css') }));
         } catch (err) {
             logger.warn(`[transcript-viewer] ${err.message}`);
             res.status(500).send('transcript render failed');
@@ -2987,6 +2967,8 @@ function start(botClient) {
     app.use('/', musicHealthRouter);
     // Feature adoption page + API (super-admin only) — dashboard/routes/feature-adoption.js
     app.use('/', featureAdoptionRouter);
+    // Service keys page + API (super-admin only) — dashboard/routes/service-keys.js
+    app.use('/', serviceKeysRouter);
     // Command usage report (super-admin only) — dashboard/routes/command-usage-report.js
     app.use('/', commandUsageReportRouter);
 
@@ -4439,7 +4421,8 @@ function start(botClient) {
                     'SELECT * FROM temp_channel_config WHERE guild_id = ?',
                     [guildId]
                 );
-                tempChannelConfig = tempChannelData[0] || {};
+                // The page edits the first creator channel; the others (/admin temp-channel) are counted (H-810).
+                tempChannelConfig = tempChannelData[0] ? { ...tempChannelData[0], extra_creators: tempChannelData.length - 1 } : {};
                 logger.info('[GET /manage/:guildId] Temp channel config:', tempChannelConfig);
             } catch (error) {
                 logger.error('Error fetching temp channel config:', error);
@@ -7010,7 +6993,9 @@ function start(botClient) {
             const embedId = result.insertId;
 
             // If action is 'post', immediately post to Discord
+            let postFailed = false;
             if (action === 'post') {
+                postFailed = true;
                 try {
                     const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
                     const channel = await botClient.channels.fetch(channel_id).catch(() => null);
@@ -7029,12 +7014,15 @@ function start(botClient) {
                         const msg = await channel.send({ embeds: [embed] });
                         await pool.execute('UPDATE custom_embeds SET message_id = ? WHERE id = ?', [msg.id, embedId]);
                         logger.info(`[Custom Embeds] Posted embed ${embedId} to channel ${channel_id} as message ${msg.id}`);
+                        postFailed = false;
                     }
                 } catch (postErr) {
                     logger.error(`[Custom Embeds] Failed to post embed ${embedId}: ${postErr.message}`);
                 }
             }
 
+            // Saved either way; say so when the post itself did not happen (H-806).
+            if (postFailed) return res.redirect(`/manage/${guildId}?page=custom-embeds&error=saved_but_not_posted_check_the_channel_and_bot_permissions`);
             res.redirect(`/manage/${guildId}?page=custom-embeds&success=created`);
         } catch (error) {
             logger.error('[POST create-custom-embed Error]', error);
@@ -8622,6 +8610,8 @@ function start(botClient) {
                     [enabled ? 1 : 0, alertChannel, guildId]
                 );
             }
+            // Applies at once instead of after the 30 s config cache (H-803).
+            global.botManager?.getClientForGuild?.(guildId)?.antiNukeManager?.invalidateConfigCache?.(guildId);
 
             res.redirect(`/manage/${guildId}?page=security&success=antinuke`);
         } catch (error) {
@@ -11563,29 +11553,32 @@ function start(botClient) {
             }
             const cleanTemplate = String(naming_template || '').replace(/\s+/g, ' ').trim().slice(0, 100);
 
-            // Check if config exists
-            const [existing] = await pool.execute(
-                'SELECT * FROM temp_channel_config WHERE guild_id = ?',
-                [guildId]
-            );
-
-            if (existing.length === 0) {
-                // Insert new config
+            // One row per creator channel (PK guild_id + creator_channel_id; /admin temp-channel adds more). The page
+            // edits the creator it showed (original_creator_channel_id) and nothing else: this used to set EVERY row
+            // of the server to the one creator channel (H-810).
+            const template = cleanTemplate || "{username}'s Channel";
+            const original = String(req.body.original_creator_channel_id || '').trim();
+            let moved = false;
+            if (/^\d{17,20}$/.test(original) && original !== String(creator_channel_id)) {
+                const [[clash]] = await pool.execute(
+                    'SELECT 1 AS x FROM temp_channel_config WHERE guild_id = ? AND creator_channel_id = ?', [guildId, creator_channel_id]);
+                if (!clash) {
+                    const [r] = await pool.execute(
+                        `UPDATE temp_channel_config SET creator_channel_id = ?, category_id = ?, naming_template = ?
+                         WHERE guild_id = ? AND creator_channel_id = ?`,
+                        [creator_channel_id, category_id, template, guildId, original]);
+                    moved = r.affectedRows > 0;
+                }
+            }
+            if (!moved) {
                 await pool.execute(
                     `INSERT INTO temp_channel_config (guild_id, creator_channel_id, category_id, naming_template)
-                     VALUES (?, ?, ?, ?)`,
-                    [guildId, creator_channel_id, category_id, cleanTemplate || "{username}'s Channel"]
+                     VALUES (?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE category_id = VALUES(category_id), naming_template = VALUES(naming_template)`,
+                    [guildId, creator_channel_id, category_id, template]
                 );
-            } else {
-                // Update existing config
-                await pool.execute(
-                    `UPDATE temp_channel_config
-                     SET creator_channel_id = ?, category_id = ?, naming_template = ?
-                     WHERE guild_id = ?`,
-                    [creator_channel_id, category_id, cleanTemplate || "{username}'s Channel", guildId]
-                );
-                logger.info('[POST /manage/:guildId/update-tempchannels] Updated config successfully');
             }
+            logger.info('[POST /manage/:guildId/update-tempchannels] Saved creator channel', { guildId, creator_channel_id, moved });
 
             res.redirect(`/manage/${guildId}?page=utilities&success=true`);
         } catch (error) {
@@ -13544,6 +13537,46 @@ function start(botClient) {
         });
     });
 
+    // Docs search (dashboard/services/docs-search.js): the guides, the /docs and /docs/rpg sections and the
+    // command list in one index, built in this process from those sources (no outside search service).
+    // /docs/search.json is what the search box on /docs and /docs/guides loads and searches in the browser;
+    // /docs/search?q= runs the same search here, for readers without JavaScript.
+    const renderDocsView = (view) => new Promise((resolve, reject) => app.render(view, {
+        user: null, clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID,
+    }, (err, html) => (err ? reject(err) : resolve(html))));
+    const docsSearch = createDocsSearch({
+        getGuides: () => ({ GUIDES, AREAS }),
+        getCatalog: () => getCatalog(client),
+        renderPages: async () => [
+            { url: '/docs', page: 'Documentation', html: await renderDocsView('docs-tailwind'), skip: ['guides', 'features'] },
+            { url: '/docs/rpg', page: 'RPG guide', html: await renderDocsView('docs-rpg') },
+        ],
+    });
+    app.get('/docs/search.json', async (req, res) => {
+        try {
+            const { body, etag } = await docsSearch.get();
+            res.set('Cache-Control', 'public, max-age=300').set('ETag', etag).type('application/json').send(body);
+        } catch (error) {
+            logger.error('[Docs search] could not build the index', { error: error.message });
+            res.status(503).json({ error: 'Search is not available right now.' });
+        }
+    });
+    app.get('/docs/search', async (req, res) => {
+        const q = typeof req.query.q === 'string' ? req.query.q.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+        let results = null;
+        let unavailable = false;
+        if (q) {
+            try { results = await docsSearch.search(q); } catch (error) {
+                unavailable = true;
+                logger.error('[Docs search] search failed', { error: error.message });
+            }
+        }
+        res.render('docs-search', {
+            user: req.user, clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID,
+            q, results, unavailable,
+        });
+    });
+
     // JWT Tools page
     app.get('/tools/jwt', (req, res) => {
         res.render('tools-jwt', {
@@ -13669,9 +13702,12 @@ function start(botClient) {
 
     // Add-the-bot link used by the site header, footer and docs. The default asks for the
     // permissions the current features use; ?admin=1 asks for Administrator instead.
+    // ?account=1 adds CertiFried to the member's own Discord account (User Install), which is how members of a
+    // server run by a custom-branded bot open Watch Together and Greenhouse (docs/activities.md).
     app.get('/invite', (req, res) => {
         const id = process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
         if (!id) return res.redirect('/docs#getting-started');
+        if (req.query.account === '1') return res.redirect(`https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(id)}&integration_type=1&scope=applications.commands`);
         const perms = req.query.admin === '1' ? '8' : '1643797540086';
         res.redirect(`https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(id)}&permissions=${perms}&scope=bot+applications.commands`);
     });
@@ -13972,11 +14008,23 @@ function start(botClient) {
     }).catch(err => {
         logger.error('Failed to load stream bot timer routes:', err);
     });
+    // Stream bot Viewers (/stream/bot/viewers): viewer records, loyalty points and ranks (core/stream-bot/viewers, H-747).
+    import('./routes/stream-bot-viewers.js').then(({ default: streamBotViewersRouter }) => {
+        app.use('/', streamBotViewersRouter);
+    }).catch(err => {
+        logger.error('Failed to load stream bot viewer routes:', err);
+    });
     // Stream bot import from Firebot and Streamer.bot (/stream/bot/import; core/stream-bot/import, design doc section 6).
     import('./routes/stream-bot-import.js').then(({ default: streamBotImportRouter }) => {
         app.use('/', streamBotImportRouter);
     }).catch(err => {
         logger.error('Failed to load stream bot import routes:', err);
+    });
+    // One-click switchover from Firebot / Streamer.bot (/stream/bot/import/switchover; core/stream-bot/switchover.js, design doc section 12).
+    import('./routes/stream-bot-switchover.js').then(({ default: streamBotSwitchoverRouter }) => {
+        app.use('/', streamBotSwitchoverRouter);
+    }).catch(err => {
+        logger.error('Failed to load stream bot switchover routes:', err);
     });
     // Birthday card GIF/sticker search through the server, so the GIPHY key is never sent to browsers (routes/card-giphy.js).
     import('./routes/card-giphy.js').then(({ default: cardGiphyRouter }) => {
@@ -14008,6 +14056,12 @@ function start(botClient) {
     }).catch(err => {
         logger.error('Failed to load stream bot overlay routes:', err);
     });
+    // Stream bot lights, Voicemeeter and Stream Deck API (/stream/bot/api/devices/*, /stream/bot/api/lights/*; core/stream-bot/devices).
+    import('./routes/stream-bot-devices.js').then(({ default: streamBotDevicesRouter }) => {
+        app.use('/', streamBotDevicesRouter);
+    }).catch(err => {
+        logger.error('Failed to load stream bot device routes:', err);
+    });
     // OBS docks (/stream/bot/dock/*): opened with a dock key that CertiFried Studio puts into OBS.
     import('./routes/stream-bot-dock.js').then(({ default: streamBotDockRouter }) => {
         app.use('/', streamBotDockRouter);
@@ -14026,6 +14080,13 @@ function start(botClient) {
         app.use('/', legalPagesRouter);
     }).catch(err => {
         logger.error('Failed to load legal and Studio pages:', err);
+    });
+    // Viewer data without a CertiFried account (/privacy/viewer, H-772): Twitch or Kick identity-only sign-in, then
+    // export or delete the stream bot data keyed to that account (dashboard/routes/privacy-viewer.js).
+    import('./routes/privacy-viewer.js').then(({ default: privacyViewerRouter }) => {
+        app.use('/', privacyViewerRouter);
+    }).catch(err => {
+        logger.error('Failed to load the viewer privacy routes:', err);
     });
 
     // Windrose game server panel (/windrose). Talks to windrose-agent on

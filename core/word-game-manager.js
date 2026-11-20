@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { getConfig as getFeatureConfig } from './feature-config.js';
 
 const sessionsByChannel = new Map(); // channelId -> { id, guildId, channelId, gameType, mode, status, hostUserId, state }
 const engines = new Map();           // gameType -> async (message, session) => boolean (consumed)
@@ -121,6 +122,9 @@ export async function handleWordGameMessage(message) {
     if (!session || session.status !== 'active') return false;
     const engine = engines.get(session.gameType);
     if (!engine) return false;
+    // The Word Games page switch also stops games already running (H-807): they used to keep taking words.
+    const cfg = await getFeatureConfig('wordgames', session.guildId).catch(() => null);
+    if (cfg && (cfg.enabled === false || cfg.enabled === 0 || cfg.enabled === '0')) return false;
     return await engine(message, session);
   } catch (err) {
     logger.error('[WordGames] message handler error', { error: err.message });

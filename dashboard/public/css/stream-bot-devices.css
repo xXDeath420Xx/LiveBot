@@ -1,0 +1,31 @@
+/*
+ * Devices page, Phase 5 (dashboard/views/stream-bot/_hardware.ejs): Lights, Light presets, Audio and Stream Deck.
+ * Colours are --cf-* tokens only, so Dark, Light and Sand all work.
+ */
+.sb-subhead { margin: var(--cf-4) var(--cf-5) var(--cf-2); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-2); }
+.sb-subhead:first-child { margin-top: var(--cf-3); }
+.cf-chip .sb-chip-btn {
+    margin-left: 6px; padding: 0 6px; min-height: 22px; border: 1px solid var(--cf-border); border-radius: var(--cf-radius);
+    background: transparent; color: var(--cf-text-2); font: inherit; font-size: var(--cf-text-xs); cursor: pointer;
+}
+.cf-chip .sb-chip-btn:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+.cf-chip .sb-chip-btn:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+.sb-cloud-form { margin: var(--cf-3) 0 0; display: grid; gap: 6px; max-width: 34rem; }
+.sb-cloud-form .cf-input-group input { min-width: 0; flex: 1 1 auto; }
+.sb-steps-list { margin: var(--cf-3) var(--cf-5) var(--cf-4); padding-left: 1.2rem; color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+.sb-steps-list li + li { margin-top: 4px; }
+.sb-steps-list a { color: var(--cf-accent-fg); }
+.sb-preset-form { border-top: 1px solid var(--cf-border); }
+.sb-preset-rows { display: grid; gap: var(--cf-2); padding: var(--cf-3) var(--cf-5); }
+.sb-preset-row {
+    display: grid; grid-template-columns: minmax(12rem, 2fr) minmax(7rem, 1fr) minmax(8rem, 1fr) 7rem auto; gap: var(--cf-2); align-items: end;
+}
+.sb-preset-row label { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-bottom: 4px; }
+.sb-preset-row :is(select, input) { width: 100%; }
+.sb-preset-row input[type="color"] { min-height: 36px; padding: 2px; }
+@media (max-width: 720px) {
+    .sb-preset-row { grid-template-columns: 1fr 1fr; }
+    .sb-preset-row > :first-child { grid-column: 1 / -1; }
+}
+#stream-deck .cf-row-control { display: flex; justify-content: flex-end; align-items: center; }
+#stream-deck .cf-row-control .cf-pill { width: auto; flex: none; }

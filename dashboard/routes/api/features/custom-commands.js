@@ -22,7 +22,7 @@ import {
 } from '../../../../core/custom-command-vars.js';
 import { liveConfigAccess } from '../../../../core/protection-exempt.js';
 import { TEMPLATES, getTemplate, templateCategories } from '../../../../core/custom-command-templates.js';
-import { isReservedName } from '../../../../core/universal-commands.js';
+import { isReservedName, resolve as resolveChatPath } from '../../../../core/universal-commands.js';
 import { getCommand } from '../../../../core/prefix-command-registry.js';
 
 const router = express.Router({ mergeParams: true });
@@ -41,7 +41,8 @@ function validate({ command_name, action_type, response, action_content }, opts 
         return { error: 'Name must be 1–30 characters: letters, numbers, - or _ (no prefix symbol).' };
     }
     // The bridge checks custom commands LAST, so a clashing name would never fire.
-    if (name !== opts.currentName && (getCommand(name) || isReservedName(name))) {
+    // resolveChatPath: a bare word chat already answers (e.g. "welcome" runs /manage welcome) shadows it too (H-805).
+    if (name !== opts.currentName && (getCommand(name) || isReservedName(name) || resolveChatPath([name])?.path)) {
         return { error: `"${name}" is already a built-in command or shortcut — pick another name.` };
     }
     if (!ACTION_TYPES.has(action_type)) {

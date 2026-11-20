@@ -22,6 +22,8 @@
     <button class="nav-item" data-tab="sounds">Sounds</button>
     <button class="nav-item" data-tab="hotkeys">Hotkeys</button>
     <button class="nav-item" data-tab="voice">Voice</button>
+    <button class="nav-item" data-tab="lights">Lights</button>
+    <button class="nav-item" data-tab="audio">Audio</button>
     <button class="nav-item" data-tab="setup">Set up OBS</button>
     <button class="nav-item" data-tab="settings">Settings</button>
     <div class="side-foot">
@@ -95,7 +97,7 @@
 
       <div class="card" id="vod-card">
         <div class="card-head"><h2>VOD-safe music</h2><span class="pill" id="vod-pill"></span></div>
-        <p class="muted">Song requests play only through the CertiFried Music source in OBS, which Studio keeps off your Twitch VOD track, so music is heard live but never saved in the VOD. This is always on.</p>
+        <p class="muted">Song requests play only through the CertiFried Music source in OBS, which Studio keeps off your Twitch VOD track, so music is heard live but never saved in the VOD. Studio does this only while a song request command is switched on; otherwise it leaves your OBS audio tracks alone and only lists what it notices.</p>
         <p class="msg" id="vod-reason"></p>
         <dl class="kv"><dt>VOD track</dt><dd id="vod-track">-</dd><dt>Music source</dt><dd id="vod-source">-</dd></dl>
         <div id="vod-warn-wrap" hidden>
@@ -116,13 +118,56 @@
           <label class="check"><input type="checkbox" id="vod-record"> Record without music (recordings use only the VOD track; changes the OBS profile, with a backup)</label>
         </details>
         <p class="msg" id="vod-msg" role="status"></p>
-        <div class="actions"><button class="btn" type="button" id="vod-check">Check again</button></div>
+        <div class="actions"><button class="btn" type="button" id="vod-check">Check again</button><button class="btn" type="button" id="vod-remove" hidden>Remove the CertiFried Music source</button></div>
       </div>
 
       <div class="card">
         <h2>Recent activity</h2>
         <ul class="log" id="recent-log"></ul>
         <div class="actions"><button class="btn ghost" data-goto="activity">All activity</button></div>
+      </div>
+    </section>
+
+    <!-- Lights (Phase 5) -->
+    <section class="tab" id="tab-lights" hidden>
+      <h1>Lights</h1>
+      <div class="card">
+        <div class="card-head"><h2>Lights on this PC's network</h2><span class="pill" id="lights-pill"></span></div>
+        <p class="muted">Studio looks for Govee (with LAN control switched on in the Govee Home app), Philips Hue bridges, LIFX, Nanoleaf and Elgato Key Light and Light Strip on your network, and Logitech Litra lights on USB. It only looks after you choose Find lights, and then each time it starts. Pairing tokens stay on this PC. Govee and LIFX cloud lights are added on the dashboard instead.</p>
+        <div class="actions tight"><button class="btn primary" type="button" id="lights-find">Find lights</button><button class="btn" type="button" id="lights-off" hidden>Stop using lights</button><button class="btn ghost" data-page="devicesLights">Lights on the dashboard</button></div>
+        <p class="msg" id="lights-msg" role="status"></p>
+        <ul class="limits" id="lights-notes"></ul>
+        <table class="table" id="lights-table"><thead><tr><th>Light</th><th>Type</th><th>State</th><th></th></tr></thead><tbody></tbody></table>
+        <p class="empty" id="lights-empty">No lights yet.</p>
+      </div>
+      <div class="card">
+        <h2>Add a light by its address</h2>
+        <p class="muted">For a light Studio did not find by itself, such as one on another network segment. Use the address from your router or the light's app.</p>
+        <form id="lights-add" class="row-form">
+          <label class="field"><span>Type</span><select id="lights-add-driver"><option value="hue">Philips Hue bridge</option><option value="nanoleaf">Nanoleaf</option><option value="elgato">Elgato Key Light or Light Strip</option><option value="govee">Govee (LAN control on)</option><option value="lifx">LIFX</option></select></label>
+          <label class="field grow"><span>Address</span><input id="lights-add-address" placeholder="192.168.1.20" maxlength="60" spellcheck="false"></label>
+          <button class="btn" type="submit">Add</button>
+        </form>
+        <p class="msg" id="lights-add-msg" role="status"></p>
+      </div>
+      <div class="card">
+        <h2>Kinds of light</h2>
+        <p class="muted">Turn a kind off to stop Studio looking for it.</p>
+        <div class="check-grid" id="lights-drivers"></div>
+      </div>
+    </section>
+
+    <!-- Audio: Voicemeeter (Phase 5) -->
+    <section class="tab" id="tab-audio" hidden>
+      <h1>Audio</h1>
+      <div class="card">
+        <div class="card-head"><h2>Voicemeeter</h2><span class="pill" id="vm-pill"></span></div>
+        <p class="muted">Lets your automations mute and unmute Voicemeeter strips and buses, change their gain, load a saved settings file and press Macro Buttons. Studio talks to Voicemeeter through its Remote API on this PC. It never starts Voicemeeter for you.</p>
+        <label class="check"><input type="checkbox" id="vm-enabled"> Control Voicemeeter from CertiFried</label>
+        <dl class="kv wide" id="vm-facts"><dt>Version</dt><dd id="vm-version">-</dd><dt>Strips</dt><dd id="vm-strips">-</dd><dt>Buses</dt><dd id="vm-buses">-</dd><dt>Settings files</dt><dd id="vm-profiles">-</dd><dt>Macro Buttons</dt><dd id="vm-macro">-</dd></dl>
+        <p class="muted">Settings files are the ones you save in Voicemeeter (Menu, Save Settings) into Documents\Voicemeeter. Only those can be loaded.</p>
+        <p class="msg" id="vm-msg" role="status"></p>
+        <div class="actions"><button class="btn" type="button" id="vm-detect">Check again</button></div>
       </div>
     </section>
 
@@ -318,6 +363,23 @@
           <p class="muted">Only change this if CertiFried support asks you to. It can be changed while the app is not paired.</p>
           <p class="msg" id="server-msg" role="status"></p>
         </details>
+      </div>
+
+      <div class="card" id="sd-card">
+        <div class="card-head"><h2>Stream Deck</h2><span class="pill" id="sd-pill"></span></div>
+        <p class="muted">The CertiFried plugin for the Elgato Stream Deck app connects to Studio on this PC only (127.0.0.1), with the token below. Keys can run an automation, switch scene, show or hide a source, mute an input, change a counter, play a sound and apply a light preset.</p>
+        <label class="check"><input type="checkbox" id="sd-enabled"> Let the Stream Deck plugin connect</label>
+        <div class="form-grid">
+          <label class="field"><span>Port</span><input id="sd-port" type="number" min="1024" max="65535"></label>
+          <label class="field"><span>Token</span><input id="sd-token" type="password" readonly spellcheck="false" autocomplete="off" value=""></label>
+        </div>
+        <p class="msg" id="sd-msg" role="status"></p>
+        <div class="actions">
+          <button class="btn" type="button" id="sd-show">Show token</button>
+          <button class="btn" type="button" id="sd-copy">Copy token</button>
+          <button class="btn" type="button" id="sd-regen">New token</button>
+          <button class="btn" type="button" id="sd-install">Install the Stream Deck plugin</button>
+        </div>
       </div>
 
       <div class="card">

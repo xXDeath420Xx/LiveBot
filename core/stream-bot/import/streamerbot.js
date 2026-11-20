@@ -25,6 +25,7 @@ import { stripSecrets } from './secrets.js';
 import { translateStreamerbot, slugKey } from './variables.js';
 import { ImportError } from './zip.js';
 import { sbSubActionName } from './streamerbot-types.js';
+import { sbLumia } from './lights.js';
 
 /** Streamer.bot EventType → stream bot trigger type (null: no equivalent; the gap key says why). */
 export const SB_TRIGGERS = Object.freeze({
@@ -45,9 +46,26 @@ export const SB_TRIGGERS = Object.freeze({
     14007: ['ObsRecordingStarted', 'obs.recording_started'], 14008: ['ObsRecordingStopped', 'obs.recording_stopped'],
     35010: ['KickChatMessage', 'chat'], 35011: ['KickFollow', 'follow'], 35012: ['KickStreamOnline', 'stream.online'], 35013: ['KickStreamOffline', 'stream.offline'],
     35014: ['KickSubscription', 'sub'], 35016: ['KickGiftSubscription', 'gift_sub'], 35017: ['KickMassGiftSubscription', 'gift_sub'],
-    35008: ['KickFirstWords', null, 'trigger.first_words'], 4016: ['YouTubeFirstWords', null, 'trigger.youtube'],
+    35008: ['KickFirstWords', null, 'trigger.first_words'],
+    // YouTube Live (H-741). EventType values read from Streamer.bot.Common.dll 1.0.7 (metadata tables) on 2026-11-20. Super Chats,
+    // Super Stickers and Jewels are tips; new members, milestones and gifted memberships are memberships (YT_KIND tells them apart).
+    4001: ['YouTubeBroadcastStarted', 'stream.online'], 4002: ['YouTubeBroadcastEnded', 'stream.offline'], 4003: ['YouTubeMessage', 'chat'],
+    4004: ['YouTubeMessageDeleted', null, 'trigger.youtube_other'], 4005: ['YouTubeUserBanned', null, 'trigger.youtube_other'],
+    4006: ['YouTubeSuperChat', 'tip'], 4007: ['YouTubeSuperSticker', 'tip'], 4008: ['YouTubeNewSponsor', 'membership'], 4009: ['YouTubeMemberMileStone', 'membership'],
+    4010: ['YouTubeNewSponsorOnlyStarted', null, 'trigger.youtube_other'], 4011: ['YouTubeNewSponsorOnlyEnded', null, 'trigger.youtube_other'],
+    4012: ['YouTubeStatisticsUpdated', null, 'trigger.youtube_other'], 4013: ['YouTubeBroadcastUpdated', null, 'trigger.youtube_other'],
+    4014: ['YouTubeMembershipGift', 'gift_sub'], 4015: ['YouTubeGiftMembershipReceived', 'membership'], 4016: ['YouTubeFirstWords', 'chat'],
+    4017: ['YouTubePresentViewers', null, 'trigger.youtube_other'], 4018: ['YouTubeNewSubscriber', null, 'trigger.youtube_other'],
+    4019: ['YouTubeBroadcastMonitoringStarted', null, 'trigger.youtube_other'], 4020: ['YouTubeBroadcastMonitoringEnded', null, 'trigger.youtube_other'],
+    4021: ['YouTubeBroadcastAdded', null, 'trigger.youtube_other'], 4022: ['YouTubeBroadcastRemoved', null, 'trigger.youtube_other'],
+    4023: ['YouTubeSevenTVEmoteAdded', null, 'trigger.youtube_other'], 4024: ['YouTubeSevenTVEmoteRemoved', null, 'trigger.youtube_other'],
+    4025: ['YouTubeBetterTTVEmoteAdded', null, 'trigger.youtube_other'], 4026: ['YouTubeBetterTTVEmoteRemoved', null, 'trigger.youtube_other'],
+    4027: ['YouTubePollClosed', null, 'trigger.youtube_other'], 4028: ['YouTubePollStarted', null, 'trigger.youtube_other'], 4029: ['YouTubePollUpdated', null, 'trigger.youtube_other'],
+    4030: ['YouTubeJewelsGifted', 'tip'], 4031: ['YouTubeUserTimedout', null, 'trigger.youtube_other'],
 });
-const TRIGGER_PLATFORM = (code) => (code >= 35000 && code < 36000 ? ['kick'] : code >= 100 && code < 500 && code !== 302 && code !== 401 ? ['twitch']
+/** YouTube triggers that share a stream bot event type, told apart by metadata.kind (core/stream-bot/youtube/normalise.js). */
+export const YT_KIND = Object.freeze({ 4006: 'super_chat', 4007: 'super_sticker', 4030: 'jewels', 4008: 'new', 4009: 'milestone', 4015: 'gift' });
+const TRIGGER_PLATFORM = (code) => (code >= 4000 && code < 5000 ? ['youtube'] : code >= 35000 && code < 36000 ? ['kick'] : code >= 100 && code < 500 && code !== 302 && code !== 401 ? ['twitch']
     : code === 201 ? ['streamlabs'] : code === 1201 ? ['streamelements'] : code >= 7000 && code < 8000 ? ['kofi'] : code >= 24000 && code < 25000 ? ['fourthwall']
         : code >= 37000 && code < 38000 ? ['throne'] : null);
 /** Speech command phrases: split on new lines and ;, trimmed, at most 20 of at most 100 characters each. */
@@ -142,6 +160,14 @@ export function convertSubActions(subs, ctx = {}, depth = 0, randomPick = false)
                 if (text.trim()) out.actions.push({ type: 'stream.announce', text, color: ['primary', 'blue', 'green', 'orange', 'purple'][num(s.color, 0)] || 'primary' });
                 break;
             }
+            // Phase 5 lights (core/stream-bot/import/lights.js): Lumia Stream colour and brightness become light steps.
+            case 'LumiaStreamSendCommand': case 'LumiaStreamSetColor': case 'LumiaStreamSetBrightness': case 'LumiaStreamSetToDefault': {
+                const r = sbLumia(name, s);
+                out.actions.push(...r.actions);
+                out.notes.push(...r.notes);
+                for (const g of r.gaps) gap(g.gap, label, ` (${g.what})`);
+                break;
+            }
             case 'ObsSetActiveScene': case 'SlobsSetActiveScene':
                 if (s.sceneName) out.actions.push({ type: 'obs.scene', scene: str(s.sceneName, 200) });
                 if (name.startsWith('Slobs')) slobs();
@@ -189,6 +215,23 @@ export function convertSubActions(subs, ctx = {}, depth = 0, randomPick = false)
             case 'LogicIf': case 'LogicSwitch': case 'LogicWhile': gap('flow.conditional', label); break;
             // Phase 4 stream actions (design doc §7.3)
             case 'TwitchClearChatMessages': out.actions.push({ type: 'chat.clear' }); break;
+            // YouTube Live (H-741): send a message (as the linked channel), ban or time out the viewer behind the event.
+            case 'YouTubeMessage': {
+                const text = tr(str(s.text, 2000));
+                if (text.trim()) out.actions.push({ type: 'chat.send', platform: 'youtube', text });
+                break;
+            }
+            case 'YouTubeBanUser':
+                out.actions.push({ type: 'chat.ban' });
+                out.notes.push('The YouTube ban acts on the viewer behind the event');
+                break;
+            case 'YoUTubeTimeoutUser': {   // (sic: Streamer.bot's own spelling)
+                const want = num(s.duration ?? s.timeout ?? s.seconds ?? s.length, 300);
+                const seconds = [10, 60, 300, 600, 1800, 3600, 86400].reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a), 300);
+                out.actions.push({ type: 'chat.timeout', seconds: String(seconds) });
+                out.notes.push(`The YouTube time-out acts on the viewer behind the event, for ${seconds} seconds${seconds !== want ? ` (the nearest choice to ${want})` : ''}`);
+                break;
+            }
             case 'CreateClip': out.actions.push({ type: 'stream.clip' }); break;
             case 'SetChannelTitle': {
                 const title = tr(str(s.title ?? s.value ?? '', 300));
@@ -379,7 +422,11 @@ export function parseStreamerbot({ files = null, exported = null, wantViewers = 
     if (users && Array.isArray(users.users)) {
         const fields = new Set();
         for (const u of users.users) for (const k of Object.keys(u || {})) fields.add(k);
-        bundle.viewers = { count: users.users.length, fields: [...fields].sort(), rows: [] };
+        // H-747: names and the last time Streamer.bot saw them (no watch time or messages: it keeps none). Twitch only.
+        const seenAt = (...v) => v.map((x) => Date.parse(String(x || ''))).filter((t) => Number.isFinite(t) && t > Date.UTC(2005, 0, 1)).sort((a, b) => b - a)[0] || null;
+        const rows = wantViewers ? users.users.filter((u) => u && String(u.type || 'twitch').toLowerCase() === 'twitch' && /^\d{1,20}$/.test(String(u.id)))
+            .map((u) => ({ platform: 'twitch', id: String(u.id), login: str(u.name, 40), name: u.display ? str(u.display, 100) : null, lastSeen: seenAt(u.lastActive, u.previousActive) })) : [];
+        bundle.viewers = { count: users.users.length, fields: [...fields].sort(), rows };
     }
 
     // LiteDB files are listed as skipped
@@ -409,7 +456,7 @@ function commandEntry(c, a, base) {
     const src = num(c.sources, 1);
     if (src & 1 || src & 16) platforms.push('twitch');
     if (src & 2097152) platforms.push('kick');
-    if (src & 1024) notes.push('It also answered on YouTube, which CertiFried does not cover yet');
+    if (src & 1024) platforms.push('youtube');   // YouTube Live (H-741)
     return {
         sourceId: String(c.id), name: str(triggers[0] || c.name, 100), triggers, regex: num(c.mode) === 1, anywhere: num(c.location) !== 0,
         enabled: c.enabled !== false && a.enabled !== false, cooldown: { global: num(c.globalCooldown), user: num(c.userCooldown) }, roles: [...new Set(roles)],
@@ -420,7 +467,7 @@ function commandEntry(c, a, base) {
 
 function triggerOf(code, t, stt) {
     const def = SB_TRIGGERS[code];
-    if (!def || !def[1]) return { trigger: null, gap: def?.[2] || (code >= 4000 && code < 5000 ? 'trigger.youtube' : 'trigger.other') };
+    if (!def || !def[1]) return { trigger: null, gap: def?.[2] || (code >= 4000 && code < 5000 ? 'trigger.youtube_other' : 'trigger.other') };
     const type = def[1];
     const trigger = { type, config: {}, conditions: [] };
     const notes = [];
@@ -455,6 +502,17 @@ function triggerOf(code, t, stt) {
         kind = 'reward';
         rewardId = str(t.rewardId || '', 64);
         if (rewardId) trigger.conditions.push({ type: 'metadata', path: 'rewardId', op: 'eq', value: rewardId });
+    } else if (code === 4016) {
+        // First words: a viewer's first chat line in the current YouTube broadcast (normalise.js metadata.firstWords).
+        trigger.config.match = { mode: 'regex', text: '.', caseSensitive: false };
+        trigger.conditions.push({ type: 'metadata', path: 'firstWords', op: 'eq', value: 'true' });
+        notes.push('First words: a viewer\'s first chat line in the current YouTube broadcast (counted afresh after a CertiFried restart)');
+    } else if (code === 4003) {
+        trigger.config.match = { mode: 'regex', text: '.', caseSensitive: false };
+        notes.push('It ran on every YouTube chat message; it matches every message here too');
+    } else if (YT_KIND[code]) {
+        trigger.conditions.push({ type: 'metadata', path: 'kind', op: 'eq', value: YT_KIND[code] });
+        if ((code === 4006 || code === 4007) && (num(t.min) || num(t.max))) trigger.conditions.push({ type: 'amount', min: num(t.min) || null, max: num(t.max) || null });
     } else if (code === 133 || code === 35010) {
         trigger.config.match = { mode: 'regex', text: '.', caseSensitive: false };
         notes.push('It ran on every chat message; it matches every message here too');

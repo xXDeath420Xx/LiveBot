@@ -184,8 +184,8 @@ async function createTempChannel(voiceState, config) {
 
     // Format channel name — support both {username} and {user} placeholders
     let channelName = config.naming_template || "{username}'s Channel";
-    channelName = channelName.replace('{username}', member.displayName);
-    channelName = channelName.replace('{user}', member.displayName);
+    channelName = channelName.replace(/\{username\}/g, member.displayName);
+    channelName = channelName.replace(/\{user\}/g, member.displayName);
 
     // Handle {number} placeholder - find next available number
     if (channelName.includes('{number}')) {
@@ -214,14 +214,16 @@ async function createTempChannel(voiceState, config) {
       name: channelName,
       type: ChannelType.GuildVoice,
       parent: category.id,
+      // The category's own permissions, so a room in a hidden or staff-only category stays that way (it used
+      // to allow @everyone to view and join, H-810), plus the owner's controls.
       permissionOverwrites: [
+        ...[...(category.permissionOverwrites?.cache?.values?.() ?? [])]
+          .filter(ow => ow.id !== member.id)
+          .map(ow => ({ id: ow.id, type: ow.type, allow: ow.allow.bitfield, deny: ow.deny.bitfield })),
         {
           id: member.id,
-          allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers]
-        },
-        {
-          id: guild.id,
-          allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.ViewChannel]
+          allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
         }
       ]
     };

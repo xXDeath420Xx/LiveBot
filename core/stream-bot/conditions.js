@@ -6,19 +6,43 @@
  *   checkConditions(conditions, event, ctx)      → { ok, results: [{ type, ok, detail }], failed }
  *   createLimiter({ now })                       cooldown + rate-limit memory: check(), record()
  *   validateConditions(list) / validateTrigger() → { ok, errors[], value }  (dashboard saves)
+ *   registerConditionType(def)                   feature conditions (core/stream-bot/viewers): def.check / def.validate, and
+ *                                                def.load { key, fn } for data read before the check (loadConditionData)
  *
  * Tested in tests/stream-bot-engine.test.js.
  */
 import { ROLES, isEventType, eventType } from './events.js';
 
-export const CONDITION_TYPES = Object.freeze([
+export const CONDITION_TYPES = [   // not frozen: registerConditionType() adds feature conditions (core/stream-bot/viewers)
     { type: 'role', label: 'Viewer role', help: 'Only when the person has (or does not have) one of these roles.' },
     { type: 'amount', label: 'Amount range', help: 'Bits, viewers, months, gift count or tip amount between a minimum and a maximum.' },
     { type: 'text', label: 'Text match', help: 'The message, name or reward matches some text.' },
     { type: 'metadata', label: 'Event detail', help: 'A detail of the event, such as the reward title or the sub tier.' },
     { type: 'cooldown', label: 'Cooldown', help: 'Wait this long before running again, for everyone or per person.' },
     { type: 'rate_limit', label: 'Rate limit', help: 'Run at most this many times in a window, for everyone or per person.' },
-]);
+];
+
+const REGISTERED = new Map();
+/**
+ * Registration hook for feature modules (core/stream-bot/viewers/register.js): { type, label, help, fields, check(c, ev, ctx),
+ * validate(c, err) → value, load?: { key, fn({ ev, profileId }) } }. check reads ctx.loaded[load.key]. Pure apart from load.
+ */
+export function registerConditionType(def) {
+    if (!def?.type || REGISTERED.has(def.type) || CONDITION_TYPES.some((c) => c.type === def.type) || typeof def.check !== 'function' || typeof def.validate !== 'function') return false;
+    REGISTERED.set(def.type, def);
+    CONDITION_TYPES.push({ type: def.type, label: def.label, help: def.help || '', fields: def.fields || [] });
+    return true;
+}
+/** Data registered conditions read (the viewer's points and so on), loaded once per run before the checks. Never throws. */
+export async function loadConditionData(conditions, ev, { profileId } = {}) {
+    const loaded = {};
+    for (const c of conditions || []) {
+        const def = REGISTERED.get(c?.type);
+        if (!def?.load || loaded[def.load.key] !== undefined) continue;
+        try { loaded[def.load.key] = await def.load.fn({ ev, profileId }); } catch { loaded[def.load.key] = null; }
+    }
+    return loaded;
+}
 
 export const MATCH_MODES = Object.freeze(['command', 'contains', 'exact', 'starts', 'word', 'regex']);
 /** Power-up or Bits trigger: which uses (channel.bits.use `type`, or the power-up's own type). */
@@ -182,8 +206,11 @@ function checkOne(c, ev, ctx) {
             if (!r.ok && ctx.test) return { ok: true, detail: `${r.detail} (ignored for a test)` };
             return r;
         }
-        default:
+        default: {
+            const def = REGISTERED.get(c.type);
+            if (def) { try { return def.check(c, ev, ctx); } catch { return { ok: false, detail: 'could not check' }; } }
             return { ok: false, detail: `unknown condition ${c.type}` };
+        }
     }
 }
 
@@ -302,10 +329,11 @@ export function validateConditions(list) {
                 break;
             }
             default:
+                if (REGISTERED.has(c.type)) { value.push(REGISTERED.get(c.type).validate(c, (m) => errors.push(m))); break; }
                 errors.push(`Unknown condition "${String(c.type).slice(0, 30)}".`);
         }
     }
     return { ok: !errors.length, errors, value };
 }
 
-export default { CONDITION_TYPES, MATCH_MODES, BITS_KINDS, METADATA_OPS, LIMITS, textMatches, triggerMatches, createLimiter, checkConditions, validateTrigger, validateConditions };
+export default { CONDITION_TYPES, MATCH_MODES, BITS_KINDS, METADATA_OPS, LIMITS, textMatches, triggerMatches, createLimiter, checkConditions, validateTrigger, validateConditions, registerConditionType, loadConditionData };

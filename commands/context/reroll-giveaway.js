@@ -30,7 +30,7 @@ async function execute(interaction) {
     if (!guild) return interaction.reply({ content: 'Server only.', ephemeral: true });
 
     const [[g]] = await pool.execute(
-        `SELECT id, winner_count, winners, is_active FROM giveaways
+        `SELECT id, winner_count, winners, is_active, rerolled_count FROM giveaways
           WHERE guild_id = ? AND message_id = ?`,
         [guild.id, target.id]);
     if (!g) return interaction.reply({ content: 'That message isn\'t a CertiFried giveaway.', ephemeral: true });
@@ -43,7 +43,9 @@ async function execute(interaction) {
         // Fallback: user reactions on the original message (minus bot).
         try {
             const msg = await target.channel.messages.fetch(target.id);
-            for (const reaction of msg.reactions.cache.values()) {
+            // Only 🎉 is an entry (core/giveaway-manager.js); any other reaction used to count too (H-807).
+            const reaction = msg.reactions.cache.get('🎉');
+            if (reaction) {
                 const users = await reaction.users.fetch();
                 for (const u of users.values()) if (!u.bot) entries.push(u.id);
             }

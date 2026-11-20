@@ -79,6 +79,12 @@ export function loadConfig(env = process.env) {
             clientSecret: pick(env, 'CFX2_KICK_CLIENT_SECRET', 'KICK_CLIENT_SECRET')
         }),
         // Shared with the dashboard, which signs a 60-second assertion for its logged-in Discord user.
-        dashboardSecret: dashboardSecret.length >= 32 ? dashboardSecret : ''
+        dashboardSecret: dashboardSecret.length >= 32 ? dashboardSecret : '',
+        // Activity host mode (docs/activities.md): the Discord application whose Activity frames the game
+        // (https://<id>.discordsays.com) and its public key (Discord's proxy signature). Default: the bot's.
+        activity: Object.freeze({
+            appId: /^\d{17,20}$/.test(pick(env, 'CFX2_ACTIVITY_APP_ID', 'ACTIVITY_APP_ID', 'DISCORD_CLIENT_ID')) ? pick(env, 'CFX2_ACTIVITY_APP_ID', 'ACTIVITY_APP_ID', 'DISCORD_CLIENT_ID') : null,
+            publicKey: /^[0-9a-f]{64}$/i.test(pick(env, 'ACTIVITY_PUBLIC_KEY', 'DISCORD_PUBLIC_KEY')) ? pick(env, 'ACTIVITY_PUBLIC_KEY', 'DISCORD_PUBLIC_KEY').toLowerCase() : null
+        })
     });
 }

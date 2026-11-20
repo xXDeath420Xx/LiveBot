@@ -71,8 +71,11 @@ router.put('/', async (req, res) => {
             whitelist_domains,
             log_detections,
             exempt_channels,
-            report_channel_id
+            report_channel_id,
+            scan_images
         } = req.body;
+        // Reading text in images had no switch (H-811). Left out of the request: unchanged (new rows: on).
+        const scanImages = scan_images === undefined ? null : (scan_images ? 1 : 0);
 
         // Validate JSON arrays if provided
         for (const [field, value] of [['exempt_channels', exempt_channels], ['whitelist_domains', whitelist_domains]]) {
@@ -89,9 +92,10 @@ router.put('/', async (req, res) => {
         }
 
         await pool.execute(`
-            INSERT INTO phishing_config (guild_id, enabled, action, mute_duration_minutes, alert_channel_id, whitelist_domains, log_detections, exempt_channels, report_channel_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO phishing_config (guild_id, enabled, action, mute_duration_minutes, alert_channel_id, whitelist_domains, log_detections, exempt_channels, report_channel_id, scan_images)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1))
             ON DUPLICATE KEY UPDATE
+                scan_images = COALESCE(?, scan_images),
                 enabled = VALUES(enabled),
                 action = VALUES(action),
                 mute_duration_minutes = VALUES(mute_duration_minutes),
@@ -110,7 +114,9 @@ router.put('/', async (req, res) => {
             normalizeWhitelist(whitelist_domains),
             log_detections ? 1 : 0,
             exempt_channels || '[]',
-            report_channel_id || null
+            report_channel_id || null,
+            scanImages,
+            scanImages
         ]);
 
         res.json({ success: true });

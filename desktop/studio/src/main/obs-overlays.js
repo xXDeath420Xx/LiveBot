@@ -15,7 +15,7 @@
  *                                       of the same name gets the new address (after a new key) or is only put in the scene.
  *                                       Nothing else in OBS is touched.
  */
-const OVERLAY_PATH = /^\/stream\/bot\/overlay\/(alerts|chat|events|goal|counter|nowplaying|canvas)\/sbo_[A-Za-z0-9_-]{32}$/;
+const OVERLAY_PATH = /^\/stream\/bot\/overlay\/(alerts|chat|events|goal|counter|nowplaying|canvas|scene)\/sbo_[A-Za-z0-9_-]{32}$/;
 const MONITOR = 'OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT';
 
 function err(code, message) { const e = new Error(message); e.code = code; return e; }

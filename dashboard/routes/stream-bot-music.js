@@ -32,6 +32,7 @@ import { COMMANDS, DEFAULT_MESSAGES, MESSAGE_VARS, formatLength } from '../../co
 import { APPROVAL_MODES, SOURCES, SOURCE_LABEL, OWNER_PRESET, LIMITS } from '../../core/stream-bot/music/settings.js';
 import { seedCommands, NAME_PREFIX } from '../../core/stream-bot/music/seed.js';
 import { proxyAudio, isKeyShape } from '../../core/stream-bot/music/audio.js';
+import { openSse } from '../../core/stream-bot/overlays/http.js';
 
 const router = express.Router();
 const LOG = '[StreamBotMusic]';
@@ -249,6 +250,8 @@ router.post('/stream/bot/api/music/commands', needApi, apiRoute(async (req, res)
     // The owner's come switched off and answer to every Streamer.bot name, with the owner's settings (Streamer.bot still answers chat).
     const r = await seedCommands(sb.store, profile.id, { aliases: owner, enabled: owner ? false : req.body?.enabled === true });
     if (owner && r.created) await music.applyPreset(profile.id, OWNER_PRESET);
+    // Studio 0.2.6 keeps OBS VOD-safe for music only while a song request command is on: tell connected Studios to look again.
+    if (r.created) { try { sb.hub.notify(profile.id, 'studio', { type: 'automations_changed' }); } catch { /* not attached */ } }
     res.json({ ok: true, created: r.created, existing: r.existing });
 }));
 
@@ -323,16 +326,15 @@ router.get('/stream/bot/overlay/music/:key/events', overlayEventsLimiter, async 
     let hit;
     try { hit = await overlayProfile(req.params.key); } catch { hit = null; }
     if (!hit) return res.status(404).json({ ok: false, error: 'This player link is not valid any more.' });
-    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-    res.write('retry: 3000\n\n');
+    // The shared overlay SSE helper (H-774): the same headers, retry 3 s and ping every 20 s as before, plus no writes
+    // after the player went away and one detach on close.
+    let detach = () => {};
+    const sse = openSse(req, res, { pingMs: 20_000, retryMs: 3_000, onClose: () => detach() });
     const client = {
-        send: (event, data) => { res.write(`event: ${event}\ndata: ${JSON.stringify({ ...data, key: undefined })}\n\n`); },
-        close: () => { try { res.end(); } catch { /* gone */ } },
+        send: (event, data) => { sse.send(event, { ...data, key: undefined }); },
+        close: () => sse.close(),
     };
-    const detach = hit.music.player.attachOverlay(hit.profileId, hit.keyHash, client);
-    const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* closed */ } }, 20_000);
-    ping.unref?.();
-    req.on('close', () => { clearInterval(ping); detach(); });
+    detach = hit.music.player.attachOverlay(hit.profileId, hit.keyHash, client);
 });
 
 router.post('/stream/bot/overlay/music/:key/report', overlayReportLimiter, async (req, res) => {

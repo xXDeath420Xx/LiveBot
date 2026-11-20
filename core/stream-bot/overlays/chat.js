@@ -1,5 +1,5 @@
 /*
- * Stream bot overlays: chat for the Chat overlay, from what Twitch and Kick send (pure; design §9).
+ * Stream bot overlays: chat for the Chat overlay, from what Twitch, Kick and YouTube send (pure; design §9, §13.10).
  *
  * The stream bot's normalised chat event keeps no badges or emote positions, so the Chat overlay reads the raw
  * notifications the receivers already hand to the stream bot (core/stream-bot/index.js onTwitch / onKick), before
@@ -8,9 +8,11 @@
  *   twitchChat(subType, e)  → { kind: 'message', channelId, message } | { kind: 'delete', channelId, id }
  *                             | { kind: 'clear_user', channelId, platform, userId } | { kind: 'clear', channelId } | null
  *   kickChat(eventType, e)  → the same shapes for Kick (chat.message.sent, moderation.banned)
+ *   youtubeChat(item, channelId) → the same shapes for a YouTube liveChatMessage (a chat line or Super Chat, a deleted
+ *                             message, a banned viewer), handed over by youtube/service.js before normalisation
  *   visibleFor(message, config) → whether a Chat overlay with these settings shows the message
  *
- * A message: { id: 'tw:<id>' | 'kk:<id>', platform, userId, login, name, color, badges: [{ kind: 'img', src, title } |
+ * A message: { id: 'tw:<id>' | 'kk:<id>' | 'yt:<id>', platform, userId, login, name, color, badges: [{ kind: 'img', src, title } |
  * { kind: 'role', role }], parts: [{ t: 'text', v } | { t: 'emote', src, alt }], at }.
  * Image `src` values are paths under the overlay's own URL (img/…): the overlay fetches emotes and badges through
  * this server (overlays/images.js), never from Twitch or Kick directly.
@@ -23,6 +25,8 @@ const KICK_EMOTE = /^\d{1,12}$/;
 const COLOR = /^#[0-9a-f]{6}$/i;
 const ROLE_BADGES = new Set(['broadcaster', 'moderator', 'vip', 'subscriber', 'founder', 'og', 'verified', 'staff', 'sub_gifter', 'artist']);
 const KICK_TOKEN = /\[emote:(\d{1,12}):([^\]\s]{1,60})\]/g;
+const YT_ID = /^[A-Za-z0-9._%-]{1,200}$/;   // liveChatMessage ids are longer than Twitch's and carry dots
+const YT_CHANNEL = /^UC[A-Za-z0-9_-]{22}$/;
 
 const s = (v, max = 100) => (v == null ? null : String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max));
 const at = () => Date.now();
@@ -154,6 +158,48 @@ export function kickChat(eventType, e) {
     return null;
 }
 
+/**
+ * A YouTube liveChatMessage (part snippet,authorDetails) → what the Chat overlay does. YouTube sends no emote positions
+ * (custom emoji arrive as :name: text) and no colours; owners, moderators, members and verified channels get role badges.
+ */
+export function youtubeChat(item, channelId) {
+    if (!item || typeof item !== 'object' || !item.snippet || channelId == null) return null;
+    const ch = String(channelId);
+    const sn = item.snippet;
+    if (sn.type === 'messageDeletedEvent') {
+        const id = String(sn.messageDeletedDetails?.deletedMessageId || '');
+        return YT_ID.test(id) ? { kind: 'delete', channelId: ch, id: `yt:${id}` } : null;
+    }
+    if (sn.type === 'userBannedEvent') {
+        const uid = String(sn.userBannedDetails?.bannedUserDetails?.channelId || '');
+        return YT_CHANNEL.test(uid) ? { kind: 'clear_user', channelId: ch, platform: 'youtube', userId: uid } : null;
+    }
+    if (sn.type !== 'textMessageEvent' && sn.type !== 'superChatEvent') return null;
+    const id = String(item.id || '');
+    const a = item.authorDetails || {};
+    if (!YT_ID.test(id) || !YT_CHANNEL.test(String(a.channelId || ''))) return null;
+    const display = String(a.displayName || '').trim().replace(/^@/, '');
+    const badges = [];
+    if (a.isChatOwner) badges.push({ kind: 'role', role: 'broadcaster', title: 'Owner' });
+    if (a.isChatModerator) badges.push({ kind: 'role', role: 'moderator', title: 'Moderator' });
+    if (a.isChatSponsor) badges.push({ kind: 'role', role: 'subscriber', title: 'Member' });
+    if (a.isVerified) badges.push({ kind: 'role', role: 'verified', title: 'Verified' });
+    let text;
+    if (sn.type === 'superChatEvent') {
+        const d = sn.superChatDetails || {};
+        text = [d.amountDisplayString, d.userComment].filter((v) => v != null && String(v).trim()).join(' ');
+    } else {
+        text = sn.textMessageDetails?.messageText ?? sn.displayMessage ?? '';
+    }
+    return {
+        kind: 'message', channelId: ch,
+        message: {
+            id: `yt:${id}`, platform: 'youtube', userId: String(a.channelId), login: s(display.toLowerCase(), 40), name: s(display, 40) || 'viewer',
+            color: null, badges, parts: [{ t: 'text', v: s(text, TEXT_MAX) || '' }], action: sn.type === 'superChatEvent' ? 'highlight' : null, at: at(),
+        },
+    };
+}
+
 /** Whether a Chat overlay shows a message (platforms ticked, commands and named users hidden). */
 export function visibleFor(message, config = {}) {
     if (!message) return false;
@@ -165,4 +211,4 @@ export function visibleFor(message, config = {}) {
     return true;
 }
 
-export default { twitchChat, kickChat, visibleFor };
+export default { twitchChat, kickChat, youtubeChat, visibleFor };

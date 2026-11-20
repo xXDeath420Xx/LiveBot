@@ -1,5 +1,5 @@
 /**
- * Server Backup Routes — create, delete, restore, and "what changed".
+ * Server Backup Routes — create, delete, restore (preview, run, resume, progress), and "what changed".
  *
  * The default export is mounted by dashboard/server.js at '/manage/:guildId' (with checkAuth and
  * checkGuildAdmin), so its paths are relative to that: POST /manage/:guildId/create-backup etc.
@@ -14,8 +14,10 @@
 import express from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
-import { createSnapshot, saveBackup, BACKUP_CONFIG_TABLES } from '../../../utils/backup-utils.js';
+import { createSnapshot, saveBackup } from '../../../utils/backup-utils.js';
+import { loadBackupRow, previewRestore, startRestore, runStatus, activeRun } from '../../../core/backup-restore.js';
 import { logFeatureEvent, userLabel } from '../../../core/feature-log.js';
+import { isRestoreDisabled, RESTORE_UNAVAILABLE_MESSAGE } from '../../../utils/backup-restore-guard.js';
 
 const router = express.Router({ mergeParams: true });
 export const backupApiRouter = express.Router({ mergeParams: true });
@@ -83,314 +85,127 @@ router.post('/delete-backup', async (req, res) => {
     }
 });
 
-// Restore backup — full server restore
+// Restore backup (register H-801, rebuilt 2026-11-20). core/backup-restore.js does the work:
+//   GET  /api/guilds/:guildId/backup-restore-preview/:backupId   dry run (what is created, changed, deleted)
+//   POST /manage/:guildId/restore-backup                         starts the run the admin confirmed (planHash)
+//   POST /manage/:guildId/restore-backup/resume                  continues an interrupted or failed run
+//   GET  /api/guilds/:guildId/backup-restore-status              progress for the page
+// Nothing is deleted unless removeExtras is ticked, and deletes run last.
+const wantsJson = (req) => req.xhr || /json/i.test(req.get('accept') || '');
+const flag = (v) => v === true || v === 'true' || v === '1' || v === 'on';
+function restoreOptions(src) {
+    return { removeExtras: flag(src.removeExtras), restoreBotConfig: src.restoreBotConfig === undefined ? true : flag(src.restoreBotConfig), restoreBans: flag(src.restoreBans) };
+}
+function botGuild(req, guildId) {
+    const botClient = global.botManager?.getClientForGuild?.(guildId) || req.app?.locals?.client;
+    return botClient?.guilds?.cache?.get(guildId) || null;
+}
+function publicRun(run) {
+    if (!run) return null;
+    const { runId, backupId, backupName, by, source, options, status, startedAt, updatedAt, finishedAt, total, error } = run;
+    return { runId, backupId, backupName, by: by?.name || null, source, options, status, startedAt, updatedAt, finishedAt, total,
+        done: run.completed?.length || 0, failed: (run.failed || []).slice(-20), failedCount: (run.failed || []).length, error: error || null, log: (run.log || []).slice(-15) };
+}
+function restoreHooks(guild, req) {
+    return {
+        onStart: (run, summary) => void logFeatureEvent(() => (guild), 'backup.restoreStarted', () => ({
+            title: '⏳ Backup Restore Started',
+            description: `Restoring server backup **${run.backupName}** from the dashboard. ${run.options.removeExtras ? 'Channels and roles that are not in the backup are removed at the end.' : 'Nothing that is not in the backup is removed.'}`,
+            fields: [['Name', run.backupName], ['By', userLabel(req.user)], ['Create', `${summary.counts.createRoles} roles, ${summary.counts.createCategories} categories, ${summary.counts.createChannels} channels`],
+                ['Change', summary.counts.updates], ['Delete', summary.counts.deletes]],
+        })),
+        onFinish: (run) => {
+            const fields = [['Steps done', `${run.completed.length}/${run.total}`], ['Failed', run.failed.length], ['By', userLabel(req.user)]];
+            if (run.status === 'failed') {
+                void logFeatureEvent(() => (guild), 'backup.failed', () => ({
+                    title: '❌ Backup Restore Stopped',
+                    description: `The restore of **${run.backupName}** stopped: ${run.error || 'unknown error'}. It can be resumed from the Backups page.`,
+                    fields,
+                }));
+            } else {
+                void logFeatureEvent(() => (guild), 'backup.restored', () => ({
+                    title: '♻️ Backup Restored',
+                    description: `Server backup **${run.backupName}** was restored from the dashboard.`,
+                    fields,
+                }));
+            }
+        },
+    };
+}
+
 router.post('/restore-backup', async (req, res) => {
     const guildId = req.params.guildId;
+    const fail = (error, code = 'restore_failed', extra = {}) => (wantsJson(req)
+        ? res.json({ success: false, error, ...extra })
+        : res.redirect(`/manage/${guildId}?page=backups&error=${encodeURIComponent(code)}`));
+    // H-801 kill switch: refuse before reading the backup or touching the server.
+    if (isRestoreDisabled()) {
+        logger.warn(`[Backup Restore] Refused (restore disabled, H-801) for ${guildId} by ${req.user?.username || '?'}`);
+        return fail(RESTORE_UNAVAILABLE_MESSAGE, RESTORE_UNAVAILABLE_MESSAGE);
+    }
     try {
-        const backupId = req.body.backupId;
-        if (!backupId) return res.redirect(`/manage/${guildId}?page=backups&error=no_id`);
-
-        const [rows] = await pool.execute('SELECT snapshot_name, snapshot_json FROM server_backups WHERE id = ? AND guild_id = ?', [backupId, guildId]);
-        if (!rows.length) return res.redirect(`/manage/${guildId}?page=backups&error=not_found`);
-
-        const snapshot = JSON.parse(rows[0].snapshot_json);
-        const botClient = global.botManager?.getClientForGuild(guildId) || req.app.locals.client;
-        const guild = botClient?.guilds?.cache?.get(guildId);
-        if (!guild) return res.redirect(`/manage/${guildId}?page=backups&error=guild_not_found`);
-
-        const disc = snapshot.discord || snapshot;
-
-        logger.warn(`[Backup Restore] Starting v${snapshot.version || '?'} restore of "${rows[0].snapshot_name}" for ${guild.name} (${guildId}) by ${req.user.username}`);
-        void logFeatureEvent(() => (guild), 'backup.restoreStarted', () => ({
-            title: '⏳ Backup Restore Started',
-            description: `Restoring server backup **${rows[0].snapshot_name}** from the dashboard. Roles, channels, emojis and members' roles are being re-created or updated.`,
-            fields: [
-                ['Name', rows[0].snapshot_name],
-                ['By', userLabel(req.user)],
-                ['Roles', disc.roles?.length],
-                ['Channels', (disc.categories?.length || 0) + (disc.channels?.length || 0)],
-            ],
-        }));
-
-        const log = [];
-        const delay = (ms) => new Promise(r => setTimeout(r, ms));
-        const roleIdMap = new Map();
-        const categoryIdMap = new Map();
-        const channelIdMap = new Map();
-
-        // Phase 1: Roles
-        for (const rd of (disc.roles || []).sort((a, b) => b.position - a.position)) {
-            try {
-                const existing = guild.roles.cache.find(r => r.name === rd.name && !r.managed);
-                if (existing) {
-                    await existing.edit({ color: rd.color, hoist: rd.hoist, mentionable: rd.mentionable, permissions: BigInt(rd.permissions), reason: 'Backup restore' });
-                    roleIdMap.set(rd.id, existing.id);
-                    log.push(`Updated role: ${rd.name}`);
-                } else {
-                    const nr = await guild.roles.create({ name: rd.name, color: rd.color, hoist: rd.hoist, mentionable: rd.mentionable, permissions: BigInt(rd.permissions), reason: 'Backup restore' });
-                    roleIdMap.set(rd.id, nr.id);
-                    log.push(`Created role: ${rd.name}`);
-                }
-                await delay(300);
-            } catch (err) { log.push(`Failed role ${rd.name}: ${err.message}`); }
-        }
-        if (disc.everyonePermissions) {
-            try { await guild.roles.everyone.edit({ permissions: BigInt(disc.everyonePermissions), reason: 'Backup restore' }); log.push('Updated @everyone permissions'); } catch (err) { log.push(`Failed @everyone: ${err.message}`); }
-        }
-
-        // Phase 1.5: Member Role Assignments
-        const memberRolesData = disc.memberRoles || {};
-        if (Object.keys(memberRolesData).length > 0) {
-            await guild.members.fetch();
-            for (const [oldRoleId, memberIds] of Object.entries(memberRolesData)) {
-                const newRoleId = roleIdMap.get(oldRoleId) || oldRoleId;
-                const role = guild.roles.cache.get(newRoleId);
-                if (!role || role.managed) continue;
-                for (const memberId of memberIds) {
-                    try {
-                        const member = guild.members.cache.get(memberId);
-                        if (!member || member.roles.cache.has(newRoleId)) continue;
-                        await member.roles.add(role, 'Backup restore');
-                        log.push(`Assigned role ${role.name} to ${member.user.username}`);
-                        await delay(200);
-                    } catch { /* skip */ }
-                }
-            }
-        }
-
-        // Phase 1.6: Pending rejoin restores
-        // 0 = "Disabled" on the page; only a missing or unreadable value falls back to 30 days.
+        const backupId = parseInt(req.body.backupId, 10);
+        if (!backupId) return fail('No backup chosen.', 'no_id');
+        // Only a previewed plan runs: the page sends the hash of the preview the admin saw.
+        if (!req.body.planHash) return fail('Open the preview and confirm it first.', 'preview_required');
+        const backupRow = await loadBackupRow(pool, guildId, backupId);
+        if (!backupRow) return fail('That backup was not found.', 'not_found');
+        const guild = botGuild(req, guildId);
+        if (!guild) return fail('The bot cannot see this server.', 'guild_not_found');
+        // 0 = "Off" on the page; only a missing or unreadable value falls back to 30 days.
         const graceRaw = parseInt(req.body.gracePeriod, 10);
-        const gracePeriodDays = Number.isFinite(graceRaw) ? Math.min(Math.max(graceRaw, 0), 365) : 30;
-        if (disc.members && disc.members.length > 0 && gracePeriodDays > 0) {
-            try {
-                const pendingRestores = disc.members.map(m => ({
-                    userId: m.id, username: m.username, nickname: m.nickname,
-                    roles: m.roles.map(oldId => roleIdMap.get(oldId) || oldId).filter(id => guild.roles.cache.has(id))
-                })).filter(m => m.roles.length > 0);
-
-                if (pendingRestores.length > 0) {
-                    await pool.execute(
-                        `INSERT INTO guild_settings (guild_id, backup_restore_data, backup_restore_expires)
-                         VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))
-                         ON DUPLICATE KEY UPDATE backup_restore_data = VALUES(backup_restore_data), backup_restore_expires = VALUES(backup_restore_expires)`,
-                        [guildId, JSON.stringify(pendingRestores), gracePeriodDays]
-                    ).catch(() => { logger.warn('[Backup Restore] backup_restore_data column not found'); });
-                    log.push(`Stored ${pendingRestores.length} pending member restores (${gracePeriodDays}-day window)`);
-                }
-            } catch (err) { log.push(`Failed pending restores: ${err.message}`); }
-        }
-
-        // Phase 2: Categories
-        function mapOverwrites(owList) {
-            return (owList || []).map(ow => ({
-                id: (ow.type === 0 ? roleIdMap.get(ow.id) : ow.id) || ow.id,
-                type: ow.type, allow: BigInt(ow.allow), deny: BigInt(ow.deny)
-            })).filter(ow => ow.id);
-        }
-
-        for (const cd of (disc.categories || []).sort((a, b) => a.position - b.position)) {
-            try {
-                const existing = guild.channels.cache.find(c => c.type === 4 && c.name === cd.name);
-                const ow = mapOverwrites(cd.permissionOverwrites);
-                if (existing) {
-                    categoryIdMap.set(cd.id, existing.id);
-                    if (ow.length) await existing.permissionOverwrites.set(ow, 'Backup restore');
-                    log.push(`Updated category: ${cd.name}`);
-                } else {
-                    const nc = await guild.channels.create({ name: cd.name, type: 4, permissionOverwrites: ow, reason: 'Backup restore' });
-                    categoryIdMap.set(cd.id, nc.id);
-                    log.push(`Created category: ${cd.name}`);
-                }
-                await delay(500);
-            } catch (err) { log.push(`Failed category ${cd.name}: ${err.message}`); }
-        }
-
-        // Phase 3: Channels
-        for (const ch of (disc.channels || []).sort((a, b) => a.position - b.position)) {
-            try {
-                const existing = guild.channels.cache.find(c => c.type !== 4 && c.name === ch.name && c.type === ch.type);
-                const parentId = ch.parentId ? (categoryIdMap.get(ch.parentId) || ch.parentId) : null;
-                const validParent = parentId && guild.channels.cache.has(parentId) ? parentId : null;
-                const ow = mapOverwrites(ch.permissionOverwrites);
-
-                if (existing) {
-                    const ed = { reason: 'Backup restore' };
-                    if (ch.topic !== undefined) ed.topic = ch.topic;
-                    if (ch.nsfw !== undefined) ed.nsfw = ch.nsfw;
-                    if (validParent) ed.parent = validParent;
-                    if (ch.rateLimitPerUser && existing.type === 0) ed.rateLimitPerUser = ch.rateLimitPerUser;
-                    if (ch.defaultAutoArchiveDuration) ed.defaultAutoArchiveDuration = ch.defaultAutoArchiveDuration;
-                    await existing.edit(ed);
-                    if (ow.length) await existing.permissionOverwrites.set(ow, 'Backup restore');
-                    channelIdMap.set(ch.id, existing.id);
-                    log.push(`Updated channel: #${ch.name}`);
-                } else {
-                    const cd = { name: ch.name, type: ch.type, parent: validParent, permissionOverwrites: ow, reason: 'Backup restore' };
-                    if (ch.topic) cd.topic = ch.topic;
-                    if (ch.nsfw) cd.nsfw = ch.nsfw;
-                    if (ch.bitrate && (ch.type === 2 || ch.type === 13)) cd.bitrate = ch.bitrate;
-                    if (ch.userLimit && (ch.type === 2 || ch.type === 13)) cd.userLimit = ch.userLimit;
-                    if (ch.rateLimitPerUser && ch.type === 0) cd.rateLimitPerUser = ch.rateLimitPerUser;
-                    if (ch.defaultAutoArchiveDuration) cd.defaultAutoArchiveDuration = ch.defaultAutoArchiveDuration;
-                    if (ch.type === 15 && ch.availableTags) cd.availableTags = ch.availableTags;
-                    if (ch.type === 15 && ch.defaultForumLayout !== undefined) cd.defaultForumLayout = ch.defaultForumLayout;
-                    if (ch.type === 15 && ch.defaultSortOrder !== undefined) cd.defaultSortOrder = ch.defaultSortOrder;
-                    const nc = await guild.channels.create(cd);
-                    channelIdMap.set(ch.id, nc.id);
-                    log.push(`Created channel: #${ch.name}`);
-                }
-                await delay(500);
-            } catch (err) { log.push(`Failed channel #${ch.name}: ${err.message}`); }
-        }
-
-        // Phase 4: Server Settings
-        if (disc.settings) {
-            try {
-                const s = disc.settings;
-                const ed = { reason: 'Backup restore' };
-                if (s.verificationLevel !== undefined) ed.verificationLevel = s.verificationLevel;
-                if (s.defaultMessageNotifications !== undefined) ed.defaultMessageNotifications = s.defaultMessageNotifications;
-                if (s.explicitContentFilter !== undefined) ed.explicitContentFilter = s.explicitContentFilter;
-                if (s.afkTimeout !== undefined) ed.afkTimeout = s.afkTimeout;
-                if (s.preferredLocale) ed.preferredLocale = s.preferredLocale;
-                if (s.premiumProgressBarEnabled !== undefined) ed.premiumProgressBarEnabled = s.premiumProgressBarEnabled;
-                if (s.description !== undefined) ed.description = s.description;
-                if (s.systemChannelFlags !== undefined) ed.systemChannelFlags = s.systemChannelFlags;
-                if (s.afkChannelId) { const mapped = channelIdMap.get(s.afkChannelId) || s.afkChannelId; if (guild.channels.cache.has(mapped)) ed.afkChannel = mapped; }
-                if (s.systemChannelId) { const mapped = channelIdMap.get(s.systemChannelId) || s.systemChannelId; if (guild.channels.cache.has(mapped)) ed.systemChannel = mapped; }
-                if (s.rulesChannelId) { const mapped = channelIdMap.get(s.rulesChannelId) || s.rulesChannelId; if (guild.channels.cache.has(mapped)) ed.rulesChannel = mapped; }
-                if (s.publicUpdatesChannelId) { const mapped = channelIdMap.get(s.publicUpdatesChannelId) || s.publicUpdatesChannelId; if (guild.channels.cache.has(mapped)) ed.publicUpdatesChannel = mapped; }
-                await guild.edit(ed);
-                log.push('Updated server settings');
-            } catch (err) { log.push(`Failed settings: ${err.message}`); }
-        }
-
-        // Phase 5: Bot Config (DB)
-        if (snapshot.botConfig) {
-            // Table and column names go into SQL: only tables the backup system exports, only plain
-            // identifiers, and every row is pinned to this guild.
-            const allowedTables = new Set(BACKUP_CONFIG_TABLES);
-            for (const [table, tRows] of Object.entries(snapshot.botConfig)) {
-                if (!allowedTables.has(table) || !Array.isArray(tRows)) {
-                    log.push(`Skipped unknown table ${String(table).slice(0, 64)}`);
-                    continue;
-                }
-                // Only columns the table still has: an older snapshot can carry one that was dropped since
-                // (e.g. log_event_config.embed_color), which used to fail every insert. And replace the rows
-                // in one transaction, so a failed insert can never leave this server's table emptied.
-                let conn;
-                try {
-                    const [colRows] = await pool.execute(
-                        'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [table]);
-                    const known = new Set(colRows.map(r => r.COLUMN_NAME));
-                    if (!known.has('guild_id')) { log.push(`Skipped ${table}: not in this database`); continue; }
-                    const ignored = new Set();
-                    conn = await pool.getConnection();
-                    await conn.beginTransaction();
-                    await conn.execute(`DELETE FROM \`${table}\` WHERE guild_id = ?`, [guildId]);
-                    for (const row of tRows) {
-                        const cols = Object.keys(row).filter(c => /^[A-Za-z0-9_]{1,64}$/.test(c));
-                        for (const c of cols) if (!known.has(c)) ignored.add(c);
-                        const usable = cols.filter(c => known.has(c));
-                        const placeholders = usable.map(() => '?').join(', ');
-                        const values = usable.map(c => (c === 'guild_id' ? guildId : row[c]));
-                        await conn.execute(`INSERT INTO \`${table}\` (${usable.map(c => '`' + c + '`').join(', ')}) VALUES (${placeholders})`, values);
-                    }
-                    await conn.commit();
-                    log.push(`Restored ${tRows.length} rows in ${table}${ignored.size ? ` (ignored columns no longer in the database: ${[...ignored].join(', ')})` : ''}`);
-                } catch (err) {
-                    if (conn) await conn.rollback().catch(() => {});
-                    log.push(`Failed DB table ${table} (left as it was): ${err.message}`);
-                } finally {
-                    if (conn) conn.release();
-                }
-            }
-        }
-
-        // Phase 6: Bans
-        if (snapshot.bans && snapshot.bans.length > 0) {
-            const currentBans = await guild.bans.fetch().catch(() => new Map());
-            for (const ban of snapshot.bans) {
-                try {
-                    if (currentBans.has(ban.userId)) continue;
-                    await guild.members.ban(ban.userId, { reason: ban.reason ? `Backup restore: ${ban.reason}` : 'Backup restore' });
-                    log.push(`Restored ban: ${ban.username}`);
-                    await delay(300);
-                } catch { /* skip */ }
-            }
-        }
-
-        // Phase 7: Emojis
-        if (disc.emojis && disc.emojis.length > 0) {
-            const existingEmojis = guild.emojis.cache.map(e => e.name);
-            for (const emoji of disc.emojis) {
-                try {
-                    if (existingEmojis.includes(emoji.name)) continue;
-                    await guild.emojis.create({ attachment: emoji.url, name: emoji.name, reason: 'Backup restore' });
-                    log.push(`Restored emoji: ${emoji.name}`);
-                    await delay(500);
-                } catch { /* skip */ }
-            }
-        }
-
-        // Phase 8: Stickers
-        if (disc.stickers && disc.stickers.length > 0) {
-            const existingStickers = guild.stickers.cache.map(s => s.name);
-            for (const sticker of disc.stickers) {
-                try {
-                    if (existingStickers.includes(sticker.name)) continue;
-                    await guild.stickers.create({ file: sticker.url, name: sticker.name, tags: sticker.tags || 'custom', description: sticker.description || '', reason: 'Backup restore' });
-                    log.push(`Restored sticker: ${sticker.name}`);
-                    await delay(500);
-                } catch { /* skip */ }
-            }
-        }
-
-        // Phase 9: Webhooks
-        if (snapshot.webhooks && snapshot.webhooks.length > 0) {
-            for (const wh of snapshot.webhooks) {
-                try {
-                    const chId = channelIdMap.get(wh.channelId) || wh.channelId;
-                    const channel = guild.channels.cache.get(chId);
-                    if (!channel) continue;
-                    const existing = await channel.fetchWebhooks().catch(() => new Map());
-                    if (existing.some(w => w.name === wh.name)) continue;
-                    await channel.createWebhook({ name: wh.name, avatar: wh.avatar, reason: 'Backup restore' });
-                    log.push(`Restored webhook: ${wh.name}`);
-                    await delay(300);
-                } catch { /* skip */ }
-            }
-        }
-
-        const created = log.filter(l => l.startsWith('Created') || l.startsWith('Restored')).length;
-        const updated = log.filter(l => l.startsWith('Updated') || l.startsWith('Assigned') || l.startsWith('Stored')).length;
-        const failed = log.filter(l => l.startsWith('Failed')).length;
-        logger.info(`[Backup Restore] Completed v${snapshot.version || '?'} restore of "${rows[0].snapshot_name}" for ${guild.name} — ${log.length} ops: ${created} created/restored, ${updated} updated, ${failed} failed`);
-        const pendingLine = log.find(l => l.startsWith('Stored') && l.includes('pending member restores'));
-        void logFeatureEvent(() => (guild), 'backup.restored', () => ({
-            title: '♻️ Backup Restored',
-            description: `Server backup **${rows[0].snapshot_name}** was restored from the dashboard.`,
-            fields: [
-                ['Name', rows[0].snapshot_name],
-                ['By', userLabel(req.user)],
-                ['Created / restored', created],
-                ['Updated', updated],
-                ['Failed', failed],
-                ['Rejoin window', pendingLine ? `${gracePeriodDays} days — members who rejoin get their roles back` : null, false],
-            ],
-        }));
-
-        res.redirect(`/manage/${guildId}?page=backups&success=restored`);
+        const graceDays = Number.isFinite(graceRaw) ? Math.min(Math.max(graceRaw, 0), 365) : 30;
+        const r = await startRestore({ guild, backupRow, options: restoreOptions(req.body), by: req.user, source: 'dashboard',
+            expectedHash: String(req.body.planHash), graceDays, deps: restoreHooks(guild, req) });
+        if (!r.ok) return fail(r.error, 'restore_not_started', r.summary ? { summary: r.summary } : {});
+        r.done.catch(() => {});
+        if (wantsJson(req)) return res.json({ success: true, message: 'Restore started. Progress shows on this page.', run: publicRun(r.run) });
+        res.redirect(`/manage/${guildId}?page=backups&success=restore_started`);
     } catch (error) {
         logger.error('[Backup Restore] Error:', { error: error.message, stack: error.stack, guildId });
-        void logFeatureEvent(() => (liveGuild(guildId)), 'backup.failed', () => ({
-            title: '❌ Backup Failed',
-            description: 'A backup restore started from the dashboard stopped with an error. Part of the backup may already have been applied.',
-            fields: [['Action', 'Restore'], ['By', userLabel(req.user)], ['Why', String(error.message || 'Unknown error').slice(0, 300), false]],
-        }));
-        res.redirect(`/manage/${guildId}?page=backups&error=restore_failed`);
+        fail('The restore could not start. Nothing was changed.');
     }
+});
+
+router.post('/restore-backup/resume', async (req, res) => {
+    const guildId = req.params.guildId;
+    if (isRestoreDisabled()) return res.json({ success: false, error: RESTORE_UNAVAILABLE_MESSAGE });
+    try {
+        const prior = runStatus(guildId);
+        if (!prior || !['interrupted', 'failed', 'done_with_errors'].includes(prior.status)) return res.json({ success: false, error: 'There is no unfinished restore to resume.' });
+        const backupRow = await loadBackupRow(pool, guildId, prior.backupId);
+        if (!backupRow) return res.json({ success: false, error: 'The backup of that restore no longer exists.' });
+        const guild = botGuild(req, guildId);
+        if (!guild) return res.json({ success: false, error: 'The bot cannot see this server.' });
+        const r = await startRestore({ guild, backupRow, resume: true, by: req.user, source: 'dashboard', graceDays: prior.graceDays || 0, deps: restoreHooks(guild, req) });
+        if (!r.ok) return res.json({ success: false, error: r.error });
+        r.done.catch(() => {});
+        res.json({ success: true, message: 'Restore resumed.', run: publicRun(r.run) });
+    } catch (error) {
+        logger.error('[Backup Restore] Resume error:', { error: error.message, stack: error.stack, guildId });
+        res.json({ success: false, error: 'The restore could not be resumed.' });
+    }
+});
+
+backupApiRouter.get('/backup-restore-preview/:backupId', async (req, res) => {
+    const { guildId } = req.params;
+    try {
+        if (isRestoreDisabled()) return res.json({ success: false, error: RESTORE_UNAVAILABLE_MESSAGE });
+        const backupRow = await loadBackupRow(pool, guildId, parseInt(req.params.backupId, 10) || 0);
+        if (!backupRow) return res.status(404).json({ success: false, error: 'Backup not found' });
+        const guild = botGuild(req, guildId);
+        if (!guild) return res.status(404).json({ success: false, error: 'The bot cannot see this server.' });
+        const pv = await previewRestore({ guild, backupRow, options: restoreOptions(req.query) });
+        if (!pv.ok) return res.json({ success: false, error: pv.error });
+        res.json({ success: true, backupName: backupRow.snapshot_name, summary: pv.summary, running: !!activeRun(guildId) });
+    } catch (error) {
+        logger.error('[Backup Restore] Preview error:', { error: error.message, stack: error.stack, guildId });
+        res.status(500).json({ success: false, error: 'Could not build the preview.' });
+    }
+});
+
+backupApiRouter.get('/backup-restore-status', (req, res) => {
+    res.json({ success: true, run: publicRun(runStatus(req.params.guildId)) });
 });
 
 // Backup diff — compare a backup against current server state
@@ -444,7 +259,7 @@ backupApiRouter.get('/backup-diff/:backupId', async (req, res) => {
         const backupChNames = new Set((disc.channels || []).map(c => c.name));
         const currentChNames = new Set(currentChannels.map(c => c.name));
         for (const c of disc.channels || []) { if (!currentChNames.has(c.name)) diff.channels.removed.push(c.name); }
-        for (const [, c] of currentChannels) { if (!backupChNames.has(c.name)) diff.channels.added.push('#' + c.name); }
+        for (const [, c] of currentChannels) { if (!backupChNames.has(c.name)) diff.channels.added.push(c.name); } // the page adds the # (H-809)
 
         // Settings diff
         if (disc.settings) {

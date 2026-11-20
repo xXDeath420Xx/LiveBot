@@ -1,6 +1,8 @@
 <%#
   GET /stream/bot/overlays/:id (dashboard/routes/stream-bot-overlays.js). Locals: overlay (overlayView), config (complete settings),
   state, url (the browser-source address, or null), form (lists), media, sounds, voices, editData (page JSON), previewSrc (tests only).
+  A scene screen (type scene) has its own sections: title and lines, artwork (background, frame picture, see-through window),
+  glows and weather.
   Every setting carries data-cfg="<path>"; /js/stream-bot-overlays.js reads them into the config it saves (PUT), runs Test,
   goal, copy and new-address buttons, and scales the live preview. Nothing here builds markup from viewer text.
 %>
@@ -110,7 +112,7 @@
         <% } %>
         <% if (t === 'chat') { %>
         <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Chat from</legend></div>
-            <div class="cf-row-control sb-checks"><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="twitch"<%= _on(c.platforms.includes('twitch')) %>> Twitch</label><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="kick"<%= _on(c.platforms.includes('kick')) %>> Kick</label></div></fieldset>
+            <div class="cf-row-control sb-checks"><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="twitch"<%= _on(c.platforms.includes('twitch')) %>> Twitch</label><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="kick"<%= _on(c.platforms.includes('kick')) %>> Kick</label><label class="sb-check"<%= form.youtube ? '' : ' hidden' %>><input type="checkbox" data-cfg="platforms" data-multi value="youtube"<%= _on(c.platforms.includes('youtube')) %>> YouTube</label></div></fieldset>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-lines">Lines on screen</label></div>
             <div class="cf-row-control"><input type="number" id="sbo-lines" data-cfg="maxMessages" min="1" max="50" value="<%= c.maxMessages %>"></div></div>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-fade">Fade out after (seconds)</label><p class="cf-row-desc">0 keeps lines until newer ones push them out.</p></div>
@@ -129,8 +131,18 @@
             <div class="cf-row-control"><input type="checkbox" id="sbo-art" data-cfg="showArt"<%= _on(c.showArt) %>></div></div>
         <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-req">Who requested it</label></div>
             <div class="cf-row-control"><input type="checkbox" id="sbo-req" data-cfg="showRequester"<%= _on(c.showRequester) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-npbg">Card background</label></div>
+            <div class="cf-row-control"><select id="sbo-npbg" data-cfg="background"><%- _opts(form.npBackgrounds, c.background) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-npw">Card width (px)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-npw" data-cfg="width" min="240" max="1920" value="<%= c.width %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-npts">Song title size (px)</label><p class="cf-row-desc">The artist line is a little smaller.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-npts" data-cfg="titleSize" min="12" max="48" value="<%= c.titleSize %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-npbar">Progress bar colour</label></div>
+            <div class="cf-row-control"><input type="color" id="sbo-npbar" data-cfg="barColor" value="<%= c.barColor %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-nptimes">Times beside the bar</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-nptimes" data-cfg="showTimes"<%= _on(c.showTimes) %>></div></div>
         <% } %>
-        <% if (t !== 'nowplaying') { %>
+        <% if (t !== 'nowplaying' && t !== 'scene') { %>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-font">Font</label><p class="cf-row-desc">Fonts every Windows PC has, so OBS shows them without downloading anything.</p></div>
             <div class="cf-row-control"><select id="sbo-font" data-cfg="<%= gp %>font"><%- _opts(form.fonts, g.font) %></select></div></div>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-size"><%= t === 'canvas' ? 'Default text size (px)' : 'Text size (px at 1080p)' %></label></div>
@@ -153,7 +165,7 @@
             <div class="cf-row-control"><select id="sbo-apos" data-cfg="general.position"><%- _opts([{ value: 'top', label: 'Top' }, { value: 'center', label: 'Centre' }, { value: 'bottom', label: 'Bottom' }], c.general.position) %></select></div></div>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-gap">Pause between alerts (ms)</label></div>
             <div class="cf-row-control"><input type="number" id="sbo-gap" data-cfg="general.gapMs" min="0" max="5000" step="100" value="<%= c.general.gapMs %>"></div></div>
-        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-giftees">An alert for each gifted sub</label><p class="cf-row-desc">Off: a gift of five shows one Gift subs alert, not five Subscription alerts as well.</p></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-giftees">An alert for each gifted sub</label><p class="cf-row-desc">Off: a gift of five shows one Gift subs alert, not five Subscription alerts as well.<%= form.youtube ? ' The same goes for gifted YouTube memberships.' : '' %></p></div>
             <div class="cf-row-control"><input type="checkbox" id="sbo-giftees" data-cfg="general.showGiftedSubs"<%= _on(c.general.showGiftedSubs) %>></div></div>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-voice">Read-aloud voice</label><p class="cf-row-desc">For Bits and tip messages when Read the message aloud is on. Spoken by CertiFried's own voices and played inside this overlay, like the alert sound.</p></div>
             <div class="cf-row-control"><select id="sbo-voice" data-cfg="general.ttsVoice"><option value="">Default (Ryan)</option><%- _opts(voices, c.general.ttsVoice) %></select></div></div>
@@ -172,6 +184,131 @@
         <% } %>
     </div>
 </section>
+
+<% if (t === 'scene') { const _num = (id, path, v, lo, hi, step) => `<input type="number" id="${id}" data-cfg="${path}" min="${lo}" max="${hi}" step="${step || 1}" value="${_e(v)}">`; %>
+<section class="cf-section" aria-labelledby="sbo-scene-text-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-scene-text-title">Title and lines</h2>
+        <p class="cf-section-desc">Up and down positions are a share of the screen height, 0 at the top and 100 at the bottom.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-title">Title</label><p class="cf-row-desc">Empty shows no title (a Just Chatting screen, for example).</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-sc-title" data-cfg="title" maxlength="80" value="<%= c.title %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-tstyle">Title look</label></div>
+            <div class="cf-row-control"><select id="sbo-sc-tstyle" data-cfg="titleStyle"><%- _opts(form.titleStyles, c.titleStyle) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-font">Font</label><p class="cf-row-desc">Fonts every Windows PC has, so OBS shows them without downloading anything.</p></div>
+            <div class="cf-row-control"><select id="sbo-sc-font" data-cfg="font"><%- _opts(form.fonts, c.font) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-tsize">Title size (px at 1080p)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-tsize', 'titleSize', c.titleSize, 24, 200) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-tcolor">Title colour</label></div>
+            <div class="cf-row-control"><input type="color" id="sbo-sc-tcolor" data-cfg="titleColor" value="<%= c.titleColor %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-glow">Glow colour</label><p class="cf-row-desc">Around the title and the lines under it.</p></div>
+            <div class="cf-row-control"><input type="color" id="sbo-sc-glow" data-cfg="glowColor" value="<%= c.glowColor %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-ty">Title up or down</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-ty', 'titleY', c.titleY, 0, 100, 0.1) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-sub">Second line</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-sc-sub" data-cfg="subtitle" maxlength="160" value="<%= c.subtitle %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-smode">Second line moves</label></div>
+            <div class="cf-row-control"><select id="sbo-sc-smode" data-cfg="subtitleMode"><%- _opts([{ value: 'marquee', label: 'Scrolls across the screen' }, { value: 'still', label: 'Stays in the middle' }], c.subtitleMode) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-msec">Seconds to scroll across</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-msec', 'marqueeSec', c.marqueeSec, 4, 120) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-ssize">Line size (px)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-ssize', 'subtitleSize', c.subtitleSize, 12, 80) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-scolor">Line colour</label></div>
+            <div class="cf-row-control"><input type="color" id="sbo-sc-scolor" data-cfg="subtitleColor" value="<%= c.subtitleColor %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-sy">Line up or down</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-sy', 'subtitleY', c.subtitleY, 0, 100, 0.1) %></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-cd">Countdown</label><p class="cf-row-desc">Starts when the scene is shown (Studio adds the source with "Refresh browser when scene becomes active").</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-sc-cd" data-cfg="countdown.enabled"<%= _on(c.countdown.enabled) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-cdmin">Countdown minutes</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-cdmin', 'countdown.minutes', c.countdown.minutes, 1, 180) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-cdlabel">Before the time</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-sc-cdlabel" data-cfg="countdown.label" maxlength="40" value="<%= c.countdown.label %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-cdend">When it reaches 0</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-sc-cdend" data-cfg="countdown.endText" maxlength="60" value="<%= c.countdown.endText %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-cdy">Countdown up or down</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-cdy', 'countdown.y', c.countdown.y, 0, 100, 0.1) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-soc">Socials line</label><p class="cf-row-desc">For example twitch.tv/you · kick.com/you. Empty shows nothing.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-sc-soc" data-cfg="socials" maxlength="200" value="<%= c.socials %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-socy">Socials up or down</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-socy', 'socialsY', c.socialsY, 0, 100, 0.1) %></div></div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbo-scene-art-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-scene-art-title">Artwork</h2>
+        <p class="cf-section-desc">The picture fills the screen. Positions below are a share of the picture, 0 to 100 across and down, so they stay on the same spot of your art.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-bg">Background picture or video</label><p class="cf-row-desc">From Images and videos on the Overlays tab.</p></div>
+            <div class="cf-row-control"><select id="sbo-sc-bg" data-cfg="background"><%- _mediaOpts(c.background) %></select></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-kb">Slow zoom</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-sc-kb" data-cfg="kenBurns"<%= _on(c.kenBurns) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-kbs">Zoom to (%)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-kbs', 'kenBurnsScale', c.kenBurnsScale, 100, 130) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-kbt">Zoom takes (seconds)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-kbt', 'kenBurnsSec', c.kenBurnsSec, 5, 120) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-dim">Darken the picture (%)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-dim', 'dim', c.dim, 0, 90) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-inset">Picture in a frame</label><p class="cf-row-desc">A second picture or animation placed on your art, such as a poster in a frame.</p></div>
+            <div class="cf-row-control"><select id="sbo-sc-inset" data-cfg="inset.media"><%- _mediaOpts(c.inset.media) %></select></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Frame picture: left, top, width, height</legend></div>
+            <div class="cf-row-control sb-fields">
+                <div class="sb-field"><label for="sbo-sc-ix">Left</label><%- _num('sbo-sc-ix', 'inset.x', c.inset.x, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-iy">Top</label><%- _num('sbo-sc-iy', 'inset.y', c.inset.y, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-iw">Width</label><%- _num('sbo-sc-iw', 'inset.w', c.inset.w, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-ih">Height</label><%- _num('sbo-sc-ih', 'inset.h', c.inset.h, 0, 100, 0.1) %></div>
+            </div></fieldset>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-win">See-through window</label><p class="cf-row-desc">Cuts a soft-edged hole in the art so a camera placed under this source in OBS shows through. Replaces the frame picture.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-sc-win" data-cfg="window.enabled"<%= _on(c.window.enabled) %>></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Window: left, top, width, height, soft edge</legend></div>
+            <div class="cf-row-control sb-fields">
+                <div class="sb-field"><label for="sbo-sc-wx">Left</label><%- _num('sbo-sc-wx', 'window.x', c.window.x, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-wy">Top</label><%- _num('sbo-sc-wy', 'window.y', c.window.y, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-ww">Width</label><%- _num('sbo-sc-ww', 'window.w', c.window.w, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-wh">Height</label><%- _num('sbo-sc-wh', 'window.h', c.window.h, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-wf">Soft edge</label><%- _num('sbo-sc-wf', 'window.feather', c.window.feather, 0, 10, 0.1) %></div>
+            </div></fieldset>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbo-scene-fx-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-scene-fx-title">Glows and weather</h2>
+        <p class="cf-section-desc">Glows are soft lights on your art: eyes, a lantern, a screen. Size is a share of the picture's width.</p></div></header>
+    <div class="cf-rows">
+        <% for (let gi = 0; gi < form.sceneLimits.glows; gi++) { const gl = c.glows[gi] || null; const gid = 'sbo-sc-g' + gi; %>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Glow <%= gi + 1 %></legend></div>
+            <div class="cf-row-control sb-fields">
+                <div class="sb-field"><label class="sb-check" for="<%= gid %>-on"><input type="checkbox" id="<%= gid %>-on" data-cfg="glows.<%= gi %>.on"<%= _on(!!gl) %>> On</label></div>
+                <div class="sb-field"><label for="<%= gid %>-x">Across</label><%- _num(gid + '-x', 'glows.' + gi + '.x', gl ? gl.x : 50, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="<%= gid %>-y">Down</label><%- _num(gid + '-y', 'glows.' + gi + '.y', gl ? gl.y : 50, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="<%= gid %>-s">Size</label><%- _num(gid + '-s', 'glows.' + gi + '.size', gl ? gl.size : 4, 0.5, 30, 0.1) %></div>
+                <div class="sb-field"><label for="<%= gid %>-c">Colour</label><input type="color" id="<%= gid %>-c" data-cfg="glows.<%= gi %>.color" value="<%= gl ? gl.color : '#ffb256' %>"></div>
+                <div class="sb-field"><label for="<%= gid %>-st">Moves</label><select id="<%= gid %>-st" data-cfg="glows.<%= gi %>.style"><%- _opts(form.glowStyles, gl ? gl.style : 'pulse') %></select></div>
+            </div></fieldset>
+        <% } %>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-smoke">Rising smoke</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-sc-smoke" data-cfg="smoke.enabled"<%= _on(c.smoke.enabled) %>></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Smoke: across, down, amount (%)</legend></div>
+            <div class="cf-row-control sb-fields">
+                <div class="sb-field"><label for="sbo-sc-smx">Across</label><%- _num('sbo-sc-smx', 'smoke.x', c.smoke.x, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-smy">Down</label><%- _num('sbo-sc-smy', 'smoke.y', c.smoke.y, 0, 100, 0.1) %></div>
+                <div class="sb-field"><label for="sbo-sc-smi">Amount</label><%- _num('sbo-sc-smi', 'smoke.intensity', c.smoke.intensity, 10, 300) %></div>
+            </div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-emb">Embers (how many)</label><p class="cf-row-desc">0 for none.</p></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-emb', 'embers', c.embers, 0, 150) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-emba">Embers rise</label></div>
+            <div class="cf-row-control"><select id="sbo-sc-emba" data-cfg="emberArea"><%- _opts([{ value: 'all', label: 'Across the whole screen' }, { value: 'centre', label: 'From the middle and bottom only' }], c.emberArea) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-rain">Rain (%)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-rain', 'rain', c.rain, 0, 100) %></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-light">Lightning flashes</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-sc-light" data-cfg="lightning"<%= _on(c.lightning) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-fog">Drifting fog (%)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-fog', 'fog', c.fog, 0, 100) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-vig">Dark edges (%)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-vig', 'vignette', c.vignette, 0, 100) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-sc-grain">Film grain (%)</label></div>
+            <div class="cf-row-control"><%- _num('sbo-sc-grain', 'grain', c.grain, 0, 30) %></div></div>
+    </div>
+</section>
+<% } %>
 
 <% if (t === 'alerts') { form.alertKinds.forEach((k) => { const a = c.alerts[k.key]; const id = 'sbo-a-' + k.key; const p = 'alerts.' + k.key + '.'; %>
 <section class="cf-section" aria-labelledby="<%= id %>-title">
@@ -192,6 +329,10 @@
                 <div class="cf-row-control"><select id="<%= id %>-anim" data-cfg="<%= p %>animation"><%- _opts(form.animations, a.animation) %></select></div></div>
             <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-media">Image or video</label><p class="cf-row-desc">From Images and videos on the Overlays tab.</p></div>
                 <div class="cf-row-control"><select id="<%= id %>-media" data-cfg="<%= p %>media"><%- _mediaOpts(a.media) %></select></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-scale">Image size (%)</label><p class="cf-row-desc">A share of the file's own size. 100 keeps the layout's usual size.</p></div>
+                <div class="cf-row-control"><input type="number" id="<%= id %>-scale" data-cfg="<%= p %>mediaScale" min="10" max="200" value="<%= a.mediaScale %>"></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-tdelay">Text appears after (ms)</label><p class="cf-row-desc">Lets the image or video play in first. 0 shows the text at once.</p></div>
+                <div class="cf-row-control"><input type="number" id="<%= id %>-tdelay" data-cfg="<%= p %>textDelayMs" min="0" max="5000" step="100" value="<%= a.textDelayMs %>"></div></div>
             <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-sound">Sound</label><p class="cf-row-desc">From your <a href="/stream/bot/sounds">Sounds</a>. It plays inside this overlay.</p></div>
                 <div class="cf-row-control"><select id="<%= id %>-sound" data-cfg="<%= p %>sound"><%- _soundOpts(a.sound) %></select></div></div>
             <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-vol">Sound volume</label></div>

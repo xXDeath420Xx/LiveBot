@@ -12,7 +12,7 @@ import {
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
 
-// guildId -> { connection, player, ff, session, channelId }
+// guildId -> { connection, player, ff, session, channelId, textChannel }
 const live = new Map();
 
 // Nudge the music panel to re-render (spotify-direct has no discord-player events).
@@ -71,10 +71,17 @@ function uriFor(parsed) {
   return `spotify:${parsed.type}:${parsed.id}`; // track|playlist|album|artist
 }
 
-async function teardown(guildId) {
+// The session is someone else's now (an owner preemption moved it): never pause or release it from here.
+const takenByOther = (session, guildId) => !!session?.busyGuildId && session.busyGuildId !== guildId;
+
+/** stopHolder for acquire(): `info.preempted` when the owner took the shared account for another server (H-760). */
+async function teardown(guildId, info = null) {
   const s = live.get(guildId);
   if (!s) return;
   live.delete(guildId);
+  if (info?.preempted && s.textChannel?.send) {
+    try { s.textChannel.send('⏸️ The owner started Spotify on the shared account — **`/spotify link`** your own to keep playing here.').catch(() => {}); } catch {}
+  }
   try { if (s.onStateChange) s.connection?.off('stateChange', s.onStateChange); } catch {}
   try { s.subscription?.unsubscribe(); } catch {}
   try { s.player?.stop(true); } catch {}
@@ -89,7 +96,10 @@ async function teardown(guildId) {
     const ap = global.player?.nodes?.get(guildId)?.dispatcher?.audioPlayer;
     if (ap) { try { s.connection?.subscribe(ap); } catch {} }
   }
-  if (s.session) { await glrStop(s.session).catch(() => {}); release(s.session, guildId); }
+  if (s.session) {
+    if (!takenByOther(s.session, guildId)) await glrStop(s.session).catch(() => {});
+    release(s.session, guildId);
+  }
 }
 
 export default {
@@ -165,7 +175,7 @@ export default {
     const session = await getSessionForUser(interaction.user.id);
     if (!session) return interaction.editReply('No Spotify account is available. Link yours with `/spotify link`.');
     const owner = isOwnerUser(interaction.user.id);
-    if (!acquire(session, guildId, { owner, stopHolder: () => teardown(guildId) })) {
+    if (!acquire(session, guildId, { owner, stopHolder: (info) => teardown(guildId, info) })) {
       const mine = owner || await isLinked(interaction.user.id);
       return interaction.editReply(mine
         ? 'Your Spotify account is already streaming in another server. One stream per account.'
@@ -179,7 +189,7 @@ export default {
     const abort = async () => {
       try { ff?.kill('SIGKILL'); } catch {}
       if (ownsConnection) { try { connection?.destroy(); } catch {} }
-      await glrStop(session).catch(() => {});
+      if (!takenByOther(session, guildId)) await glrStop(session).catch(() => {});
       release(session, guildId);
     };
 
@@ -188,7 +198,7 @@ export default {
       // teardown() released the lock if this guild already held it — re-take it WITH the
       // owner/stopHolder settings, or an owner's stream becomes preemptable and a preempted
       // stream is never torn down on the Discord side.
-      acquire(session, guildId, { owner, stopHolder: () => teardown(guildId) });
+      acquire(session, guildId, { owner, stopHolder: (info) => teardown(guildId, info) });
 
       // Reader-first ordering: open ffmpeg on the FIFO (it waits for go-librespot to
       // start writing), join the VC, THEN trigger playback — so audio flows from the
@@ -221,13 +231,18 @@ export default {
       }
       try { await waitReady(connection, 20000); }
       catch (e) { await abort(); return interaction.editReply('Couldn\'t connect to the voice channel.'); }
+      // The owner took the shared account while we were joining (its stop found nothing live to tear down yet).
+      if (takenByOther(session, guildId)) {
+        await abort();
+        return interaction.editReply('⏸️ The owner started Spotify on the shared account — **`/spotify link`** your own to keep playing here.');
+      }
 
       const subscription = connection.subscribe(player);
       player.play(resource);
       player.on('error', err => logger.error(`[SpotifyConnect] player error in ${guildId}: ${err.message}`));
       const onStateChange = (_o, ns) => { if (ns.status === 'disconnected' || ns.status === 'destroyed') teardown(guildId); };
       connection.on('stateChange', onStateChange);
-      live.set(guildId, { connection, player, ff, session, channelId: vc.id, ownsConnection, subscription, onStateChange });
+      live.set(guildId, { connection, player, ff, session, channelId: vc.id, textChannel: interaction.channel || null, ownsConnection, subscription, onStateChange });
 
       // Start playback. go-librespot's /player/play returns HTTP 500 EVEN ON SUCCESS,
       // so we ignore the code and confirm via the player STATE instead.

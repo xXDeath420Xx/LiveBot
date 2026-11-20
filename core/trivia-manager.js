@@ -245,17 +245,20 @@ export async function endGame(interaction, gameId) {
             // Award coins based on score
             economyReward = Math.floor(game.score * 5);
 
-            await pool.execute(
+            // A member who never used the economy has no row: make it, and only report coins that were paid (H-807).
+            await pool.execute('INSERT IGNORE INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)', [game.guildId, game.userId]);
+            const [paid] = await pool.execute(
                 'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
                 [economyReward, economyReward, game.guildId, game.userId]
             );
+            if (!(paid?.affectedRows > 0)) economyReward = 0;
 
             const [[userEconomy]] = await pool.execute(
                 'SELECT wallet FROM user_economy WHERE guild_id = ? AND user_id = ?',
                 [game.guildId, game.userId]
             );
 
-            if (userEconomy) {
+            if (userEconomy && economyReward > 0) {
                 await pool.execute(
                     `INSERT INTO economy_transactions (guild_id, user_id, transaction_type, amount, balance_before, balance_after, description)
                      VALUES (?, ?, 'reward', ?, ?, ?, ?)`,

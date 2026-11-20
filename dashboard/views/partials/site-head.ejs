@@ -6,6 +6,7 @@
   Page-specific stylesheets (Font Awesome, /css/cf-settings.css, a page's own CSS) are plain
   <link> tags in the page, right after this include.
   Locals: title (required; the full <title> text), description, path (canonical path, e.g. '/docs'), noindex.
+  Optional share-card overrides (pages that unfurl per item, e.g. /sprites/u/:id): ogTitle, ogImage (absolute URL), ogType.
   The <html> tag itself stays in the page, with data-theme / data-density / data-style
   taken from locals.uiTheme, locals.uiDensity and locals.uiStyle (set by the preferences middleware).
 %>
@@ -13,6 +14,8 @@
   const _siteTitle = (typeof title !== 'undefined' && title) ? title : 'CertiFried';
   const _siteDesc = (typeof description !== 'undefined' && description) ? description : 'CertiFried: a free Discord bot for moderation, protection, stream alerts, levels, music and games, managed from a web dashboard.';
   const _sitePath = (typeof path !== 'undefined' && path) ? path : null;
+  const _ogTitle = (typeof ogTitle !== 'undefined' && ogTitle) ? ogTitle : _siteTitle;
+  const _ogImage = (typeof ogImage !== 'undefined' && /^https:\/\//.test(String(ogImage))) ? ogImage : 'https://certifriedmultitool.com/images/CertiFried.png';
 
 %>
     <script>
@@ -43,9 +46,10 @@
     <meta name="description" content="<%= _siteDesc %>">
     <% if (typeof noindex !== 'undefined' && noindex) { %><meta name="robots" content="noindex"><% } %>
     <meta property="og:site_name" content="CertiFried">
-    <meta property="og:title" content="<%= _siteTitle %>">
+    <% if (typeof ogType !== 'undefined' && ogType) { %><meta property="og:type" content="<%= ogType %>"><% } %>
+    <meta property="og:title" content="<%= _ogTitle %>">
     <meta property="og:description" content="<%= _siteDesc %>">
-    <meta property="og:image" content="https://certifriedmultitool.com/images/CertiFried.png">
+    <meta property="og:image" content="<%= _ogImage %>">
     <% if (_sitePath) { %><link rel="canonical" href="https://certifriedmultitool.com<%= _sitePath %>"><meta property="og:url" content="https://certifriedmultitool.com<%= _sitePath %>"><% } %>
     <% const _tcMeta = { light: '#f6f7f8', sand: '#faf6ef' }[locals.uiTheme] || '#0e0f11'; %>
     <% if (locals.uiTheme === 'auto') { %><meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f8"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0f11"><% } else { %><meta name="theme-color" content="<%= _tcMeta %>"><% } %>

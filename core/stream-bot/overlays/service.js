@@ -85,12 +85,22 @@ export function createOverlayService({
                 case 'counter': return { value: await counterValue(o) };
                 case 'nowplaying': return { now: nowCard(o) };
                 case 'chat': return { messages: (chatRing.get(o.profileId) || []).filter((m) => visibleFor(m, o.config)).slice(-o.config.maxMessages) };
+                case 'scene': return { media: await sceneMedia(o) };
                 default: return {};
             }
         } catch (err) {
             log('warn', 'initial state failed', { overlayId: o.id, error: err?.message });
             return {};
         }
+    }
+    /** The kinds of a scene screen's media ({ [id]: 'image' | 'video' }), so the page knows what element to draw. */
+    async function sceneMedia(o) {
+        const out = {};
+        for (const id of [o.config?.background, o.config?.inset?.media].filter(Boolean)) {
+            const m = media ? await media.get(o.profileId, id).catch(() => null) : null;
+            if (m) out[m.id] = m.kind;
+        }
+        return out;
     }
     const goalView = (o, current) => ({ title: o.config.title, current: Math.round(current * 100) / 100, target: o.config.target, metric: o.config.metric });
     async function counterValue(o) {
@@ -274,6 +284,7 @@ export function createOverlayService({
         const out = {
             id: crypto.randomBytes(6).toString('hex'), key, label: ALERT_KINDS[key].label, test,
             layout: v.layout, animation: v.animation, durationMs: Number(v.durationMs) || a.durationMs,
+            mediaScale: Number(a.mediaScale) || 100, textDelayMs: Number(a.textDelayMs) || 0,
             title: await renderText(v.message, ev, o.profileId), name: ev.user?.name ? String(ev.user.name).slice(0, 60) : null,
             detail: v.detail ? await renderText(v.detail, ev, o.profileId) : '', message: v.showMessage ? viewerMessage(ev) : '',
             media: null, sound: null, tts: null, variation: v.variation,

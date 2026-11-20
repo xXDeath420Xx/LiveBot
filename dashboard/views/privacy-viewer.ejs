@@ -1,0 +1,129 @@
+<%#
+  GET /privacy/viewer (dashboard/routes/privacy-viewer.js, H-772). Locals: user, accounts [{ platform, login, name }],
+  providers { twitch, kick } (sign-in configured), counts [{ table, total }] | null, message, error, deleted [{ table, n }] | null,
+  csrfToken (global middleware).
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Your viewer data · CertiFried', description: 'Watched a stream that uses the CertiFried stream bot? Sign in with Twitch or Kick to download or delete what the stream bot holds about you. No CertiFried account needed.', path: '/privacy/viewer' }) %>
+    <style>
+        .pv-box { margin: 0 0 var(--cf-6); padding: var(--cf-4) var(--cf-5); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); }
+        .pv-box h2 { margin-top: 0; }
+        .pv-actions { display: flex; flex-wrap: wrap; gap: var(--cf-3); align-items: center; margin-top: var(--cf-3); }
+        .pv-actions form { margin: 0; }
+        .pv-note { color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+        .pv-status { margin: 0 0 var(--cf-6); padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border); border-left: 3px solid var(--cf-accent-line); border-radius: var(--cf-radius); background: var(--cf-surface); color: var(--cf-text); }
+        .pv-status.is-error { border-left-color: var(--cf-danger, var(--cf-accent-line)); }
+        .pv-table { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+        .pv-table th, .pv-table td { text-align: left; padding: var(--cf-2) var(--cf-3); border-bottom: 1px solid var(--cf-border); }
+        .pv-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .pv-confirm { display: flex; flex-wrap: wrap; gap: var(--cf-3); align-items: flex-end; }
+        .pv-confirm label { display: block; font-size: var(--cf-text-sm); color: var(--cf-text-2); margin-bottom: var(--cf-1); }
+        .pv-confirm input { min-height: 40px; padding: 0 var(--cf-3); border: 1px solid var(--cf-border-strong, var(--cf-border)); border-radius: var(--cf-radius); background: var(--cf-bg); color: var(--cf-text); font: inherit; }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/privacy/viewer' }) %>
+<%
+  const _accounts = Array.isArray(locals.accounts) ? locals.accounts : [];
+  const _providers = locals.providers || {};
+  const _label = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' };
+  const _tables = {
+    stream_bot_events_about_you: 'Events where you are the viewer (follows, subs, cheers, raids, redemptions, tips, and chat where a streamer keeps chat)',
+    stream_bot_events_naming_you: 'Other people\'s events that name you (a chat reply to you or a mention, a gift sub you received, a raid into your channel); on delete your name and ID are removed from them',
+    stream_bot_music_named_you: 'Song requests, bans and playlist songs where you are named as the person who handled them',
+    stream_bot_music_requests_decided: 'Song requests you approved, denied or removed (your name removed)',
+    stream_bot_music_bans_created: 'Song bans you added (your name removed)',
+    stream_bot_music_playlist_items_added: 'Playlist songs you added (your name removed)',
+    stream_bot_values_for_you: 'Values a streamer\'s commands saved for you ({db:…})',
+    stream_bot_viewers_about_you: 'Your viewer record in a streamer\'s channel: watch time, chat messages, points, rank, and follow, sub, gift, Bits, raid and tip counts',
+    stream_bot_viewer_history_about_you: 'Changes to your points there (bonuses, gifts, gambles, the streamer\'s changes) and rank-ups',
+    stream_bot_viewers: 'Your viewer records (watch time, messages, points)',
+    stream_bot_viewer_history: 'Point history of your viewer records',
+    stream_bot_music_requests_by_you: 'Song requests you made',
+    stream_bot_music_likes_by_you: 'Songs you liked (!like)',
+    twitch_user_follows: 'Channels your Twitch account followed (read once on October 28, 2026; no longer collected)',
+    stream_bot_events: 'Events where you were the viewer',
+    stream_bot_variables: 'Values saved for you ({db:…})',
+    stream_bot_music_likes: 'Song likes',
+    stream_bot_music_requests: 'Song requests (your name and words removed; the streamer keeps a nameless line)',
+  };
+%>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+        <div class="cfs-pagehead">
+            <h1>Your viewer data</h1>
+            <p class="cfs-lede">If you watch or chat in a stream that uses the CertiFried stream bot, it may hold your follows, subs, cheers, song requests and similar events, and a viewer record with your watch time, chat message count and points, linked to your Twitch or Kick account. Sign in with that account to download or delete them, in every streamer&rsquo;s channel. You do not need a CertiFried account.</p>
+        </div>
+
+        <% if (locals.error) { %><div class="pv-status is-error" role="alert"><%= locals.error %></div><% } %>
+        <% if (locals.message) { %><div class="pv-status" role="status"><%= locals.message %>
+            <% if (Array.isArray(locals.deleted) && locals.deleted.length) { %><ul><% locals.deleted.forEach((d) => { %><li><%= _tables[d.table] || d.table %>: <%= d.n %></li><% }) %></ul><% } else if (Array.isArray(locals.deleted)) { %> There was nothing to delete.<% } %>
+        </div><% } %>
+
+        <% if (!_accounts.length) { %>
+        <section class="pv-box" aria-labelledby="pv-sign-h">
+            <h2 id="pv-sign-h">Sign in to prove the account is yours</h2>
+            <p>We only ask Twitch, Kick or YouTube who you are. Twitch is asked for no permissions at all; Kick is asked for <code>user:read</code>, the least it allows; Google is asked to see your YouTube channel (<code>youtube.readonly</code>), the least that says which channel is yours. The sign-in is used once and then revoked, and nothing from it is stored. You stay signed in on this page for 30 minutes.</p>
+            <div class="pv-actions">
+                <% if (_providers.twitch) { %><a class="btn btn-primary" href="/privacy/viewer/twitch">Sign in with Twitch</a><% } %>
+                <% if (_providers.kick) { %><a class="btn btn-secondary" href="/privacy/viewer/kick">Sign in with Kick</a><% } %>
+                <% if (_providers.youtube) { %><a class="btn btn-secondary" href="/privacy/viewer/youtube">Sign in with YouTube</a><% } %>
+            </div>
+            <% if (!_providers.twitch || !_providers.kick || !_providers.youtube) { %><p class="pv-note">A sign-in that is not available here can still be handled by email: <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</p><% } %>
+        </section>
+        <% } else { %>
+        <section class="pv-box" aria-labelledby="pv-who-h">
+            <h2 id="pv-who-h">Signed in</h2>
+            <ul>
+                <% _accounts.forEach((a) => { %><li><%= _label[a.platform] || a.platform %>: <strong><%= a.name || a.login %></strong></li><% }) %>
+            </ul>
+            <div class="pv-actions">
+                <% if (_providers.twitch && !_accounts.some((a) => a.platform === 'twitch')) { %><a class="btn btn-secondary btn-sm" href="/privacy/viewer/twitch">Add your Twitch account</a><% } %>
+                <% if (_providers.kick && !_accounts.some((a) => a.platform === 'kick')) { %><a class="btn btn-secondary btn-sm" href="/privacy/viewer/kick">Add your Kick account</a><% } %>
+                <% if (_providers.youtube && !_accounts.some((a) => a.platform === 'youtube')) { %><a class="btn btn-secondary btn-sm" href="/privacy/viewer/youtube">Add your YouTube channel</a><% } %>
+                <form method="post" action="/privacy/viewer/sign-out"><input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>"><button type="submit" class="btn btn-secondary btn-sm">Sign out</button></form>
+            </div>
+        </section>
+
+        <section class="pv-box" aria-labelledby="pv-held-h">
+            <h2 id="pv-held-h">What the stream bot holds about you</h2>
+            <% if (Array.isArray(locals.counts) && locals.counts.length) { %>
+            <table class="pv-table">
+                <thead><tr><th scope="col">Data</th><th scope="col" class="num">Rows</th></tr></thead>
+                <tbody><% locals.counts.forEach((c) => { %><tr><td><%= _tables[c.table] || c.table %></td><td class="num"><%= c.total %></td></tr><% }) %></tbody>
+            </table>
+            <% } else if (Array.isArray(locals.counts)) { %>
+            <p>Nothing. The stream bot holds no events, viewer records, song requests, likes or saved values for <%= _accounts.length > 1 ? 'these accounts' : 'this account' %>.</p>
+            <% } %>
+            <div class="pv-actions">
+                <a class="btn btn-primary" href="/privacy/viewer/export" download>Download my data (JSON)</a>
+            </div>
+            <p class="pv-note">Up to 1,000 rows per table, newest first. Streamers&rsquo; own copies (their Twitch or Kick dashboards, recordings, screenshots) are not held by CertiFried.</p>
+        </section>
+
+        <section class="pv-box" aria-labelledby="pv-del-h">
+            <h2 id="pv-del-h">Delete my data</h2>
+            <p>This deletes the events where you are the viewer, your viewer records (watch time, messages, points and their history), the values streamers&rsquo; commands saved for you and your song likes, and removes your name and what you typed from your song requests (the streamer keeps a nameless line in their queue history). Where someone else&rsquo;s event names you (a chat reply to you or a mention, a gift sub you received, a raid into your channel) or a song request names you as the person who handled it, your name and ID are removed and the rest stays. For Twitch it also deletes the old list of channels your account followed, if CertiFried has one. It cannot be undone. A stream bot keeps working: new events from you after this are stored again for their normal time (90 days for events).</p>
+            <form method="post" action="/privacy/viewer/delete" class="pv-confirm">
+                <input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>">
+                <div><label for="pv-confirm">Type DELETE to confirm</label><input type="text" id="pv-confirm" name="confirm" autocomplete="off" spellcheck="false" required pattern="DELETE"></div>
+                <button type="submit" class="btn btn-danger">Delete my data</button>
+            </form>
+        </section>
+        <% } %>
+
+        <section class="cfs-section" aria-labelledby="pv-more-h">
+            <h2 id="pv-more-h">More</h2>
+            <div class="cfs-prose">
+                <ul>
+                    <li>Have a CertiFried account (signed in with Discord)? <code>/privacy export</code> and <code>/privacy delete</code> with the bot cover everything, including this, through the Twitch and Kick accounts you linked.</li>
+                    <li>Moderation actions a streamer took in their own channel (bans, timeouts) are kept by Twitch or Kick, not by CertiFried.</li>
+                    <li>The <a href="/privacy">Privacy Policy</a> and <a href="/legal/data">Data we collect</a> explain what is kept and for how long. Questions: <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

@@ -1,8 +1,9 @@
 <%
 // Server backups: create a snapshot, restore or delete one, and compare one with the server as it
-// is now (the compare dialog). Built on the settings-row kit (cf-settings.css). Forms, field names
-// (snapshot_name, backupId, gracePeriod) and routes (dashboard/routes/features/backups.js) are
-// unchanged; the list is one row per backup with its actions.
+// is now (the compare dialog). Built on the settings-row kit (cf-settings.css). Restore (H-801, 2026-11-20)
+// opens a preview dialog (GET /api/guilds/:id/backup-restore-preview), posts the confirmed plan's hash to
+// /manage/:id/restore-backup and shows progress (backup-restore-status) with Resume; create and delete
+// are plain forms (dashboard/routes/features/backups.js).
 const bkList = (typeof backups !== 'undefined' && Array.isArray(backups)) ? backups.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) : [];
 const bkNow = Date.now();
 const bkAge = (d) => {
@@ -31,6 +32,19 @@ const bkBy = (id) => {
     .diff-changed { color: var(--cf-warning); background: color-mix(in srgb, var(--cf-warning) 10%, transparent); }
     .diff-summary { justify-content: flex-start; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
     .diff-summary:empty { display: none; }
+    .rs-opts { display: grid; gap: var(--cf-2); margin-bottom: var(--cf-4); }
+    .rs-opts label { display: flex; gap: var(--cf-2); align-items: flex-start; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .rs-opts input { margin-top: 3px; }
+    .rs-foot { justify-content: flex-end; gap: var(--cf-2); }
+    .rs-foot .rs-status { margin-right: auto; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .diff-item.diff-note { color: var(--cf-text-2); background: color-mix(in srgb, var(--cf-text-3) 10%, transparent); }
+    .bk-run { margin: 0 0 var(--cf-4); padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm); }
+    .bk-run[hidden] { display: none; }
+    .bk-run-title { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-1); }
+    .bk-run-bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--cf-text-3) 20%, transparent); overflow: hidden; }
+    .bk-run-bar span { display: block; height: 100%; width: 0; background: var(--cf-accent, var(--cf-success)); transition: width .3s; }
+    .bk-run-log { margin: var(--cf-2) 0 0; padding: 0; list-style: none; font-size: var(--cf-text-xs); color: var(--cf-text-3); max-height: 9rem; overflow: auto; overflow-wrap: anywhere; }
+    .bk-run-actions:empty, .bk-run-actions button[hidden] { display: none; }
 </style>
 
 <div class="page-section">
@@ -40,7 +54,7 @@ const bkBy = (id) => {
                 <i class="fas fa-database"></i>
                 <span>Server backups</span>
             </div>
-            <div class="page-section-subtitle">Make one before big changes. Restoring replaces what is there now.</div>
+            <div class="page-section-subtitle">Make one before big changes. A restore shows you what it will do first.</div>
         </div>
     </div>
 
@@ -79,7 +93,7 @@ const bkBy = (id) => {
         <header class="cf-section-head">
             <div>
                 <h2 class="cf-section-title" id="bk-list-title">Saved backups<% if (bkList.length) { %> <span class="cf-chip"><%= bkList.length %></span><% } %></h2>
-                <p class="cf-section-desc">Compare shows what changed since the backup. Restore re-creates missing roles and channels and resets the ones that changed; it cannot be undone.</p>
+                <p class="cf-section-desc">Compare shows what changed since the backup. Restore first lists what it would create, change and delete; it re-creates what is missing and resets what changed, and removes nothing unless you tick "Also remove".</p>
             </div>
             <% if (bkList.length > 15) { %>
             <div class="cf-section-actions">
@@ -108,6 +122,12 @@ const bkBy = (id) => {
                     </select>
                 </div>
             </div>
+            <div class="bk-run" id="bkRun" hidden aria-live="polite">
+                <p class="bk-run-title" id="bkRunTitle"></p>
+                <div class="bk-run-bar"><span id="bkRunBar"></span></div>
+                <ul class="bk-run-log" id="bkRunLog"></ul>
+                <div class="bk-run-actions"><button type="button" class="btn btn-sm btn-primary" id="bkRunResume" hidden>Resume restore</button></div>
+            </div>
             <% if (bkList.length) { %>
             <div class="cf-list bk-list" id="bkList">
                 <% bkList.forEach(function (backup) {
@@ -125,11 +145,7 @@ const bkBy = (id) => {
                     </div>
                     <div class="cf-list-actions">
                         <button type="button" class="btn btn-sm btn-secondary" data-bk-compare="<%= backup.id %>">Compare</button>
-                        <form action="/manage/<%= guild.id %>/restore-backup" method="POST" class="bk-restore" data-name="<%= backup.snapshot_name %>">
-                            <input type="hidden" name="backupId" value="<%= backup.id %>">
-                            <input type="hidden" name="gracePeriod" value="30">
-                            <button type="submit" class="btn btn-sm btn-secondary">Restore</button>
-                        </form>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bk-restore="<%= backup.id %>" data-name="<%= backup.snapshot_name %>">Restore…</button>
                         <form action="/manage/<%= guild.id %>/delete-backup" method="POST" class="bk-delete" data-name="<%= backup.snapshot_name %>">
                             <input type="hidden" name="backupId" value="<%= backup.id %>">
                             <button type="submit" class="btn btn-sm btn-danger">Delete</button>
@@ -157,20 +173,153 @@ const bkBy = (id) => {
     </div>
 </div>
 
+<div class="diff-overlay cf-modal" id="rsOverlay" role="dialog" aria-modal="true" aria-labelledby="rsTitle">
+    <div class="diff-modal cf-modal-dialog">
+        <div class="cf-modal-head">
+            <h3 class="cf-modal-title" id="rsTitle">Restore preview</h3>
+            <button type="button" class="cf-modal-close" id="rsClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="diff-body cf-modal-body">
+            <div class="rs-opts">
+                <label><input type="checkbox" id="rsRemove"> <span>Also remove channels, categories and roles that are not in the backup. They are removed last, and only if everything before worked.</span></label>
+                <label><input type="checkbox" id="rsConfig" checked> <span>Restore CertiFried's settings for this server from the backup. Settings added since the backup are kept unless "Also remove" is ticked.</span></label>
+                <label><input type="checkbox" id="rsBans"> <span>Ban again the users who were banned in the backup and are not banned now.</span></label>
+            </div>
+            <div id="rsBody"></div>
+        </div>
+        <div class="cf-modal-foot rs-foot">
+            <span class="rs-status" id="rsStatus"></span>
+            <button type="button" class="btn btn-sm btn-secondary" id="rsCancel">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" id="rsGo" disabled>Restore</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     var gid = '<%= guild.id %>';
     var overlay = document.getElementById('diffOverlay');
     var lastFocus = null;
 
-    // Restore and delete ask first; restore carries the rejoin window chosen above.
-    document.querySelectorAll('form.bk-restore').forEach(function (f) {
-        f.addEventListener('submit', function (e) {
-            var grace = document.getElementById('restore-grace-period');
-            f.querySelector('[name=gracePeriod]').value = grace ? grace.value : '30';
-            if (!confirm('Restore "' + f.dataset.name + '"? Roles, channels and permissions are reset to the backup. This cannot be undone, and can take several minutes.')) e.preventDefault();
-        }, true);
+    // Restore: preview first (GET backup-restore-preview), then the run the admin confirmed (planHash), then progress.
+    var rs = { overlay: document.getElementById('rsOverlay'), body: document.getElementById('rsBody'), go: document.getElementById('rsGo'),
+        status: document.getElementById('rsStatus'), id: null, name: '', hash: null, last: null };
+    function rsOpts() {
+        return { removeExtras: document.getElementById('rsRemove').checked, restoreBotConfig: document.getElementById('rsConfig').checked, restoreBans: document.getElementById('rsBans').checked };
+    }
+    function rsSection(title, items, cls, limit) {
+        if (!items || !items.length) return;
+        var sec = document.createElement('div'); sec.className = 'diff-section';
+        var t = document.createElement('div'); t.className = 'diff-section-title'; t.textContent = title + ' (' + items.length + ')'; sec.appendChild(t);
+        items.slice(0, limit || 40).forEach(function (txt) { var el = document.createElement('div'); el.className = 'diff-item ' + cls; el.textContent = txt; sec.appendChild(el); });
+        if (items.length > (limit || 40)) { var more = document.createElement('div'); more.className = 'diff-item diff-note'; more.textContent = '…and ' + (items.length - (limit || 40)) + ' more'; sec.appendChild(more); }
+        rs.body.appendChild(sec);
+    }
+    async function rsPreview() {
+        rs.hash = null; rs.go.disabled = true; rs.status.textContent = 'Working out what would change…';
+        rs.body.textContent = '';
+        var o = rsOpts();
+        var q = '?removeExtras=' + (o.removeExtras ? 1 : 0) + '&restoreBotConfig=' + (o.restoreBotConfig ? 1 : 0) + '&restoreBans=' + (o.restoreBans ? 1 : 0);
+        try {
+            var resp = await fetch('/api/guilds/' + gid + '/backup-restore-preview/' + encodeURIComponent(rs.id) + q, { credentials: 'include' });
+            var data = await resp.json();
+            if (!data.success) throw new Error(data.error || 'Request failed');
+            var s = data.summary;
+            rs.body.textContent = '';
+            rsSection('Will be created', s.create, 'diff-added');
+            rsSection('Will be changed', s.update, 'diff-changed');
+            rsSection('Will be deleted', s.remove, 'diff-removed');
+            if (s.keptNotInBackup) {
+                var kept = [].concat(s.keptNotInBackup.categories.map(function (n) { return 'Category ' + n; }), s.keptNotInBackup.channels.map(function (n) { return '#' + n; }), s.keptNotInBackup.roles.map(function (n) { return 'Role ' + n; }));
+                rsSection('Not in the backup, kept', kept, 'diff-note', 20);
+            }
+            rsSection('Cannot be restored', s.skipped, 'diff-note');
+            rsSection('Good to know', s.notes, 'diff-note');
+            if (!s.counts.total) { var none = document.createElement('p'); none.textContent = 'The server already matches this backup. There is nothing to restore.'; rs.body.appendChild(none); }
+            rs.hash = s.hash;
+            rs.go.disabled = !s.counts.total || data.running;
+            rs.go.className = 'btn btn-sm ' + (s.counts.deletes ? 'btn-danger' : 'btn-primary');
+            rs.go.textContent = s.counts.deletes ? 'Restore and delete ' + s.counts.deletes : 'Restore';
+            rs.status.textContent = data.running ? 'A restore is already running for this server.' : s.counts.total + ' step' + (s.counts.total === 1 ? '' : 's');
+        } catch (err) {
+            rs.status.textContent = '';
+            rs.body.textContent = 'Could not build the preview: ' + err.message;
+        }
+    }
+    function rsClose() { rs.overlay.classList.remove('active'); if (rs.last) rs.last.focus(); }
+    document.querySelectorAll('[data-bk-restore]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            rs.last = b; rs.id = b.getAttribute('data-bk-restore'); rs.name = b.dataset.name || '';
+            document.getElementById('rsTitle').textContent = 'Restore "' + rs.name + '"?';
+            document.getElementById('rsRemove').checked = false;
+            rs.overlay.classList.add('active');
+            document.getElementById('rsClose').focus();
+            rsPreview();
+        });
     });
+    ['rsRemove', 'rsConfig', 'rsBans'].forEach(function (id) { document.getElementById(id).addEventListener('change', rsPreview); });
+    document.getElementById('rsClose').addEventListener('click', rsClose);
+    document.getElementById('rsCancel').addEventListener('click', rsClose);
+    rs.overlay.addEventListener('click', function (e) { if (e.target === rs.overlay) rsClose(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && rs.overlay.classList.contains('active')) rsClose(); });
+    async function rsPost(path, params) {
+        var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        var resp = await fetch('/manage/' + gid + path, { method: 'POST', credentials: 'include', body: new URLSearchParams(params),
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-Token': csrf } });
+        return resp.json();
+    }
+    rs.go.addEventListener('click', async function () {
+        if (!rs.hash) return;
+        var o = rsOpts();
+        if (o.removeExtras && !confirm('Delete everything listed under "Will be deleted"? This cannot be undone.')) return;
+        rs.go.disabled = true; rs.status.textContent = 'Starting…';
+        var grace = document.getElementById('restore-grace-period');
+        try {
+            var data = await rsPost('/restore-backup', { backupId: rs.id, planHash: rs.hash, gracePeriod: grace ? grace.value : '30',
+                removeExtras: o.removeExtras ? '1' : '0', restoreBotConfig: o.restoreBotConfig ? '1' : '0', restoreBans: o.restoreBans ? '1' : '0' });
+            if (!data.success) {
+                rs.status.textContent = data.error || 'The restore did not start.';
+                if (data.summary) rsPreview();
+                else rs.go.disabled = false;
+                return;
+            }
+            rsClose();
+            pollRun();
+        } catch (err) { rs.status.textContent = 'The restore did not start: ' + err.message; rs.go.disabled = false; }
+    });
+
+    // Progress of the current or last restore; an interrupted or failed one can be resumed.
+    var runTimer = null;
+    var RUN_LABEL = { running: 'Restoring', done: 'Restore finished', done_with_errors: 'Restore finished with errors', failed: 'Restore stopped', interrupted: 'Restore interrupted (the bot restarted)' };
+    async function pollRun() {
+        clearTimeout(runTimer);
+        try {
+            var resp = await fetch('/api/guilds/' + gid + '/backup-restore-status', { credentials: 'include' });
+            var data = await resp.json();
+            var run = data && data.run;
+            var box = document.getElementById('bkRun');
+            if (!run) { box.hidden = true; return; }
+            var stale = run.finishedAt && (Date.now() - new Date(run.finishedAt).getTime()) > 7 * 86400000;
+            if (stale && run.status === 'done') { box.hidden = true; return; }
+            box.hidden = false;
+            document.getElementById('bkRunTitle').textContent = (RUN_LABEL[run.status] || run.status) + ': "' + run.backupName + '", ' + run.done + ' of ' + run.total + ' steps' + (run.failedCount ? ', ' + run.failedCount + ' failed' : '') + (run.error ? ' (' + run.error + ')' : '');
+            document.getElementById('bkRunBar').style.width = (run.total ? Math.round(100 * run.done / run.total) : 0) + '%';
+            var log = document.getElementById('bkRunLog'); log.textContent = '';
+            run.failed.slice(-5).forEach(function (f) { var li = document.createElement('li'); li.textContent = 'Failed: ' + f.label + ': ' + f.error; log.appendChild(li); });
+            run.log.slice(-8).forEach(function (l) { var li = document.createElement('li'); li.textContent = l; log.appendChild(li); });
+            document.getElementById('bkRunResume').hidden = ['interrupted', 'failed', 'done_with_errors'].indexOf(run.status) === -1;
+            if (run.status === 'running') runTimer = setTimeout(pollRun, 3000);
+        } catch (err) { runTimer = setTimeout(pollRun, 10000); }
+    }
+    document.getElementById('bkRunResume').addEventListener('click', async function () {
+        var btn = this; btn.disabled = true;
+        try {
+            var data = await rsPost('/restore-backup/resume', {});
+            if (!data.success) alert(data.error || 'Could not resume.');
+        } finally { btn.disabled = false; pollRun(); }
+    });
+    pollRun();
+
     document.querySelectorAll('form.bk-delete').forEach(function (f) {
         f.addEventListener('submit', function (e) {
             if (!confirm('Delete the backup "' + f.dataset.name + '"? This cannot be undone.')) e.preventDefault();

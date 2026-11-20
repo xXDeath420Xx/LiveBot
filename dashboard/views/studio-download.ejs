@@ -30,7 +30,7 @@
     <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
         <div class="cfs-pagehead">
             <h1>CertiFried Studio</h1>
-            <p class="cfs-lede">The Windows app for the CertiFried stream bot. It runs on your streaming PC and carries out the actions your automations send: switching OBS scenes, showing and hiding sources, playing sounds and pressing hotkeys. Your settings stay on the dashboard.</p>
+            <p class="cfs-lede">The Windows app for the CertiFried stream bot. It runs on your streaming PC and carries out the actions your automations send: switching OBS scenes, showing and hiding sources, playing sounds, pressing hotkeys, changing your lights and controlling Voicemeeter. Your settings stay on the dashboard.</p>
             <p class="cfs-meta">Free and open source under the GNU AGPL-3.0-or-later. <a href="/studio">What Studio does</a>.</p>
             <% if (_rel) { %><p class="cfs-meta">Version <%= _rel.version %><% if (_rel.releaseDate) { %>, released <time datetime="<%= _rel.releaseDate %>"><%= _date(_rel.releaseDate) %></time><% } %>. Windows 10 and 11, 64-bit.</p><% } %>
         </div>
@@ -56,6 +56,15 @@
             <% } %>
         </section>
 
+        <% if (_rel && _rel.streamdeck) { %>
+        <section class="cfs-section" aria-labelledby="dl-sd-h" id="stream-deck">
+            <h2 id="dl-sd-h">Stream Deck plugin</h2>
+            <p>Keys for the Elgato Stream Deck app: run an automation, switch scene, show or hide a source, mute an input, change a counter, play a sound and apply a light preset. It talks only to CertiFried Studio on the same PC. Studio also installs it for you (Settings, Stream Deck).</p>
+            <a class="btn btn-secondary" href="/downloads/studio/<%= encodeURIComponent(_rel.streamdeck.file) %>" download>Download the Stream Deck plugin</a>
+            <p class="dl-hash"><%= _rel.streamdeck.file %>, <%= _size(_rel.streamdeck.size) %><% if (_rel.streamdeck.sha256) { %><br>SHA-256 <code><%= _rel.streamdeck.sha256 %></code><% } %></p>
+        </section>
+        <% } %>
+
         <section class="cfs-section" aria-labelledby="dl-smart-h">
             <h2 id="dl-smart-h">Windows SmartScreen</h2>
             <p>CertiFried Studio is not code-signed. The first time you open it, Windows SmartScreen shows "Windows protected your PC", as it does for new apps without a signature. To continue, click More info, then click Run anyway. <a href="/studio/faq#smartscreen">Why Studio is unsigned</a>.</p>
@@ -69,6 +78,7 @@
                 <li>On the dashboard, open <a href="/stream/bot/devices">Stream bot, Devices</a> and make a pairing code. Type it into Studio, or choose Open in CertiFried Studio.</li>
                 <li>In OBS, open Tools, WebSocket Server Settings. Turn the server on and note the port and password. Enter them in Studio under OBS.</li>
                 <li>Add OBS, sound and hotkey actions to your automations. Studio carries them out and reports back to the run history.</li>
+                <li>Optional: in Studio open Lights and choose Find lights, turn on Voicemeeter control under Audio, or turn on Stream Deck in Settings.</li>
             </ol>
             <p class="cfs-meta">The full walkthrough is in the <a href="/docs/guides/stream-bot">Stream bot guide</a>.</p>
         </section>

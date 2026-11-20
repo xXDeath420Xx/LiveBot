@@ -30,7 +30,67 @@ import logger from './logger.js';
  *   every command with it — so a bad name is dropped here, with a warning,
  *   rather than allowed to break the deploy.
  * - Descriptions are 1–100 characters.
+ * - One command (with its subcommands, options and choices) may total 8,000
+ *   characters of names, descriptions and choice values. With localizations,
+ *   Discord counts the longest version of each field. One command over the
+ *   limit fails the whole bulk PUT, so every command is measured after its
+ *   localizations are applied and, if it would pass LOCALIZED_BUDGET, the
+ *   description localizations that add the most are dropped (logged) until it
+ *   fits. `node scripts/check-command-localizations.mjs` is the dry run.
  */
+
+/** Discord's limit for one command, and the budget used here (a margin for rounding in Discord's count). */
+export const DISCORD_COMMAND_LIMIT = 8000;
+export const LOCALIZED_BUDGET = 7900;
+
+const longest = (base, map) => Math.max(String(base ?? '').length, ...Object.values(map || {}).map((v) => String(v).length));
+
+/**
+ * A command's size as Discord counts it: for every name and description the longest of the default and its
+ * localizations, plus choice names (longest) and choice values, over the command, its groups, subcommands and
+ * options.
+ */
+export function discordCommandSize(json) {
+    let n = longest(json.name, json.name_localizations) + longest(json.description, json.description_localizations);
+    for (const o of json.options || []) {
+        n += discordCommandSize(o);
+        for (const c of o.choices || []) n += longest(c.name, c.name_localizations) + String(c.value ?? '').length;
+    }
+    return n;
+}
+
+/** Every node of a command that carries description localizations, with how much each one adds to the size. */
+function localizedNodes(json, out = []) {
+    if (json.description_localizations) {
+        out.push({ node: json, extra: longest('', json.description_localizations) - String(json.description ?? '').length });
+    }
+    for (const o of json.options || []) localizedNodes(o, out);
+    return out;
+}
+
+/**
+ * Bring a localized command under the budget by removing description localizations, the ones that add the
+ * most first, and within one field only its longest locales. Returns how many localizations were dropped.
+ */
+export function fitLocalizedSize(json, budget = LOCALIZED_BUDGET) {
+    let size = discordCommandSize(json);
+    if (size <= budget) return 0;
+    let dropped = 0;
+    while (size > budget) {
+        const nodes = localizedNodes(json).filter((x) => x.extra > 0).sort((a, b) => b.extra - a.extra);
+        if (!nodes.length) break;
+        const { node } = nodes[0];
+        const base = String(node.description ?? '').length;
+        const map = node.description_localizations;
+        const max = Math.max(...Object.values(map).map((v) => String(v).length));
+        for (const [locale, value] of Object.entries(map)) {
+            if (String(value).length === max && max > base) { delete map[locale]; dropped++; }
+        }
+        if (!Object.keys(map).length) delete node.description_localizations;
+        size = discordCommandSize(json);
+    }
+    return dropped;
+}
 
 /** Discord locale codes we can serve, derived from the catalogues we hold. */
 function discordLocalesFor() {
@@ -93,7 +153,18 @@ function applyTo(node, keyPath, discordLocales, stats) {
 export function localizeCommand(json, stats = { names: 0, descriptions: 0 }) {
     const discordLocales = discordLocalesFor();
     if (!discordLocales.length) return json;
+    localizeTree(json, discordLocales, stats);
+    const dropped = fitLocalizedSize(json);
+    if (dropped) {
+        stats.descriptions -= dropped;
+        stats.dropped = (stats.dropped || 0) + dropped;
+        logger.warn(`[i18n] /${json.name}: dropped ${dropped} description localization(s) to stay under Discord's ${DISCORD_COMMAND_LIMIT}-character command limit (now ${discordCommandSize(json)})`);
+    }
+    return json;
+}
 
+/** Fill in the catalogue's localizations on a command and every group, subcommand and option under it. */
+function localizeTree(json, discordLocales, stats) {
     const root = `commands.${json.name}`;
     applyTo(json, root, discordLocales, stats);
 
@@ -127,10 +198,11 @@ export function localizeCommands(payloads) {
     if (stats.names || stats.descriptions) {
         logger.info(
             `[i18n] Applied ${stats.names} name and ${stats.descriptions} description localizations ` +
-            `across ${payloads.length} commands (${discordLocalesFor().join(', ')})`
+            `across ${payloads.length} commands (${discordLocalesFor().join(', ')})` +
+            (stats.dropped ? `; ${stats.dropped} dropped to fit Discord's command size limit` : '')
         );
     }
     return payloads;
 }
 
-export default { localizeCommand, localizeCommands };
+export default { localizeCommand, localizeCommands, discordCommandSize, fitLocalizedSize, DISCORD_COMMAND_LIMIT, LOCALIZED_BUDGET };

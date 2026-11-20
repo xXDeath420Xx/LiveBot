@@ -1,13 +1,15 @@
 <%#
   GET /stream/bot/timers (dashboard/routes/stream-bot-timers.js). Locals: own, kick (timer views from core/stream-bot/timers.js
   timerView, plus automationName), linked [{ platform, login }], schemaReady (false until migration 456 is applied), pageData
-  (#sb-data for /js/stream-bot-timers.js: own, kick, automations, limits, linkedPlatforms).
+  (#sb-data for /js/stream-bot-timers.js: own, kick, automations, limits, linkedPlatforms, youtube), youtube ({ dailyUnits,
+  sendUnits, chatMax } once YouTube is set up on the server, else null: the YouTube choices and the quota note show only then).
 %>
 <%- include('_head', { pageTitle: 'Timers', active: 'timers', sbPage: 'timers' }) %>
 <%
   const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
   const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
-  const _where = { all: 'Twitch and Kick', twitch: 'Twitch', kick: 'Kick' };
+  const _where = { all: 'Twitch and Kick', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', everywhere: 'Twitch, Kick and YouTube' };
+  const _yt = locals.youtube || null;
   const _every = (n) => n % 60 === 0 && n >= 60 ? (n === 60 ? 'every hour' : 'every ' + (n / 60) + ' hours') : (n === 1 ? 'every minute' : 'every ' + n + ' minutes');
   const _chips = (t) => {
       const out = [];
@@ -40,7 +42,7 @@
 <div class="cf-page-head">
     <div>
         <h1 class="cf-page-title">Timers</h1>
-        <p class="cf-page-sub">Messages the bot posts in your chat on a schedule. On Twitch they come from the CertiFried bot account, on Kick through Kick Defender. A timer can also run one of your automations instead.</p>
+        <p class="cf-page-sub">Messages the bot posts in your chat on a schedule. On Twitch they come from the CertiFried bot account, on Kick through Kick Defender<%= _yt ? ', on YouTube from your own channel' : '' %>. A timer can also run one of your automations instead.</p>
     </div>
     <div class="cf-page-actions"><button type="button" class="btn btn-primary btn-sm" id="sb-timer-new">Add a timer</button></div>
 </div>
@@ -50,7 +52,7 @@
 <div class="cf-notice is-warn"><div class="cf-notice-body">Timers on this page are not switched on yet (the database update for them has not run). Your Kick channel page timers keep posting as before.</div></div>
 <% } %>
 <% if (!linked.length) { %>
-<div class="cf-notice is-warn"><div class="cf-notice-body">Link a Twitch or Kick channel on the <a href="/stream/bot/connections">Connections</a> page first.</div></div>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Link a Twitch<%= _yt ? ', Kick or YouTube' : ' or Kick' %> channel on the <a href="/stream/bot/connections">Connections</a> page first.</div></div>
 <% } %>
 <div class="cf-notice" id="sb-timer-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sb-timer-msg-text"></div></div>
 
@@ -88,9 +90,10 @@
                 <div class="cf-row-control"><input type="text" id="sb-t-name" maxlength="100" autocomplete="off"></div>
             </div>
             <div class="cf-row" id="sb-t-where-row">
-                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-where">Post in</label></div>
-                <div class="cf-row-control"><select id="sb-t-where">
-                    <option value="all">Twitch and Kick</option><option value="twitch">Twitch</option><option value="kick">Kick</option>
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-where">Post in</label>
+                    <% if (_yt) { %><p class="cf-row-desc" id="sb-t-yt-quota" hidden>Each post on YouTube uses <%= _yt.sendUnits %> of the <%= Number(_yt.dailyUnits).toLocaleString('en-GB') %> YouTube units CertiFried has each day for all streamers together (reading your chat while you are live uses about 1,700 an hour). <span id="sb-t-yt-rate"></span> YouTube cuts messages at <%= _yt.chatMax %> characters, and timers stop posting there once 85% of the day's units are used.</p><% } %></div>
+                <div class="cf-row-control"><select id="sb-t-where"<%- _yt ? ' aria-describedby="sb-t-yt-quota"' : '' %>>
+                    <option value="all">Twitch and Kick</option><option value="twitch">Twitch</option><option value="kick">Kick</option><% if (_yt) { %><option value="youtube">YouTube</option><option value="everywhere">Twitch, Kick and YouTube</option><% } %>
                 </select></div>
             </div>
             <div class="cf-row">

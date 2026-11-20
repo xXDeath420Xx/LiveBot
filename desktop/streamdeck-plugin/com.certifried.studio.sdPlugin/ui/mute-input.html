@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Mute input</title>
+    <link rel="stylesheet" href="pi.css">
+</head>
+<body>
+    <form id="settings">
+    <div class="row"><label for="input">Audio input</label><select id="input" data-setting="input" data-list="inputs" data-placeholder="Choose an input"></select></div>
+    <p class="hint" id="input-hint"></p>
+    <div class="row"><label for="mode">On press</label><select id="mode" data-setting="mode" data-default="toggle"><option value="toggle">Mute or unmute</option><option value="mute">Mute</option><option value="unmute">Unmute</option></select></div>
+    </form>
+    <div id="connection"></div>
+    <script src="pi.js"></script>
+</body>
+</html>

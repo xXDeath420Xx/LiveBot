@@ -4,7 +4,9 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import configCache from '../utils/configCache.js';
 import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 import { themeColor } from './guild-theme.js';
-import { protectionHold, takeAutomatedAction } from './protection-exempt.js';
+import { protectionHold, takeAutomatedAction, allowGlobalBan, isGlobalBanAllowed } from './protection-exempt.js';
+import { isSuperAdmin } from '../utils/constants.js';
+import { appealDecisionScope, isGlobalBanBanReason } from './global-ban-appeal-scope.js';
 import {
     classifyBanSource, computeConfidence, shouldCreateEntry, entryConfidence, decideEnforcement,
     decideMessageEnforcement, guildTrust, isBurst, strongerSource, normaliseMode, normaliseThreshold,
@@ -153,6 +155,8 @@ class GlobalBanManager {
 
             // Check exempt roles
             if (this.isExempt(member, config)) return false;
+            // This server accepted their appeal for itself (the global ban only, H-802)
+            if (await isGlobalBanAllowed(member.guild.id, member.id)) return false;
 
             // Mode + confidence threshold (protect / alert / feed) pick the action.
             const decision = this.decide(record, config);
@@ -184,6 +188,7 @@ class GlobalBanManager {
         if (!config || !config.check_on_message) return false;
 
         if (!message.member || this.isExempt(message.member, config)) return false;
+        if (await isGlobalBanAllowed(message.guild.id, message.author.id)) return false;
 
         // Only a real ban/kick in Protect mode at or above the threshold — never an alert per message.
         const decision = this.decide(record, config, { atMessage: true });
@@ -861,9 +866,14 @@ class GlobalBanManager {
     }
 
     /**
-     * Review an appeal (approve/deny)
+     * Review an appeal (register H-802). Only a CertiFried super-admin decides for every server: approve
+     * lifts the shared ban, deny closes the appeal. A server's moderator (opts.guild) can only approve for
+     * their own server (approveAppealForServer); the appeal stays open for the team.
+     * Rules: core/global-ban-appeal-scope.js.
      */
-    async reviewAppeal(reviewerId, appealId, approved, response) {
+    async reviewAppeal(reviewerId, appealId, approved, response, { guild = null } = {}) {
+        const decision = appealDecisionScope({ reviewerIsSuperAdmin: isSuperAdmin(String(reviewerId)), approved, inGuild: !!guild });
+        if (decision.scope === 'refuse') return { success: false, scope: 'refuse', message: decision.message };
         try {
             const [appeals] = await pool.execute(
                 'SELECT * FROM global_ban_appeals WHERE id = ? AND status IN ("pending","under_review")',
@@ -874,6 +884,7 @@ class GlobalBanManager {
             }
 
             const appeal = appeals[0];
+            if (decision.scope === 'server') return await this.approveAppealForServer(appeal, guild, reviewerId, response);
             const status = approved ? 'approved' : 'denied';
 
             await pool.execute(
@@ -896,10 +907,53 @@ class GlobalBanManager {
             // never undo the decision, which also shows on the /appeal page.
             await this.notifyAppealDecision(appeal.user_id, approved, response);
 
-            return { success: true, status, userId: appeal.user_id };
+            return { success: true, scope: 'global', status, userId: appeal.user_id };
         } catch (error) {
             logger.error('[GlobalBan] Failed to review appeal', { error: error.message });
             return { success: false, message: 'Database error while reviewing appeal.' };
+        }
+    }
+
+    /**
+     * A server's moderators accept an appeal for their own server only: the global ban stops acting on the
+     * person in this server (protection_allowlist kind 'globalban', core/protection-exempt.js allowGlobalBan;
+     * raid, phishing, name filters and every other protection still apply) and a "Global Ban:" ban in this
+     * server is lifted. The shared ban and the appeal are unchanged.
+     */
+    async approveAppealForServer(appeal, guild, reviewerId, response) {
+        const userId = String(appeal.user_id);
+        const allow = await allowGlobalBan(guild, userId, String(reviewerId), `Global ban appeal #${appeal.id} approved for this server`);
+        if (!allow.ok) return { success: false, scope: 'server', message: allow.error };
+        let unbanned = false;
+        try {
+            const ban = await guild.bans.fetch(userId).catch(() => null);
+            if (ban && isGlobalBanBanReason(ban.reason)) {
+                await guild.bans.remove(userId, `Global ban appeal #${appeal.id} approved for this server`);
+                unbanned = true;
+            }
+        } catch (error) {
+            logger.warn('[GlobalBan] Could not lift the server ban for an approved appeal', { guildId: guild.id, userId, error: error.message });
+        }
+        await this.logAction(appeal.global_ban_entry_id, String(guild.id), userId, 'appeal_server_allow', String(reviewerId), response || null);
+        await this.notifyServerAllow(userId, guild.name, response);
+        return { success: true, scope: 'server', status: appeal.status, userId, unbanned };
+    }
+
+    /** DM: one server accepted the appeal for itself. Never throws. */
+    async notifyServerAllow(userId, guildName, response) {
+        if (!userId || !this.client?.users?.fetch) return false;
+        try {
+            const user = await this.client.users.fetch(String(userId));
+            const lines = [`The moderators of ${String(guildName || 'a server').slice(0, 100)} accepted your appeal for their server: CertiFried no longer acts on the shared ban list there.`,
+                'The shared ban itself is unchanged for other servers, and the CertiFried team still reviews your appeal.'];
+            const note = String(response || '').trim().slice(0, 1500);
+            if (note) lines.push('', 'Moderator\'s note:', note);
+            lines.push('', 'Details: https://certifriedmultitool.com/appeal');
+            await user.send({ content: lines.join('\n'), allowedMentions: { parse: [] } });
+            return true;
+        } catch (error) {
+            logger.info('[GlobalBan] Could not DM the server appeal decision', { userId: String(userId), error: error.message });
+            return false;
         }
     }
 

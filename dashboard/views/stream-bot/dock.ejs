@@ -50,7 +50,7 @@
 <% } else { %>
     <h1 class="dock-title"><%= page === 'chat' ? 'Chat' : 'Activity' %> <span class="dock-live" id="dock-live" hidden>Live</span></h1>
     <% if (page === 'chat' && !data.storeChat && !data.events.length) { %>
-    <p class="dock-empty" id="dock-hint">Chat from your Twitch and Kick channels shows here as it arrives.</p>
+    <p class="dock-empty" id="dock-hint">Chat from your <%= data.youtube ? 'Twitch, Kick and YouTube' : 'Twitch and Kick' %> channels shows here as it arrives.</p>
     <% } else if (!data.events.length) { %>
     <p class="dock-empty" id="dock-hint">Nothing yet. New events show here as they happen.</p>
     <% } %>

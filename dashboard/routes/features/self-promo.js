@@ -3,6 +3,7 @@ import pool from '../../../utils/db.js';
 import { ensureAuth, ensureGuildPerms } from '../api.js';
 import logger from '../../../utils/logger.js';
 import { invalidateSelfPromoConfig } from '../../../core/self-promo-handler.js';
+import configCache from '../../../utils/configCache.js';
 
 const router = express.Router();
 
@@ -169,6 +170,19 @@ router.put('/:guildId/self-promo/config', ensureAuth, ensureGuildPerms, async (r
         ]);
 
         invalidateSelfPromoConfig(req.guildId);
+
+        // The live-promotion filter switch (H-811), saved on its own so the rest saves before migration 469.
+        if (has('live_promo_filter')) {
+            try {
+                await pool.execute('UPDATE self_promo_config SET live_promo_filter = ? WHERE guild_id = ?', [body.live_promo_filter ? 1 : 0, req.guildId]);
+                configCache.invalidate('live_promo_filter', req.guildId);
+            } catch (err) {
+                if (err.code === 'ER_BAD_FIELD_ERROR') {
+                    return res.json({ success: false, error: 'Saved, except the live-promotion switch: it needs a database update (migration 469) first.' });
+                }
+                throw err;
+            }
+        }
 
         res.json({ success: true, message: 'Self-promo config updated' });
     } catch (error) {

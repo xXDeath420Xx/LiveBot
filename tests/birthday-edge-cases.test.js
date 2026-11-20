@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 
 /*
@@ -11,6 +11,7 @@ const helpers = await import('../core/birthday-helpers.js');
 const { EXPIRED_ROLE_SQL } = await import('../jobs/birthday-scheduler.js');
 const { default: BirthdayManager } = await import('../core/birthday-manager.js');
 const { default: pool } = await import('../utils/db.js');
+after(() => pool.end().catch(() => {})); // close the pool so the file exits on its own
 
 test('29 February is celebrated on the 28th in years without one', () => {
     const { birthdaysOn } = helpers;

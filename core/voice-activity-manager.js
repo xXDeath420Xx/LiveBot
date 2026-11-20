@@ -78,14 +78,11 @@ class VoiceActivityManager {
       const stats = await this.getVoiceActivityStats(guildId, userId);
       const totalMinutes = Math.floor(stats.total_time / 60);
 
-      // Voice Novice - 1 hour (60 minutes)
-      if (totalMinutes >= 60) {
-        await achievementManager.trackAchievement(userId, guildId, 'voice_novice', totalMinutes);
-      }
-
-      // Voice Expert - 100 hours (6000 minutes)
-      if (totalMinutes >= 6000) {
-        await achievementManager.trackAchievement(userId, guildId, 'voice_expert', totalMinutes);
+      // Voice Novice (1 hour) and Voice Expert (100 hours): progress is the voice total, raised to it and never added
+      // (fix wave 7: trackAchievement added the whole total after every session, so the count grew past the real time).
+      if (totalMinutes > 0) {
+        await achievementManager.recordTotal(userId, guildId, 'voice_novice', totalMinutes);
+        await achievementManager.recordTotal(userId, guildId, 'voice_expert', totalMinutes);
       }
     } catch (error) {
       logger.error(`[VoiceActivityManager] Achievement tracking error: ${error.message}`, { guildId, userId });

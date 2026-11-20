@@ -20,6 +20,8 @@ if (typeof spGateRequiredRoles === 'string') {
 if (!Array.isArray(spGateRequiredRoles)) spGateRequiredRoles = [];
 const spGateDeleteUnauth = spConfig.announce_delete_unauthorized !== undefined
     ? !!spConfig.announce_delete_unauthorized : true;
+// Live-promotion filter (H-811, migration 469): on unless switched off.
+const spLiveFilter = !(spConfig.live_promo_filter === 0 || spConfig.live_promo_filter === false);
 const spRoles = typeof roles !== 'undefined' ? roles : [];
 const spPlatformName = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' };
 const spChannelName = (channels || []).find(c => c.id === spChannelId)?.name;
@@ -224,6 +226,26 @@ const spChannelName = (channels || []).find(c => c.id === spChannelId)?.name;
             </div>
         </section>
 
+        <section class="cf-section" aria-labelledby="sp-livefilter-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-livefilter-title">Live promotion elsewhere</h2>
+                    <p class="cf-section-desc">Posts like "I'm live" or "going live" with a stream link, from members who are not moderators.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-live-filter">Delete live promotion outside self-promo channels</label>
+                        <p class="cf-row-desc">On by default. Channels whose names contain words like live, promo, stream, content or creator are always allowed, and moderators are never affected.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="live_promo_filter" id="sp-live-filter" <%= spLiveFilter ? 'checked' : '' %>>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <div class="cf-form-actions">
             <div id="sp-status" class="cf-status-line" role="status" aria-live="polite"></div>
             <button type="submit" class="btn btn-primary">Save</button>
@@ -261,6 +283,7 @@ document.getElementById('sp-form').addEventListener('submit', async (e) => {
         announce_min_level: minLevel,
         announce_required_role_ids: requiredRoleIds,
         announce_delete_unauthorized: document.getElementById('sp-gate-delete-unauth').checked,
+        live_promo_filter: document.getElementById('sp-live-filter').checked,
     };
     try {
         const res = await fetch('/api/guilds/<%= guild.id %>/self-promo/config', {

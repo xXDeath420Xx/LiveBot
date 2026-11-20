@@ -10,12 +10,13 @@
  * normaliseTip(source, payload)             tip services → event, or null
  * normaliseStudio(event)                    an OBS event CertiFried Studio reported → event, or null
  * sampleEvent(type, overrides)              the Test button's event for a trigger type
+ * (YouTube Live events are converted in core/stream-bot/youtube/normalise.js, H-741, design §13.)
  *
  * Tested in tests/stream-bot-events.test.js.
  */
 
 export const ROLES = Object.freeze(['broadcaster', 'moderator', 'vip', 'subscriber']);
-export const PLATFORMS = Object.freeze(['twitch', 'kick', 'streamelements', 'streamlabs', 'kofi', 'bmac', 'throne', 'fourthwall', 'studio', 'bot', 'test']);
+export const PLATFORMS = Object.freeze(['twitch', 'kick', 'youtube', 'streamelements', 'streamlabs', 'kofi', 'bmac', 'throne', 'fourthwall', 'studio', 'bot', 'test']);
 export const TIP_SOURCES = Object.freeze(['streamelements', 'streamlabs', 'kofi', 'bmac', 'throne', 'fourthwall']);
 
 const MESSAGE_MAX = 1000;
@@ -35,7 +36,7 @@ export const EVENT_TYPES = [   // not frozen: registerEventType() adds feature t
         sample: sample({ user: SAMPLE_USER, metadata: { tier: '1000', isGift: false } }) },
     { type: 'resub', label: 'Resubscription', group: 'Support', platforms: ['twitch', 'kick'], fields: ['user', 'tier', 'months', 'message'],
         sample: sample({ user: SAMPLE_USER, amount: 7, currency: 'months', message: 'Seven months already!', metadata: { tier: '1000', months: 7, streak: 3 } }) },
-    { type: 'gift_sub', label: 'Gift subs', group: 'Support', platforms: ['twitch', 'kick'], fields: ['user', 'count', 'tier'],
+    { type: 'gift_sub', label: 'Gift subs', group: 'Support', platforms: ['twitch', 'kick', 'youtube'], fields: ['user', 'count', 'tier'],
         sample: sample({ user: SAMPLE_USER, amount: 5, currency: 'subs', metadata: { tier: '1000', count: 5, anonymous: false } }) },
     { type: 'cheer', label: 'Bits (cheer)', group: 'Support', platforms: ['twitch'], fields: ['user', 'amount', 'message'],
         sample: sample({ user: SAMPLE_USER, amount: 500, currency: 'bits', message: 'Cheer500 good luck on the boss' }) },
@@ -68,15 +69,15 @@ export const EVENT_TYPES = [   // not frozen: registerEventType() adds feature t
         sample: sample({ message: 'Boss down first try?', metadata: { title: 'Boss down first try?', winner: 'No', status: 'resolved' } }) },
     { type: 'ad_break', label: 'Ad break', group: 'Stream', platforms: ['twitch'], fields: ['amount'],
         sample: sample({ amount: 90, currency: 'seconds', metadata: { automatic: true } }) },
-    { type: 'stream.online', label: 'Stream went live', group: 'Stream', platforms: ['twitch', 'kick'], fields: [],
+    { type: 'stream.online', label: 'Stream went live', group: 'Stream', platforms: ['twitch', 'kick', 'youtube'], fields: [],
         sample: sample({ metadata: {} }) },
-    { type: 'stream.offline', label: 'Stream ended', group: 'Stream', platforms: ['twitch', 'kick'], fields: [],
+    { type: 'stream.offline', label: 'Stream ended', group: 'Stream', platforms: ['twitch', 'kick', 'youtube'], fields: [],
         sample: sample({ metadata: {} }) },
-    { type: 'chat', label: 'Chat message', group: 'Chat', platforms: ['twitch', 'kick'], fields: ['user', 'message'],
+    { type: 'chat', label: 'Chat message', group: 'Chat', platforms: ['twitch', 'kick', 'youtube'], fields: ['user', 'message'],
         sample: sample({ user: SAMPLE_USER, message: '!hello' }) },
-    { type: 'tip', label: 'Tip', group: 'Tips', platforms: [...TIP_SOURCES], fields: ['user', 'amount', 'currency', 'message'],
+    { type: 'tip', label: 'Tip or Super Chat', group: 'Tips', platforms: [...TIP_SOURCES, 'youtube'], fields: ['user', 'amount', 'currency', 'message'],
         sample: sample({ platform: 'streamelements', user: { id: null, login: null, name: 'Juniper', roles: [] }, amount: 5, currency: 'USD', message: 'Coffee is on me', metadata: { kind: 'donation' } }) },
-    { type: 'membership', label: 'Membership (tip service)', group: 'Tips', platforms: ['kofi', 'bmac', 'fourthwall'], fields: ['user', 'amount', 'currency', 'tier'],
+    { type: 'membership', label: 'Membership (YouTube or tip service)', group: 'Tips', platforms: ['kofi', 'bmac', 'fourthwall', 'youtube'], fields: ['user', 'amount', 'currency', 'tier'],
         sample: sample({ platform: 'kofi', user: { id: null, login: null, name: 'Juniper', roles: [] }, amount: 3, currency: 'USD', metadata: { tier: 'Supporter', first: true } }) },
     { type: 'merch_order', label: 'Merch order', group: 'Tips', platforms: ['kofi', 'fourthwall'], fields: ['user', 'amount', 'currency'],
         sample: sample({ platform: 'fourthwall', user: { id: null, login: null, name: 'Juniper', roles: [] }, amount: 28, currency: 'USD', metadata: { items: 2 } }) },
@@ -468,12 +469,25 @@ export function describeEvent(ev) {
         case 'follow': return `${who} followed`;
         case 'sub': return ev.metadata?.isGift ? `${who} received a gift sub` : `${who} subscribed`;
         case 'resub': return amt ? `${who} resubscribed (${amt} months)` : `${who} resubscribed`;
-        case 'gift_sub': return `${ev.user ? who : 'An anonymous viewer'} gifted ${amt} sub${ev.amount === 1 ? '' : 's'}`;
+        case 'gift_sub': return `${ev.user ? who : 'An anonymous viewer'} gifted ${amt} ${ev.platform === 'youtube' ? 'membership' : 'sub'}${ev.amount === 1 ? '' : 's'}`;
         case 'cheer': return `${ev.user ? who : 'An anonymous viewer'} cheered ${amt} bits`;
         case 'raid': return `${who} raided with ${amt} viewer${ev.amount === 1 ? '' : 's'}`;
         case 'redemption': return `${who} redeemed ${ev.metadata?.reward || 'a reward'}`;
-        case 'tip': return `${who} tipped ${money}`.trim();
-        case 'membership': return `${who} became a member${money ? ` (${money})` : ''}`;
+        case 'tip': {
+            const k = ev.metadata?.kind;   // YouTube (H-741): Super Chat, Super Sticker, Jewels; tracked, never processed
+            if (k === 'super_chat') return `${who} sent a Super Chat${money ? ` (${money})` : ''}`;
+            if (k === 'super_sticker') return `${who} sent a Super Sticker${money ? ` (${money})` : ''}`;
+            if (k === 'jewels') return `${who} sent ${amt} jewels`;
+            return `${who} tipped ${money}`.trim();
+        }
+        case 'membership':
+            if (ev.platform === 'youtube') {
+                const lvl = ev.metadata?.tier ? ` (${ev.metadata.tier})` : '';
+                if (ev.metadata?.kind === 'milestone') return `${who} has been a member for ${ev.metadata?.months ?? amt} months${lvl}`;
+                if (ev.metadata?.kind === 'gift') return `${who} received a gifted membership${lvl}`;
+                return `${who} became a member${lvl}`;
+            }
+            return `${who} became a member${money ? ` (${money})` : ''}`;
         case 'merch_order': return `${who} placed an order${money ? ` (${money})` : ''}`;
         case 'chat': return `${who}: ${ev.message || ''}`;
         case 'stream.online': return 'Stream went live';

@@ -128,9 +128,6 @@ tests/name-filters.test.js
 tests/nav-polish.test.js
 tests/nsfw-protection.test.js
 tests/one-word-story.test.js
-tests/owo-merged-text.test.js
-tests/owo-social-routing.test.js
-tests/owo-social.test.js
 tests/poll-bets.test.js
 tests/prefix-cleanup-delay.test.js
 tests/privacy-tables.test.js
@@ -202,3 +199,9 @@ tests/word-bank.test.js
 tests/word-filter.test.js
 tests/wordseek.test.js
 tests/youtube-uploads.test.js
+tests/critters-battle.test.js
+tests/critters-hunt.test.js
+tests/critters-migration.test.js
+tests/critters-rules.test.js
+tests/critters-surfaces.test.js
+tests/sql-reserved-aliases.test.js

@@ -12,6 +12,8 @@ import sharp from 'sharp';
 import pool from '../../utils/db.js';
 import encryptionService from '../../utils/encryption.js';
 import logger from '../../utils/logger.js';
+import { renderFramed } from '../services/site-frame.js';
+import { FRAMED_PAGE, shell, framedOptions, chrome, userMenu, renderLogin, renderAccount } from '../services/sprites-pages.js';
 import {
   LOGIN_URL, exchangeAuthCode, fetchSpriteData, buildModel, parseAuthCode,
   syncFromRefreshToken, TIERS, EAS_CONFIGURED, authorizeUrl, connectViaOAuth, signInViaEpic,
@@ -1344,7 +1346,7 @@ async function finishLogin(req, res, tok) {
 // ── views (same themed grid as the standalone prototype, served as plain HTML) ──
 function placeholder(v) {
   const initial = esc((v.tierLabel || '?')[0]);
-  return `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" fill="#15171e"/>`
+  return `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/>`
     + `<text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${v.tierColor}">${initial}</text></svg>`;
 }
 function cell(v, opts = {}) {
@@ -1354,14 +1356,14 @@ function cell(v, opts = {}) {
   if (v.future) cls.push('future');
   if (v.vaulted) cls.push('vaulted');
   // Buy-back toggle only makes sense on the owner's own view, for cells that
-  // are unowned + obtainable (not vaulted, not future). Renders a small ★/+
+  // are unowned + obtainable (not vaulted, not future). Renders a small /+
   // button in the top-left that POSTs to /sprites/buyback/toggle.
   const isOnBuyback = opts.buybackSet && opts.buybackSet.has(v.name);
   if (isOnBuyback) cls.push('buyback');
   const buybackBtn = (opts.showBuybackToggle && !v.owned && !v.vaulted && !v.future)
     ? `<form method="post" action="/sprites/buyback/toggle" class="buyback-toggle-form">
          <input type="hidden" name="variant_name" value="${esc(v.name)}">
-         <button type="submit" class="buyback-toggle ${isOnBuyback ? 'on' : 'off'}" title="${isOnBuyback ? 'Remove from buy-back list' : 'Add to buy-back list'}">${isOnBuyback ? '★' : '+'}</button>
+         <button type="submit" class="buyback-toggle ${isOnBuyback ? 'on' : 'off'}" title="${isOnBuyback ? 'Remove from buy-back list' : 'Add to buy-back list'}">${isOnBuyback ? '' : '+'}</button>
        </form>` : '';
   // Friendly name for alt/title — shown by the browser while the icon loads or
   // if it 404s. Uses the display label, never the raw catalog codename.
@@ -1370,7 +1372,7 @@ function cell(v, opts = {}) {
     ? `<img loading="lazy" src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(friendly)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:this.dataset.ph}).firstChild)" data-ph="${esc(placeholder(v))}">`
     : placeholder(v);
   const badges = [];
-  if (v.starter) badges.push('<span class="b starter">★ Starter</span>');
+  if (v.starter) badges.push('<span class="b starter">Starter</span>');
   if (v.mastered) badges.push('<span class="b master">✦ Mastered</span>');
   // For future variants with a known release date (Holofoil = 2026-07-09
   // 9 AM ET), swap the static "Unreleased" pill for a "Releases in <clock>"
@@ -1379,7 +1381,7 @@ function cell(v, opts = {}) {
   //
   // Vaulted families are skipped entirely — Epic may not un-vault them on
   // release day (Air/Seven are currently absent from the loot pool), so
-  // promising a countdown would be misleading. The 🚫 Vaulted badge below
+  // promising a countdown would be misleading. The Vaulted badge below
   // already carries the "not available" signal on its own.
   if (v.future && !v.owned && !v.vaulted) {
     // Countdown is data-driven: buildModel puts the unlock instant on the
@@ -1394,13 +1396,13 @@ function cell(v, opts = {}) {
       badges.push('<span class="b soon">Unreleased</span>');
     }
   }
-  if (v.vaulted) badges.push('<span class="b vaulted">🚫 Vaulted</span>');
+  if (v.vaulted) badges.push('<span class="b vaulted">Vaulted</span>');
   // Availability disclaimer badge — appears alongside future/vaulted for
   // sprites with unusual availability (e.g. Pollo's stream-event debut). The
   // full explanation lives on the info-card; the tile just gets a short
   // headline. Owned variants still get the badge so the user knows their copy
   // came from a limited event.
-  if (v.availabilityNote) badges.push(`<span class="b note" title="${esc(v.availabilityNote.text)}">⚠ ${esc(v.availabilityNote.label)}</span>`);
+  if (v.availabilityNote) badges.push(`<span class="b note" title="${esc(v.availabilityNote.text)}">${esc(v.availabilityNote.label)}</span>`);
   const xpLine = v.owned
     ? `<span class="xp">${fmt(v.xp)} XP${v.mastered ? '' : ` / ${fmt(4000)}`}</span>`
     : `<span class="cost">${v.summonCost != null ? `${fmt(v.summonCost)} ✦` : ''}</span>`;
@@ -1431,1012 +1433,15 @@ function cell(v, opts = {}) {
   return `<td><div class="${cls.join(' ')}" ${dataAttrs} title="${esc(friendly)}">
     ${buybackBtn}
     <div class="thumb">${img}${v.owned ? '<span class="tick">✓</span>' : '<span class="lock">🔒</span>'}</div>
-    <div class="meta"><span class="tn" style="color:${v.tierColor}">${esc(v.tierLabel)}</span>${xpLine}</div>
+    <div class="meta"><span class="tn" data-tier style="--tier:${v.tierColor}">${esc(v.tierLabel)}</span>${xpLine}</div>
     <div class="track">${bar}</div>
     <div class="badges">${badges.join('')}</div>
   </div></td>`;
 }
 
-const STYLE = `
-  :root{--bg:#0b0c10;--bg2:#101218;--card:#161922;--line:#242837;--txt:#eef0f6;--muted:#878da0;
-        --green:#3ad07a;--purple:#7b5cff;--gold:#ffcf3a}
-  *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1430,transparent),var(--bg);
-       color:var(--txt);font:15px/1.5 'Segoe UI',system-ui,Roboto,sans-serif}
-  a{color:var(--purple)} code{background:#0e0f13;padding:2px 6px;border-radius:6px;border:1px solid var(--line)}
-  /* No backdrop-filter on the sticky header — it forces the browser to re-blur
-     the entire scrolling content on every frame, the single biggest scroll-
-     perf killer on a long page like this. Solid high-opacity bg reads the
-     same to the eye and scrolls at full framerate. */
-  header{display:flex;align-items:center;gap:14px;padding:16px 26px;border-bottom:1px solid var(--line);
-         background:#0c0d12;position:sticky;top:0;z-index:5}
-  .logo{font-weight:900;letter-spacing:.5px;font-size:18px}
-  .logo .c{color:var(--green)} .logo .f{color:var(--purple)}
-  .tagline{color:var(--muted);font-size:13px;border-left:1px solid var(--line);padding-left:14px}
-  .logo{text-decoration:none}
-  .logo:hover{filter:brightness(1.1)}
-  .nav{margin-left:auto;display:flex;gap:10px;align-items:center} .nav form{margin:0}
-  .nav button:not(.menu-item){background:#1b1e29;color:var(--txt);border:1px solid var(--line);border-radius:8px;
-              padding:7px 13px;font:600 13px/1 inherit;cursor:pointer}
-  .nav button:not(.menu-item):hover{border-color:var(--purple)} .nav button.danger:not(.menu-item):hover{border-color:#ff5b6e;color:#ff8a96}
-  /* ── Top-nav user menu ─────────────────────────────────────────────── */
-  .avatar{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font-weight:900;font-size:13px;color:#fff;flex:none;text-shadow:0 1px 1px rgba(0,0,0,.3)}
-  .usermenu{position:relative}
-  .usermenu summary{cursor:pointer;display:flex;align-items:center;gap:9px;padding:4px 12px 4px 4px;border:1px solid var(--line);border-radius:999px;background:#161922;color:var(--txt);font-weight:700;font-size:13px;user-select:none;transition:border-color .15s,background .15s;list-style:none}
-  .usermenu summary::-webkit-details-marker{display:none}
-  .usermenu summary::marker{display:none;content:''}
-  .usermenu summary:hover{border-color:var(--purple);background:#1a1f2a}
-  .usermenu[open] summary{border-color:var(--purple);background:#1a1f2a}
-  .usermenu-name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .usermenu-caret{color:var(--muted);font-size:9px;margin-left:2px;transition:transform .2s}
-  .usermenu[open] .usermenu-caret{transform:rotate(180deg)}
-  .usermenu-dropdown{position:absolute;top:calc(100% + 10px);right:0;min-width:230px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 12px 36px rgba(0,0,0,.5);z-index:20}
-  .usermenu-dropdown::before{content:'';position:absolute;top:-7px;right:18px;width:12px;height:12px;background:var(--card);border:1px solid var(--line);border-right:0;border-bottom:0;transform:rotate(45deg)}
-  .menu-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:var(--txt);text-decoration:none;font:700 13px/1.2 inherit;background:transparent;border:0;cursor:pointer;width:100%;text-align:left;transition:background .12s}
-  .menu-item:hover{background:rgba(123,92,255,.14)}
-  .menu-item.current{background:rgba(123,92,255,.18);color:#cbb5ff}
-  .menu-item.danger{color:#ff8aa6}
-  .menu-item.danger:hover{background:rgba(255,91,110,.14)}
-  .menu-icon{font-size:14px;width:18px;text-align:center;flex:none}
-  .menu-form{margin:0;padding:0}
-  .menu-divider{height:1px;background:var(--line);margin:5px 8px}
-  /* CertiFried Network dropdown — sibling to .usermenu, lives next to the brand logo. */
-  .cf-network{position:relative;align-self:center;margin-left:6px}
-  .cf-network summary{cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:#161922;color:var(--txt);font-weight:700;font-size:12px;letter-spacing:.04em;user-select:none;transition:border-color .15s,background .15s;list-style:none}
-  .cf-network summary::-webkit-details-marker{display:none}
-  .cf-network summary:hover,.cf-network[open] summary{border-color:var(--purple);background:#1a1f2a;color:#cfc5ff}
-  .cf-network-menu{position:absolute;top:calc(100% + 9px);left:0;min-width:240px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 12px 36px rgba(0,0,0,.5);z-index:25}
-  .cf-network-menu::before{content:'';position:absolute;top:-7px;left:18px;width:12px;height:12px;background:var(--card);border:1px solid var(--line);border-right:0;border-bottom:0;transform:rotate(45deg)}
-  .cf-network-menu a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:var(--txt);text-decoration:none;font:700 13px/1.2 inherit;transition:background .12s}
-  .cf-network-menu a:hover{background:rgba(123,92,255,.14);color:#cfc5ff}
-  .cf-network-menu .cfn-section{padding:6px 12px 4px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-  .cf-network-menu .cfn-divider{height:1px;background:var(--line);margin:5px 8px}
-  .nav .navlink{padding:7px 13px;border-radius:999px;color:var(--muted);font-weight:700;font-size:13px;text-decoration:none;transition:color .15s,background .15s}
-  .nav .navlink:hover{color:var(--txt);background:#161922}
-  .nav .navlink.primary{background:linear-gradient(90deg,var(--purple),#9b7bff);color:#fff}
-  .nav .navlink.primary:hover{filter:brightness(1.1);background:linear-gradient(90deg,var(--purple),#9b7bff)}
-  main{max-width:1180px;margin:0 auto;padding:26px}
-  .hero{display:flex;gap:24px;align-items:center;flex-wrap:wrap;background:var(--card);
-        border:1px solid var(--line);border-radius:14px;padding:14px 20px;margin-bottom:14px}
-  .who{font-size:12px;color:var(--muted)} .who b{display:block;font-size:20px;color:var(--txt);line-height:1.2}
-  .stats{display:flex;gap:22px;flex-wrap:wrap;flex:1}
-  .stat{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;line-height:1.3}
-  .stat b{display:block;font-size:22px;color:var(--txt);letter-spacing:0;text-transform:none;line-height:1.1;margin-bottom:1px}
-  .stat.dust b{color:var(--gold)} .stat.master b{color:var(--purple)} .stat.owned b{color:var(--green)} .stat.xp b{color:#5bf0ff} .stat.future b{color:#ffa64d} .stat.acct b{color:#ff8aa6} .stat.vaulted b{color:#ff5b6e}
-  .who .since{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;letter-spacing:0;text-transform:none}
-  .lvlbadge{display:flex;flex-direction:column;align-items:center;justify-content:center;
-            width:66px;height:66px;border-radius:50%;flex:none;
-            background:linear-gradient(135deg,var(--purple) 0%,#5832dd 100%);
-            color:#fff;box-shadow:0 0 14px rgba(123,92,255,.4)}
-  .lvlnum{font-size:24px;font-weight:900;line-height:1}
-  .lvllabel{font-size:9px;font-weight:700;letter-spacing:.12em;opacity:.92;margin-top:2px}
-  .playercard{display:grid;grid-template-columns:1.1fr 1fr;gap:30px;background:var(--card);
-              border:1px solid var(--line);border-radius:18px;padding:22px 26px;margin-bottom:24px}
-  .playercard .cardhead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
-                        color:var(--muted);margin:0 0 14px;font-weight:700}
-  .tierrow{display:grid;grid-template-columns:84px 1fr 56px;gap:12px;align-items:center;margin:7px 0;font-size:13px}
-  .tlabel{font-weight:800;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
-  .tbar{height:10px;background:#0e0f13;border:1px solid var(--line);border-radius:6px;overflow:hidden}
-  .tfill{height:100%;transition:width .3s ease;border-radius:5px}
-  .tcnt{font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums;text-align:right;font-size:13px}
-  .tcnt.sub{font-weight:600;color:var(--muted);font-size:12px}
-  .tnote{font-weight:600;color:#ff8aa6;font-size:11px;margin-left:6px;cursor:help}
-  .tierrow.muted .tlabel,.tierrow.muted .tcnt{opacity:.85}
-  .highlights ul{margin:0;padding:0;list-style:none}
-  .highlights li{padding:6px 0;font-size:13.5px;line-height:1.55;color:var(--txt);border-bottom:1px dashed #1d2030}
-  .highlights li:last-child{border-bottom:0}
-  @media (max-width:780px){.playercard{grid-template-columns:1fr;gap:18px}}
-  /* Profile extras: playercard + career timeline get tucked behind a single
-     "Collector profile & history" details section so the sprite grid is what
-     draws the eye on first paint, with the deeper data still one click away. */
-  .profile-extras{margin-top:28px}
-  .profile-extras > summary{cursor:pointer;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 14px;background:#0e0f13;border:1px solid var(--line);border-radius:10px;list-style:none;display:flex;align-items:center;gap:8px;user-select:none;transition:color .15s,border-color .15s}
-  .profile-extras > summary::-webkit-details-marker{display:none}
-  .profile-extras > summary::before{content:'▶';font-size:10px;color:var(--purple);transition:transform .2s}
-  .profile-extras[open] > summary::before{transform:rotate(90deg)}
-  .profile-extras > summary:hover{color:var(--txt);border-color:var(--purple)}
-  .profile-extras[open] > summary{margin-bottom:16px}
-  .career-timeline{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 26px;margin-bottom:24px;content-visibility:auto;contain-intrinsic-size:0 900px}
-  /* Sprite extras — quest progression + cosmetic locker cards. Mirror the
-     .card padding/margin/border of the info page's cards so they blend into
-     the profile view visually. Grid layout stacks vertically at ≤700px. */
-  .sprite-extras .card{padding:18px 20px}
-  .sprite-extras .cardhead{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px;font-weight:700}
-  .sprite-quest-row{margin-bottom:10px}
-  .sprite-quest-row:last-child{margin-bottom:0}
-  .sprite-quest-row .ct-bar{position:relative;height:6px;background:#1c2030;border-radius:3px;overflow:hidden}
-  .sprite-quest-row .ct-fill{height:100%;background:linear-gradient(90deg,var(--purple),#5bf0ff);transition:width .3s}
-  .sprite-quest-row .ct-fill.completed{background:linear-gradient(90deg,var(--green),#8ff0b0)}
-  .sqr-label{font-size:13px;line-height:1.35}
-  .sprite-cosmetic-row{margin-bottom:14px}
-  .sprite-cosmetic-row:last-child{margin-bottom:0}
-  .scr-header{font-size:13px;margin-bottom:6px}
-  .scr-header .sub{font-size:11px;color:var(--muted);margin-left:6px}
-  .scr-chips{display:flex;flex-wrap:wrap;gap:5px}
-  .cosmetic-chip{font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#0e0f13;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  .cosmetic-chip b{color:var(--purple);font-weight:800;margin-right:4px}
-  @media (max-width:700px){
-    .sprite-extras{grid-template-columns:1fr!important}
-  }
-  .career-timeline .cardhead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 14px;font-weight:700}
-  .career-timeline .cardhead .sub{font-size:11px;color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0}
-  .ct-rows{display:flex;flex-direction:column;gap:6px}
-  .ct-row{display:grid;grid-template-columns:200px 1fr 220px auto;align-items:center;gap:14px;padding:8px 12px;background:#0e0f13;border:1px solid var(--line);border-radius:10px;transition:background .15s}
-  .ct-row:hover{background:#11141c}
-  .ct-row.completed{background:rgba(255,207,58,.06);border-color:rgba(255,207,58,.3)}
-  .ct-row.completed:hover{background:rgba(255,207,58,.09)}
-  .ct-row.current{border-color:var(--purple);box-shadow:0 0 0 1px rgba(123,92,255,.25)}
-  .ct-season{font-weight:700;font-size:13px;color:var(--txt)}
-  .ct-bar{height:14px;background:#161922;border:1px solid var(--line);border-radius:7px;overflow:hidden;position:relative}
-  .ct-fill{height:100%;background:linear-gradient(90deg,var(--purple),#9b7bff);transition:width .4s ease;border-radius:6px}
-  .ct-fill.completed{background:linear-gradient(90deg,var(--gold),#ffe48a)}
-  .ct-stat{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .ct-stat b{color:var(--txt);font-size:14px;margin:0 4px}
-  .ct-status{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
-  .ct-status.complete{background:rgba(255,207,58,.18);color:var(--gold)}
-  .ct-status.current{background:rgba(123,92,255,.18);color:var(--purple)}
-  @media (max-width:780px){
-    .ct-row{grid-template-columns:1fr;gap:6px;padding:10px 12px}
-    .ct-stat{font-size:13px}
-  }
-  .ring{--p:0;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;
-        background:conic-gradient(var(--green) calc(var(--p)*1%),#222634 0)}
-  .ring i{width:58px;height:58px;border-radius:50%;background:var(--card);display:grid;place-items:center;
-          font-size:17px;font-weight:800;font-style:normal}
-  /* Skip rendering the table when it's off-screen — modern browsers honor this
-     to dramatically reduce scroll cost on big DOM. contain-intrinsic-size gives
-     the layout a height estimate so the page geometry stays stable. */
-  table.grid{content-visibility:auto;contain-intrinsic-size:0 2400px}
-  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--bg2);
-        border:1px solid var(--line);border-radius:16px;overflow:hidden}
-  thead th{background:#12141c;font-size:12px;text-transform:uppercase;
-           letter-spacing:.06em;padding:12px 8px;border-bottom:1px solid var(--line)}
-  thead th:first-child{text-align:left;padding-left:18px;color:var(--muted)}
-  tbody tr:nth-child(odd){background:rgba(255,255,255,.012)}
-  th.fam{text-align:left;padding:10px 14px 10px 18px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
-  .famname{font-weight:700;font-size:15px;display:block} .famcount{font-size:12px;color:var(--muted)} .famcount.full{color:var(--green)}
-  .famcount-vaulted{font-size:11px;color:#ff5b6e;font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,91,110,.12);margin-top:2px}
-  td{padding:8px;border-bottom:1px solid var(--line);text-align:center;vertical-align:top}
-  /* table-layout: fixed prevents the countdown-driven text width changes from
-     recomputing column widths every second — without it, a wobble in any
-     .b.countdown badge cascades to the whole column and shifts the jail-bar
-     SVG backgrounds around. contain: layout on .cell isolates each cell's
-     internal reflow from ancestors. */
-  table.grid{table-layout:fixed}
-  .cell{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:104px;padding:8px 6px 9px;border-radius:12px;transition:transform .12s;contain:layout}
-  .cell:hover{transform:translateY(-2px)} .cell.empty{visibility:hidden}
-  .thumb{position:relative;width:78px;height:78px;border-radius:14px;display:grid;place-items:center;background:#0f1118;border:1px solid var(--line);overflow:hidden}
-  .thumb img,.thumb .ph{width:100%;height:100%;object-fit:contain}
-  /* All unowned states show the sprite in FULL COLOR now — the overlay carries the state semantic. */
-  .cell.locked .thumb img,.cell.locked .thumb .ph,
-  .cell.vaulted .thumb img,.cell.vaulted .thumb .ph,
-  .cell.future  .thumb img,.cell.future  .thumb .ph{filter:none;opacity:1}
-  .cell.owned .thumb{border-color:rgba(58,208,122,.5);box-shadow:0 0 0 1px rgba(58,208,122,.25)}
-  .cell.mastered .thumb{border-color:var(--purple);box-shadow:0 0 14px rgba(123,92,255,.45)}
-  .tick{position:absolute;top:3px;right:4px;background:var(--green);color:#04210f;font-weight:900;font-size:12px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;z-index:5}
-  /* Hide the tiny corner lock — we now paint a big centered one via ::after. */
-  .cell:not(.owned) .lock{display:none}
-  /* BIG LOCK: obtainable-but-unowned cells get a full-thumb dark scrim + centered padlock. */
-  .cell.locked:not(.vaulted):not(.future) .thumb::after{
-    content:'🔒';position:absolute;inset:0;display:grid;place-items:center;
-    font-size:38px;line-height:1;color:#fff;
-    text-shadow:0 2px 6px rgba(0,0,0,.9),0 0 18px rgba(0,0,0,.65);
-    background:linear-gradient(rgba(0,0,0,.25),rgba(0,0,0,.55));
-    pointer-events:none;z-index:3;border-radius:inherit}
-  /* JAIL BARS: vaulted OR future (both = "not in the loot pool right now") get horizontal
-     top/bottom rails + 4 vertical iron bars painted via an inline SVG background image. */
-  .cell.vaulted .thumb::before,
-  .cell.future:not(.owned) .thumb::before{
-    content:'';position:absolute;inset:0;pointer-events:none;z-index:3;border-radius:inherit;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 78 78' preserveAspectRatio='none'><defs><linearGradient id='bar' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='%23140a02'/><stop offset='0.35' stop-color='%236b5024'/><stop offset='0.65' stop-color='%234a3818'/><stop offset='1' stop-color='%23140a02'/></linearGradient><linearGradient id='rail' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%236b5024'/><stop offset='0.5' stop-color='%234a3818'/><stop offset='1' stop-color='%23140a02'/></linearGradient></defs><rect x='0' y='0' width='78' height='5' fill='url(%23rail)'/><rect x='0' y='73' width='78' height='5' fill='url(%23rail)'/><rect x='11' y='4' width='4.5' height='70' fill='url(%23bar)' rx='0.5'/><rect x='28' y='4' width='4.5' height='70' fill='url(%23bar)' rx='0.5'/><rect x='45' y='4' width='4.5' height='70' fill='url(%23bar)' rx='0.5'/><rect x='62' y='4' width='4.5' height='70' fill='url(%23bar)' rx='0.5'/></svg>");
-    background-size:100% 100%;background-repeat:no-repeat;
-    box-shadow:inset 0 0 24px rgba(0,0,0,.55)}
-  /* Vaulted keeps its warm red border/glow as an extra semantic cue on top of the bars. */
-  .cell.future:not(.owned) .thumb{border-color:rgba(91,240,255,.4);box-shadow:0 0 10px rgba(91,240,255,.15)}
-  .meta{display:flex;flex-direction:column;line-height:1.25} .tn{font-size:12px;font-weight:700} .xp{font-size:11px;color:var(--muted)} .cost{font-size:11px;color:#7e8aa0}
-  .track{width:78px;height:4px;background:#1c2030;border-radius:3px;overflow:hidden}
-  .track .prog{display:block;height:100%;background:linear-gradient(90deg,var(--purple),var(--green))}
-  .cell:not(.owned) .track,.cell.mastered .track{visibility:hidden}
-  .badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;min-height:16px}
-  .b{font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
-  .b.starter{color:var(--gold);background:rgba(255,207,58,.12)} .b.master{color:var(--purple);background:rgba(123,92,255,.16)} .b.soon{color:#5bf0ff;background:rgba(91,240,255,.1)} .b.vaulted{color:#ff5b6e;background:rgba(255,91,110,.12)}
-  /* "Releases in <clock>" pill — celebratory gold, distinct from static
-     "Unreleased" cyan so the ticking countdown reads as opportunity, not
-     as another unavailable variant. Countdown numbers are extra-bright.
-     inline-block + min-width on the number span locks total pill width so
-     digit transitions can't cause micro-reflow (the "wobble" symptom). */
-  .b.countdown{color:#ffcf3a;background:rgba(255,207,58,.14);border:1px solid rgba(255,207,58,.22)}
-  /* Availability disclaimer — warm gold like the countdown, but with a solid
-     border to visually distinguish "unusual availability" from "releases in X".
-     Owned + note = still shows so users know their copy came from a limited
-     window. Full explanation opens on tile click via the info-card modal. */
-  .b.note{color:#ffcf3a;background:rgba(255,207,58,.1);border:1px solid rgba(255,207,58,.35);cursor:help}
-  .rel-cd{color:#ffe48a;font-variant-numeric:tabular-nums;letter-spacing:.02em;display:inline-block;min-width:6.6em;text-align:right}
-  /* Buy-back list — same gold palette as the countdown pill, matched theming. */
-  .bb-panel{margin:0 auto 18px;max-width:1180px;padding:0;border:1px solid rgba(255,207,58,.22);border-radius:14px;background:linear-gradient(180deg,rgba(255,207,58,.06),rgba(255,207,58,.01));overflow:hidden}
-  .bb-panel[open]{background:linear-gradient(180deg,rgba(255,207,58,.08),rgba(255,207,58,.015))}
-  .bb-summary{list-style:none;cursor:pointer;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:14px;user-select:none;color:var(--txt)}
-  .bb-summary::-webkit-details-marker{display:none}
-  .bb-summary::marker{content:''}
-  .bb-summary::before{content:'▸';display:inline-block;margin-right:8px;color:var(--gold);font-size:12px;transition:transform .15s}
-  .bb-panel[open] .bb-summary::before{transform:rotate(90deg)}
-  .bb-summary-stats{color:var(--muted);font-size:13px}
-  .bb-summary-stats b{color:#ffe48a;font-variant-numeric:tabular-nums}
-  .bb-fresh{color:var(--muted);font-size:12px;margin-left:6px;font-variant-numeric:tabular-nums}
-  .bb-share{display:inline-block;margin-left:10px;padding:3px 10px;border:1px solid rgba(255,207,58,.35);border-radius:6px;background:rgba(255,207,58,.10);color:#ffcf3a;font-size:11px;font-weight:700;text-decoration:none;transition:background .12s}
-  .bb-share:hover{background:rgba(255,207,58,.22);color:#ffe48a}
-  .bb-panel-body{padding:0 18px 16px;border-top:1px solid rgba(255,207,58,.14)}
-  .bb-progress{height:8px;background:#0e0f13;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin:12px 0 10px}
-  .bb-progress i{display:block;height:100%;background:linear-gradient(90deg,#ffcf3a,#ffe48a);transition:width .4s}
-  .bb-seed-note{margin:6px 0 10px;padding:8px 12px;background:rgba(58,208,122,.10);border:1px solid rgba(58,208,122,.3);border-radius:8px;color:#a6f0c2;font-size:13px}
-  .bb-seed-note.bb-seed-warn{background:rgba(255,207,58,.10);border-color:rgba(255,207,58,.35);color:#ffcf3a}
-  .bb-list-table{width:100%;border-collapse:collapse;margin:8px 0 12px;background:#0e0f13;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .bb-row td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:14px}
-  .bb-row:last-child td{border-bottom:0}
-  .bb-row:hover td{background:rgba(255,207,58,.04)}
-  .bb-cell-thumb{width:52px}
-  .bb-thumb{display:inline-block;width:42px;height:42px;object-fit:contain;background:#0f1118;border:1px solid var(--line);border-radius:8px}
-  .bb-thumb-ph{display:grid;place-items:center;font-weight:900;font-size:16px}
-  .bb-tier{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-right:8px}
-  .bb-auto{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#7b5cff;background:rgba(123,92,255,.12);padding:2px 6px;border-radius:5px;margin-left:8px;vertical-align:middle}
-  .bb-cell-cost{text-align:right;font-variant-numeric:tabular-nums;color:#ffe48a;font-weight:700;white-space:nowrap;width:100px}
-  .bb-cell-action{width:36px;text-align:center}
-  .bb-remove{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:6px;width:24px;height:24px;padding:0;font-size:14px;line-height:1;cursor:pointer;transition:color .12s,border-color .12s}
-  .bb-remove:hover{color:#ff5b6e;border-color:#ff5b6e}
-  .bb-seed{margin-top:6px;padding:10px;border:1px dashed var(--line);border-radius:8px}
-  .bb-seed summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:13px}
-  .bb-seed[open] summary{color:var(--txt)}
-  /* Per-cell buy-back toggle button — top-left corner of unowned obtainable cells. */
-  .buyback-toggle-form{position:absolute;top:3px;left:3px;margin:0;z-index:4}
-  .buyback-toggle{background:rgba(0,0,0,.55);color:#ffcf3a;border:1px solid rgba(255,207,58,.35);border-radius:6px;width:20px;height:20px;padding:0;font:800 12px/1 inherit;cursor:pointer;display:grid;place-items:center;transition:background .12s,color .12s,transform .12s}
-  .buyback-toggle:hover{background:rgba(255,207,58,.22);color:#ffe48a;transform:scale(1.1)}
-  .buyback-toggle.on{background:rgba(255,207,58,.28);color:#ffe48a;border-color:#ffcf3a}
-  .cell.buyback .thumb{box-shadow:0 0 0 2px rgba(255,207,58,.35),0 0 12px rgba(255,207,58,.18)}
-  /* Since the toggle uses absolute positioning, the cell needs relative. */
-  .cell{position:relative}
-  .relogin-banner{display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,rgba(255,91,110,.18),rgba(255,138,166,.08));border:1px solid rgba(255,91,110,.5);color:#ffd0d8;border-radius:14px;padding:14px 20px;margin-bottom:20px;font-size:14px;line-height:1.55;flex-wrap:wrap}
-  .relogin-banner b{color:#fff} .relogin-banner .btn{background:#ff8aa6 !important;color:#3a0010 !important}
-  .expiry-banner{display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,rgba(255,207,58,.18),rgba(255,228,138,.08));border:1px solid rgba(255,207,58,.5);color:#ffe9a8;border-radius:14px;padding:14px 20px;margin-bottom:14px;font-size:14px;line-height:1.55;flex-wrap:wrap}
-  .expiry-banner b{color:#fff}
-  .admin-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-  .admin-table th,.admin-table td{padding:11px 13px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
-  .admin-table th{background:#12141c;text-transform:uppercase;letter-spacing:.05em;font-size:11px;color:var(--muted)}
-  .admin-table tr:hover td{background:rgba(255,255,255,.02)}
-  .admin-table .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em}
-  .admin-table .pill.ok{background:rgba(58,208,122,.15);color:var(--green)} .admin-table .pill.bad{background:rgba(255,91,110,.18);color:#ff8aa6}
-  .admin-table .pill.warn{background:rgba(255,207,58,.18);color:var(--gold)}
-  .admin-table a{color:var(--purple)}
-  .admin-table code{font-size:11px}
-  .browse-search{width:100%;padding:11px 13px;border-radius:9px;border:1px solid var(--line);background:#0e0f13;color:var(--txt);font:inherit;margin:14px 0 4px}
-  .browse-search:focus{outline:none;border-color:var(--purple)}
-  .feed-list{list-style:none;padding:0;margin:0}
-  .feed-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.5}
-  .feed-row:last-child{border-bottom:0}
-  .feed-row a{color:var(--txt);text-decoration:none}
-  .feed-row a:hover b{color:var(--purple)}
-  .feed-icon{flex:none;width:22px;text-align:center;font-size:14px}
-  .feed-time{margin-left:auto;color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
-  .browse-list{list-style:none;padding:0;margin:14px 0}
-  .browse-row{padding:11px 0;border-bottom:1px solid var(--line)}
-  .browse-row:last-child{border-bottom:0}
-  .browse-row label{display:flex;align-items:center;gap:14px;cursor:pointer}
-  .browse-row label:hover{background:rgba(123,92,255,.06);margin:0 -14px;padding:0 14px;border-radius:8px}
-  .browse-row input{accent-color:var(--purple);width:18px;height:18px}
-  .browse-id{flex:1} .browse-id .sub{display:block;font-size:12px;color:var(--muted);margin-top:2px}
-  .browse-count{font-weight:800;color:var(--green);font-variant-numeric:tabular-nums}
-  .browse-count .sub{color:var(--muted);font-weight:600}
-  .cmp-summary{display:flex;gap:16px;flex-wrap:wrap}
-  .cmp-summary-card{padding:10px 14px;background:#0e0f13;border:1px solid var(--line);border-radius:10px;min-width:200px}
-  .cmp-user-link b{color:var(--txt)} .cmp-user-link:hover b{color:var(--purple)}
-  .cmp-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-  .cmp-table th,.cmp-table td{padding:11px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
-  .cmp-table th{background:#12141c;text-transform:uppercase;letter-spacing:.05em;font-size:11px;color:var(--muted)}
-  .cmp-table tr:last-child td{border-bottom:0}
-  .cmp-table tr.unique td{background:rgba(255,207,58,.05)}
-  .cmp-table tr.unique td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
-  .cmp-sprite{display:flex;align-items:center;gap:14px}
-  .cmp-thumb{flex:none;width:56px;height:56px;border-radius:12px;background:#0f1118;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden}
-  .cmp-thumb img,.cmp-thumb .ph{width:100%;height:100%;object-fit:contain}
-  .cmp-text{display:flex;flex-direction:column;gap:3px;line-height:1.3}
-  .cmp-sprite .cmp-tier{font-weight:800;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
-  .cmp-sprite b{font-size:15px}
-  .cmp-table tr.unique .cmp-thumb{border-color:rgba(255,207,58,.55);box-shadow:0 0 10px rgba(255,207,58,.15)}
-  .cmp-badge{display:inline-block;margin-left:10px;font-size:10px;font-weight:800;background:rgba(255,207,58,.16);color:var(--gold);padding:2px 8px;border-radius:999px;letter-spacing:.04em;text-transform:uppercase}
-  .cmp-user{display:inline-block;padding:3px 10px;border-radius:999px;background:rgba(58,208,122,.14);color:var(--green);font-weight:700;font-size:12px;text-decoration:none;margin:2px 4px 2px 0;border:1px solid rgba(58,208,122,.3)}
-  .cmp-user:hover{background:rgba(58,208,122,.22)}
-  .cmp-need .cmp-user{background:rgba(255,91,110,.12);color:#ff8aa6;border-color:rgba(255,91,110,.3)}
-  .cmp-need .cmp-user:hover{background:rgba(255,91,110,.2)}
-  .cmp-have-col,.cmp-need-col{width:38%}
-  /* Global pill (health-audit card renders pills outside .admin-table). Less
-     specific than the scoped admin-table pill rule, so that still wins there. */
-  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;background:#1a1d26;color:var(--muted)}
-  .pill.ok{background:rgba(58,208,122,.15);color:var(--green)}
-  .pill.bad{background:rgba(255,91,110,.18);color:#ff8aa6}
-  .pill.warn{background:rgba(255,207,58,.15);color:var(--gold)}
-  .audit-list{margin:4px 0 0;padding-left:18px;font-size:12.5px;line-height:1.5}
-  .audit-list.bad li{color:#ff9db2}
-  .audit-list.warn li{color:#d9c47a}
-  /* ── Compare "Viewing as" visual board (cb-*) ─────────────────────────── */
-  .cb-standings{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-  .cb-stand{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:#0e0f13;border:1px solid var(--line);text-decoration:none;color:var(--txt);font-size:12.5px}
-  .cb-stand:hover{border-color:var(--purple)}
-  .cb-stand.on{border-color:var(--gold);background:rgba(255,207,58,.08)}
-  .cb-stand .cb-rank{color:var(--muted);font-weight:800;font-variant-numeric:tabular-nums}
-  .cb-stand .cb-stand-n{color:var(--green);font-weight:800;font-variant-numeric:tabular-nums}
-  .cb-stand .cb-stand-go{color:var(--muted);font-weight:800;margin-left:1px}
-  .cb-stand:hover .cb-stand-go{color:var(--purple)}
-  .cb-fromlink{color:var(--green);text-decoration:none;font-weight:700}
-  .cb-fromlink:hover{text-decoration:underline}
-  .cb-agg{margin:6px 0 14px}
-  .cb-agg-bar{height:8px;border-radius:999px;background:#0e0f13;border:1px solid var(--line);overflow:hidden}
-  .cb-agg-bar span{display:block;height:100%;background:linear-gradient(90deg,#3ad07a,#5bf0ff)}
-  .cb-agg-txt{font-size:13px;color:var(--muted);margin-top:6px}
-  .cb-agg-txt b{color:var(--txt)}
-  .cb-viewas{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
-  .cb-viewas-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
-  .cb-chips{display:flex;flex-wrap:wrap;gap:6px}
-  .cb-vchip{padding:5px 12px;border-radius:999px;background:#0e0f13;border:1px solid var(--line);text-decoration:none;color:var(--muted);font-size:12.5px;font-weight:700}
-  .cb-vchip:hover{color:var(--txt);border-color:var(--purple)}
-  .cb-vchip.on{background:var(--purple);border-color:var(--purple);color:#fff}
-  .cb-vselect{display:none;background:#0e0f13;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font-size:13px;max-width:100%}
-  .cb-controls{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
-  .cb-tiers{display:flex;flex-wrap:wrap;gap:6px}
-  .cb-tierpill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:700;user-select:none}
-  .cb-tierpill span{color:var(--tc)}
-  .cb-tierpill input{accent-color:var(--tc)}
-  .cb-ctl-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  #cb-search,#cb-sort{background:#0e0f13;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font-size:13px}
-  #cb-search{min-width:140px}
-  .cb-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
-  .cb-csv{padding:6px 11px;border-radius:8px;background:#0e0f13;border:1px solid var(--line);color:var(--muted);text-decoration:none;font-size:12.5px;font-weight:700;cursor:pointer}
-  .cb-csv:hover{color:var(--txt);border-color:var(--purple)}
-  .cb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
-  .cb-tile{position:relative;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--tc)}
-  .cb-tile.cb-uniq{box-shadow:0 0 0 1px rgba(255,207,58,.4),0 0 14px rgba(255,207,58,.1)}
-  .cb-tile.cb-dim{opacity:.62}
-  .cb-tile[role=button]{cursor:pointer}
-  .cb-tile[role=button]:hover{border-color:var(--tc)}
-  .cb-art{aspect-ratio:1/1;border-radius:10px;background:#0f1118;display:grid;place-items:center;overflow:hidden}
-  .cb-art img,.cb-art .ph{width:100%;height:100%;object-fit:contain}
-  .cb-meta{display:flex;flex-direction:column;gap:2px;line-height:1.25}
-  .cb-tier{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--tc)}
-  .cb-fam{font-size:14px}
-  .cb-ctx{font-size:11.5px;color:var(--muted);margin-top:2px}
-  .cb-ctx.cb-from{color:var(--green)}
-  .cb-ctx.cb-hunt{color:#8ab4ff}
-  .cb-ctx.cb-vault{color:#ff8aa6}
-  .cb-ctx.cb-need{color:var(--gold)}
-  .cb-detail{display:none;font-size:11.5px;border-top:1px solid var(--line);padding-top:7px;margin-top:2px}
-  .cb-tile.open .cb-detail{display:block}
-  .cb-detail>div{display:flex;flex-wrap:wrap;gap:4px 6px;margin-bottom:5px;align-items:baseline}
-  .cb-detail>div>span{font-weight:800;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
-  .cb-has>span{color:var(--green)}
-  .cb-needs>span{color:#ff8aa6}
-  .cb-detail a{color:var(--txt);text-decoration:none;background:#0f1118;border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-weight:600}
-  .cb-detail a:hover{border-color:var(--purple)}
-  .cb-detail i{color:var(--muted)}
-  .cb-empty{text-align:center;padding:40px 20px;font-size:15px;color:var(--muted);background:var(--bg2);border:1px dashed var(--line);border-radius:14px}
-  .cb-lev{margin-top:18px;background:#0e0f13;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-  .cb-lev summary{cursor:pointer;font-weight:700;color:var(--txt)}
-  @media (max-width:640px){
-    .cb-chips{display:none}
-    .cb-vselect{display:inline-block}
-    .cb-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:9px}
-  }
-  /* Matrix view — auto-selected for large collector groups (>5). A sticky
-     sprite column on the left, then one narrow column per collector. Scan a
-     COLUMN for one person's gaps, a ROW for scarcity. Horizontal scroll
-     instead of the unreadable 17-chips-per-cell soup the chip table becomes. */
-  .cmp-matrix-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--bg2);-webkit-overflow-scrolling:touch}
-  .cmp-matrix{border-collapse:collapse;font-size:12px;min-width:100%}
-  .cmp-matrix td,.cmp-matrix th{border-bottom:1px solid var(--line);vertical-align:middle}
-  .cmp-matrix tr:last-child td{border-bottom:0}
-  .cmp-matrix thead th{background:#12141c;padding:6px 4px}
-  .cmp-matrix .mx-sprite{position:sticky;left:0;background:var(--bg2);min-width:190px;max-width:190px;padding:7px 12px;box-shadow:1px 0 0 var(--line)}
-  .cmp-matrix thead .mx-sprite{z-index:5;background:#12141c;text-transform:uppercase;letter-spacing:.05em;font-size:11px;color:var(--muted);text-align:left}
-  .cmp-matrix tbody .mx-sprite{z-index:1}
-  .mx-sprite-in{display:flex;align-items:center;gap:10px}
-  .mx-ico{flex:none;width:34px;height:34px;border-radius:8px;background:#0f1118;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;font-size:14px}
-  .mx-ico img{width:100%;height:100%;object-fit:contain}
-  .mx-txt{display:flex;flex-direction:column;line-height:1.25;min-width:0}
-  .mx-txt .mx-tier{font-weight:800;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em}
-  .mx-txt b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
-  .cmp-matrix .mx-user{writing-mode:vertical-rl;white-space:nowrap;height:120px;width:26px;max-width:26px;padding:6px 0;font-weight:700}
-  .cmp-matrix .mx-user a{color:var(--muted);text-decoration:none;font-size:11px}
-  .cmp-matrix .mx-user a:hover{color:var(--purple)}
-  .cmp-matrix .mx-cell{text-align:center;width:26px;font-size:15px;line-height:1;padding:4px 0}
-  .mx-miss{color:#2c3140}
-  .mx-master{color:var(--gold)}
-  .cmp-matrix .mx-count{text-align:center;min-width:48px;font-variant-numeric:tabular-nums;font-weight:800;padding:4px 10px;color:var(--txt)}
-  .cmp-matrix .mx-count .mx-of{color:var(--muted);font-weight:600}
-  .cmp-matrix tbody tr.unique td{background:rgba(255,207,58,.05)}
-  .cmp-matrix tbody tr.unique .mx-sprite{background:#1b1a12;box-shadow:inset 3px 0 0 var(--gold),1px 0 0 var(--line)}
-  .cmp-rank{display:inline-block;min-width:20px;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:800;margin-right:6px}
-  @media (max-width:720px){
-    .cmp-table thead{display:none}
-    .cmp-table tr{display:block;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--bg2)}
-    .cmp-table tr.unique{background:rgba(255,207,58,.06);box-shadow:inset 3px 0 0 var(--gold)}
-    .cmp-table td{display:block;padding:6px 0;border:0;text-align:left;width:100%}
-    .cmp-table td.cmp-have::before{content:'✓ HAS: ';color:var(--green);font-weight:800;font-size:11px;letter-spacing:.05em;margin-right:6px}
-    .cmp-table td.cmp-need::before{content:'✗ NEEDS: ';color:#ff8aa6;font-weight:800;font-size:11px;letter-spacing:.05em;margin-right:6px}
-    .cmp-sprite{padding-bottom:10px;border-bottom:1px solid var(--line)}
-    .cmp-summary-card{min-width:0;width:100%}
-  }
-  /* /sprites/info — transparency page. Table shows the 4 endpoints checked +
-     Quack/Batman hit counts. Pill rows show live tier tokens + family names +
-     "absent" tokens the community keeps asking about. */
-  .audit-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .audit-table th,.audit-table td{padding:8px 10px;border:1px solid var(--line);vertical-align:top;text-align:left}
-  .audit-table th{background:#1a1e2b;font-weight:700}
-  /* .audit-num rather than .num because .num is already used elsewhere as a
-     30px purple circular badge for the Epic Setup steps (line ~1362). Class
-     collision was making Response Size cells render as tiny purple circles. */
-  .audit-table td.audit-num,.audit-table th.audit-num{text-align:right;white-space:nowrap}
-  .audit-table td.center,.audit-table th.center{text-align:center}
-  .audit-hit{color:#ff8090;font-weight:800}
-  .audit-hit-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  .audit-sub{font-size:11px;color:var(--muted);display:block;margin-top:2px}
-  .audit-tokens{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
-  .audit-token{background:#1a1e2b;border:1px solid #2a2f3c;padding:3px 9px;border-radius:6px;color:#a9b6d0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;white-space:nowrap}
-  .audit-token.absent{background:#2a1015;border-color:#6b1a24;color:#ffb4bd;font-weight:700}
-  /* Confirmed-shipped rumor pill. Carries a codename + live count so it runs
-     longer than the terse absent pills — allow it to wrap. */
-  .audit-token.present{background:#0f2418;border-color:#1f6b3a;color:#8ce8ac;font-weight:700;white-space:normal}
-  .audit-token.present code{color:#c8f7d8;background:rgba(0,0,0,.25);padding:1px 4px;border-radius:4px}
-  .audit-token.family{font-size:11px}
-  @media (max-width:600px){
-    /* Global — the whole site benefits from these, not just /sprites/info */
-    body{overflow-x:hidden}
-    main{padding:14px 12px;overflow-wrap:anywhere}
-    .card{padding:16px;margin:14px auto;border-radius:12px}
-    /* On narrow screens, long unbreakable strings in <code> (endpoint URLs,
-       UUIDs) force the browser to expand the layout width to fit them, then
-       scale the whole page down — which is what makes the site look "too
-       narrow" on a Fold cover screen. Force wrap on all code inside content. */
-    .card code,.card p,.card li,.audit-token{overflow-wrap:anywhere;word-break:break-word}
-    header{padding:11px 14px;flex-wrap:wrap;gap:8px 12px;position:static}
-    .tagline{display:none}
-    .cf-network{margin-left:0}
-    .nav{margin-left:0;flex-wrap:wrap;gap:6px}
-    .nav .navlink{padding:5px 10px;font-size:12px}
-    /* Main sprite grid — 7-col table (family label + 6 tiers) with 104px
-       min-width cells + 78px thumbs = 728px minimum table width. On a 340px
-       viewport, table-layout:fixed collapses columns below thumb width and
-       cells visually overlap. Same fix as .cmp-table / .audit-table: stack
-       into a card-per-family layout with the tier cells as a flex-wrap grid. */
-    table.grid,table.grid tbody,table.grid tr{display:block;background:transparent;border:0;width:auto}
-    table.grid{border-radius:0;overflow:visible;content-visibility:visible;contain-intrinsic-size:auto}
-    table.grid thead{display:none}
-    table.grid tr{background:var(--card);border:1px solid var(--line);border-radius:14px;
-                  margin-bottom:12px;padding:10px 8px 12px;display:flex;flex-wrap:wrap;
-                  gap:8px;align-items:flex-start}
-    table.grid tr:nth-child(odd){background:var(--card)}
-    /* Family header spans the full row width above the cell grid. Uses
-       flex-basis:100% instead of a grid column-span since siblings are flex. */
-    table.grid th.fam{flex:1 0 100%;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;
-                      padding:2px 4px 8px;border-bottom:1px solid var(--line);margin-bottom:2px;
-                      white-space:normal;text-align:left;background:transparent}
-    table.grid th.fam .famname{font-size:16px}
-    /* flex: 0 1 basis so cells DON'T grow beyond 1/3. Families with 4 tiers
-       naturally show 3+1, 6 tiers show 3+3, 1 tier (Burnt Peanut) shows 1
-       and lets the rest of the row stay empty rather than stretching one cell
-       to fill 100% width. calc() subtracts the gap so 3 fit per row exactly. */
-    table.grid td{padding:0;border:0;text-align:center;background:transparent;
-                  flex:0 1 calc(33.33% - 6px)}
-    table.grid td .cell{min-width:0;width:100%;padding:6px 2px 8px;gap:4px}
-    /* Thumbs shrink from fixed 78px to fluid 100% (max 84px) so they scale
-       inside their grid cell instead of overflowing it. aspect-ratio:1 keeps
-       them square without a fixed pixel height. */
-    table.grid td .thumb{width:100%;height:auto;max-width:84px;aspect-ratio:1;margin:0 auto}
-    table.grid td .track{width:100%;max-width:84px;margin:0 auto}
-    table.grid td .cell.empty{display:none}
-    /* Big lock/jail-bar overlays scale automatically because they use
-       position:absolute + inset:0, but the emoji lock at 38px is too big for
-       a shrunken thumb — trim to 26px on mobile. */
-    table.grid .cell.locked:not(.vaulted):not(.future) .thumb::after{font-size:26px}
-    /* Countdown pill inside a mobile cell — width was 6.6em to prevent digit
-       wobble; that's too wide for a shrunken cell. 5em still holds the widest
-       "23h 59m" reading without wobbling. */
-    .rel-cd{min-width:5em}
-    /* Buffs strip stacks single-column instead of two side-by-side. */
-    .cf-buffs-panel{min-width:0;flex:1 1 100%}
-    /* Info-page audit table — stack into a card-per-row on mobile.
-       data-label on each <td> becomes an inline label via ::before, matching
-       the .cmp-table pattern for consistency across sprite pages. */
-    .audit-table{font-size:12.5px;display:block;border:0;background:transparent;border-radius:0}
-    .audit-table thead{display:none}
-    .audit-table tbody{display:block}
-    .audit-table tr{display:block;background:#0e0f13;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:10px 12px}
-    /* !important on white-space beats the desktop .num class specificity
-       (.audit-table td.num sets white-space:nowrap for right-aligned numeric
-       columns). Without this override, Chrome shrink-wraps display:block tds
-       with nowrap content to the content's intrinsic width — the Response
-       Size cell was rendering at 30px wide, causing "82 variants" to visually
-       overflow into the following Quack Hits cell. */
-    .audit-table td{display:block;padding:5px 0;border:0;text-align:left !important;white-space:normal !important;overflow-wrap:anywhere;width:auto}
-    .audit-table td::before{content:attr(data-label);display:block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:2px}
-    .audit-table td:first-child{padding-top:0}
-    .audit-table td:last-child{padding-bottom:0}
-    .audit-table code{display:inline-block;max-width:100%}
-    /* audit-token wraps normally on narrow screens instead of forcing a
-       nowrap column that pushes viewport width. Long family names like
-       "ZeroPointSprite" still fit; anything longer breaks at a syllable. */
-    .audit-token{white-space:normal;line-height:1.4}
-    /* Text-heavy pages (/sprites/info) — shrink long-form typography so the
-       page doesn't read as a wall-of-text scroll. Applies to any .card with
-       prose, no effect on grid pages since those use .stat / .famname etc. */
-    .card h1{font-size:20px;line-height:1.25;margin:8px 0 4px}
-    .card h2{font-size:15.5px;line-height:1.3;margin:10px 0 6px}
-    .card>p,.card>ol li,.card>ul li,.info-details p,.info-details ol li{font-size:13.5px;line-height:1.55}
-    .card>p{margin:8px 0}
-    .card>ol,.card>ul{padding-left:18px}
-    /* Collapsed methodology block — click to expand. Keeps the info page
-       tight on mobile while preserving full reproduction steps. */
-    details.info-details{margin:0}
-    details.info-details>summary{cursor:pointer;list-style:none;padding:8px 0;font-weight:700;color:var(--purple);font-size:14px}
-    details.info-details>summary::-webkit-details-marker{display:none}
-    details.info-details>summary::before{content:'▸ ';color:var(--muted);font-weight:800}
-    details.info-details[open]>summary::before{content:'▾ '}
-    details.info-details[open]>summary{margin-bottom:6px;border-bottom:1px solid var(--line)}
-  }
-  /* Galaxy Z Fold cover screen (~340-380 CSS px) — tighter padding, smaller
-     type on the endpoint code strings, extra-aggressive wrap. */
-  @media (max-width:430px){
-    main{padding:12px 10px}
-    .card{padding:14px;margin:10px auto}
-    .card h1{font-size:19px}
-    .card h2{font-size:16px}
-    header{padding:9px 12px;gap:6px 10px}
-    .logo{font-size:16px}
-    .cf-network summary{font-size:11px;padding:4px 9px}
-    .nav .navlink{padding:4px 9px;font-size:11.5px}
-    .audit-table{font-size:12px}
-    .audit-table td code{font-size:11px}
-    .audit-token{font-size:11px;padding:2px 7px}
-    .audit-token.family{font-size:10.5px}
-    /* Fold cover — shrink sprite grid further so 3 cells + gaps fit in ~318px
-       content width (340 viewport - 22 padding). Thumb caps at 72px, cell
-       padding trims, gap tightens. Family header font drops slightly. */
-    table.grid tr{padding:8px 6px 10px;gap:6px}
-    table.grid td{flex:0 1 calc(33.33% - 4px)}
-    table.grid td .thumb{max-width:72px}
-    table.grid td .track{max-width:72px}
-    table.grid td .cell{padding:5px 1px 7px;gap:3px}
-    table.grid td .tn{font-size:11px}
-    table.grid td .xp{font-size:10px}
-    table.grid td .cost{font-size:10px}
-    table.grid td .b{font-size:9px;padding:1px 5px}
-    table.grid .cell.locked:not(.vaulted):not(.future) .thumb::after{font-size:22px}
-    table.grid th.fam{padding:0 2px 6px}
-    table.grid th.fam .famname{font-size:15px}
-    table.grid th.fam .famcount{font-size:11px}
-  }
-  /* Buffs & Drops strip — client-populated per-second w/ ET wall clock math. */
-  .cf-buffs{display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap}
-  .cf-buffs-panel{flex:1;min-width:280px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:#0e0f13;transition:background .2s,border-color .2s}
-  .cf-buffs-panel.mastery{background:linear-gradient(90deg,rgba(58,208,122,.10),rgba(58,208,122,.02));border-color:rgba(58,208,122,.45)}
-  .cf-buffs-panel.power{background:linear-gradient(90deg,rgba(255,207,58,.12),rgba(255,207,58,.02));border-color:rgba(255,207,58,.55)}
-  .cf-buffs-title{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
-  .cf-buffs-headline{font-weight:800;font-size:15px;color:#fff;margin-bottom:2px;line-height:1.2}
-  .cf-buffs-sub{font-size:13px;color:var(--muted);line-height:1.45}
-  .cf-buffs-countdown{font-variant-numeric:tabular-nums;font-weight:700;color:#cbb5ff}
-  .cf-buffs-upcoming{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:3px}
-  .cf-buffs-upitem{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
-  .cf-buffs-uplabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .cmp-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 14px;padding:10px 14px;background:#0e0f13;border:1px solid var(--line);border-radius:12px}
-  .cmp-filter-label{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
-  .cmp-tier-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;border:1px solid;background:#161922;cursor:pointer;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;user-select:none}
-  .cmp-tier-pill input{accent-color:var(--purple);width:14px;height:14px;margin:0}
-  .cmp-tier-pill:has(input:not(:checked)){opacity:.35;background:transparent}
-  .cmp-clear{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:600 12px/1 inherit;cursor:pointer;text-transform:uppercase;letter-spacing:.04em;margin-left:auto}
-  .cmp-clear:hover{color:var(--txt);border-color:var(--purple)}
-  .cmp-clear + .cmp-clear{margin-left:0}
-  .cell.vaulted .thumb{border-color:rgba(255,91,110,.45);box-shadow:0 0 10px rgba(255,91,110,.18)}
-  /* Vaulted image no longer greyscaled — the jail bars overlay carries the "locked away" cue.
-     Kept the red border above as a redundant signal (bars = "not gettable", red = "vaulted specifically"). */
-  footer{color:var(--muted);font-size:12.5px;text-align:center;padding:26px;line-height:1.7}
-  .legend{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin:18px 0 4px;color:var(--muted);font-size:12.5px}
-  .legend span{display:inline-flex;align-items:center;gap:6px} .sw{width:12px;height:12px;border-radius:4px;display:inline-block}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;max-width:680px;margin:30px auto}
-  .card h2{margin:0 0 6px} .card ol{padding-left:20px;line-height:1.9} .warn{border-left:3px solid var(--gold);padding:8px 14px;color:#d8c98f;background:rgba(255,207,58,.06);border-radius:0 8px 8px 0;margin-top:16px}
-  .card .sub{color:var(--muted);font-size:13px;margin:6px 0}
-  .once{background:rgba(58,208,122,.1);border:1px solid rgba(58,208,122,.25);border-radius:10px;padding:10px 14px;color:var(--green);font-size:13px;font-weight:600;margin:16px 0}
-  .step{display:flex;gap:14px;margin:20px 0;align-items:flex-start}
-  .num{flex:none;width:30px;height:30px;border-radius:50%;background:var(--purple);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px}
-  .stepbody{flex:1;min-width:0} .stepbody b{font-size:15px}
-  .card textarea{width:100%;padding:11px 13px;border-radius:9px;border:1px solid var(--line);background:#0e0f13;color:var(--txt);font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;margin:10px 0 12px;resize:vertical;min-height:62px}
-  .card textarea:focus{outline:none;border-color:var(--purple)}
-  .btn{display:inline-block;background:linear-gradient(90deg,var(--purple),#9b7bff);color:#fff;border:0;border-radius:10px;padding:11px 18px;font:700 14px/1 inherit;cursor:pointer;text-decoration:none}
-  input[type=text]{width:100%;padding:11px 13px;border-radius:9px;border:1px solid var(--line);background:#0e0f13;color:var(--txt);font:inherit;margin-top:6px}
-  .toolbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 16px}
-  .filters{display:flex;gap:6px;flex-wrap:wrap}
-  .filters button{background:#161922;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font:600 13px/1 inherit;cursor:pointer}
-  .filters button:hover{color:var(--txt)} .filters button.active{background:var(--purple);color:#fff;border-color:var(--purple)}
-  .sortwrap{margin-left:auto;color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px}
-  .sortwrap select{background:#161922;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;cursor:pointer}
-  .resync-form{margin:0}
-  .resync-btn{background:#161922;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font:600 13px/1 inherit;cursor:pointer;transition:border-color .15s,color .15s}
-  .resync-btn:hover{border-color:var(--purple);color:#cfc5ff}
-  .sharebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:0 0 16px}
-  .sharebar span{color:var(--muted);font-size:13px;font-weight:600} .sharebar input{flex:1;min-width:220px;background:#0e0f13;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 11px;font:inherit;margin:0}
-  .sharebar button{background:var(--purple);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:700 13px/1 inherit;cursor:pointer;white-space:nowrap}
-  .viewban{background:rgba(123,92,255,.1);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:0 0 16px;color:var(--muted)} .viewban b{color:var(--txt)}
-  .navlink{color:var(--purple);text-decoration:none;font-weight:700;font-size:13px;align-self:center}
-  table.grid .cell{transition:opacity .15s,transform .12s}
-  table.f-have .cell.locked,
-  table.f-need .cell.owned, table.f-need .cell.future, table.f-need .cell.vaulted,
-  table.f-master .cell:not(.mastered),
-  table.f-unrel .cell:not(.future){opacity:.1}
-  tr.rowhide{display:none}
-  /* ── Trading-card modal (Pokemon / Yu-Gi-Oh vibe) ─────────────────────── */
-  .cell[data-info-trigger]{cursor:pointer}
-  .info-modal{position:fixed;inset:0;background:rgba(6,7,10,.82);backdrop-filter:blur(10px);
-    display:none;align-items:center;justify-content:center;z-index:9999;padding:16px;
-    animation:info-fade .2s ease-out}
-  .info-modal.open{display:flex}
-  @keyframes info-fade{from{opacity:0}to{opacity:1}}
-  @keyframes card-in{
-    0%{transform:scale(.85) rotateY(-8deg);opacity:0}
-    60%{transform:scale(1.03) rotateY(2deg);opacity:1}
-    100%{transform:scale(1) rotateY(0);opacity:1}
-  }
-  @keyframes holo-shimmer{
-    0%{background-position:0% 50%}
-    50%{background-position:100% 50%}
-    100%{background-position:0% 50%}
-  }
-  @keyframes card-glow{
-    0%,100%{filter:drop-shadow(0 0 12px var(--card-glow, rgba(123,92,255,.4)))}
-    50%{filter:drop-shadow(0 0 22px var(--card-glow, rgba(123,92,255,.7)))}
-  }
-  /* Card outer frame — colored border per rarity. Width capped like a real
-     trading card; height auto-fits content so the ability panels never scroll. */
-  .info-card{
-    width:min(380px, 92vw);
-    max-height:92vh;
-    position:relative;padding:0;
-    background:linear-gradient(155deg,var(--card-a,#2a2438) 0%,var(--card-b,#0f1018) 100%);
-    border-radius:22px;
-    border:none;
-    box-shadow:
-      0 0 0 3px var(--card-frame,#3a3550),
-      0 0 0 5px rgba(0,0,0,.35),
-      0 30px 80px rgba(0,0,0,.7);
-    animation:card-in .35s cubic-bezier(.2,.9,.3,1.3);
-    display:flex;flex-direction:column;
-    /* Card content flows naturally; only scroll if the card itself
-       exceeds the viewport (very tall descriptions on tiny screens). */
-    overflow:hidden auto;
-    scrollbar-width:thin;scrollbar-color:var(--card-frame) transparent;
-  }
-  .info-card::-webkit-scrollbar{width:5px}
-  .info-card::-webkit-scrollbar-thumb{background:var(--card-frame);border-radius:3px}
-  /* Rarity variables set via data attribute */
-  .info-card[data-rarity="Rare"]{--card-frame:#5bf0ff;--card-a:#0e2833;--card-b:#0a1418;--card-glow:rgba(91,240,255,.35)}
-  .info-card[data-rarity="Epic"]{--card-frame:#c084fc;--card-a:#241238;--card-b:#0e0a18;--card-glow:rgba(192,132,252,.4)}
-  .info-card[data-rarity="Legendary"]{--card-frame:#ffcf3a;--card-a:#332510;--card-b:#161006;--card-glow:rgba(255,207,58,.45)}
-  .info-card[data-rarity="Mythic"]{--card-frame:#ff6cc4;--card-a:#331428;--card-b:#180a12;--card-glow:rgba(255,108,196,.5);animation:card-in .35s cubic-bezier(.2,.9,.3,1.3), card-glow 2.4s ease-in-out infinite 1s}
-  /* CH7S4 Override rarity system (Common/Uncommon/Rare/Very Rare). "Rare" reuses the cyan above. */
-  .info-card[data-rarity="Common"]{--card-frame:#b6c0cf;--card-a:#1c2027;--card-b:#0d0f13;--card-glow:rgba(182,192,207,.28)}
-  .info-card[data-rarity="Uncommon"]{--card-frame:#4fd77a;--card-a:#0f2a1a;--card-b:#08160e;--card-glow:rgba(79,215,122,.35)}
-  .info-card[data-rarity="Very Rare"]{--card-frame:#a678ff;--card-a:#221338;--card-b:#100a18;--card-glow:rgba(166,120,255,.42)}
-  /* Holofoil / Gem / Cube tiers get the iridescent conic-gradient overlay */
-  .info-card.holo::before{
-    content:'';position:absolute;inset:0;pointer-events:none;border-radius:22px;
-    background:conic-gradient(from 0deg, #ff6cc4, #ffcf3a, #3ad07a, #5bf0ff, #7b5cff, #ff6cc4);
-    background-size:200% 200%;
-    mix-blend-mode:overlay;
-    opacity:.32;
-    animation:holo-shimmer 4.5s ease-in-out infinite;
-    z-index:1;
-  }
-  .info-card > *{position:relative;z-index:2}
+// The Sprite Tracker stylesheet lives in dashboard/public/css/cf-sprites.css (site tokens, all three
+// themes); shell() links it. Kept as a file so style fixes go live with scripts/reload-dashboard.mjs.
 
-  /* Header bar — sprite name + level/HP badge */
-  .info-hdr{
-    display:flex;align-items:center;justify-content:space-between;gap:8px;
-    padding:11px 16px 8px;
-  }
-  .info-hdr .fam-wrap{flex:1;min-width:0}
-  .info-hdr .fam-name{
-    font:900 20px/1.05 inherit;letter-spacing:-.01em;margin:0;
-    color:#f5f0ff;text-shadow:0 1px 0 rgba(0,0,0,.5);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  }
-  .info-hdr .fam-sub{
-    font:800 9px/1 inherit;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--card-frame);margin-top:3px;opacity:.9;
-  }
-  .info-hdr .level-badge{
-    background:rgba(0,0,0,.55);border:2px solid var(--card-frame);
-    padding:5px 10px 4px;border-radius:22px;text-align:center;
-    min-width:56px;line-height:1;flex-shrink:0;
-  }
-  .info-hdr .level-badge .lvl-num{
-    font:900 18px/1 inherit;color:var(--card-frame);display:block;
-    text-shadow:0 0 8px var(--card-glow,rgba(255,255,255,.3));
-  }
-  .info-hdr .level-badge .lvl-lbl{
-    font:800 8px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
-    color:#e8eaf0;opacity:.85;margin-top:2px;display:block;
-  }
-  .info-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);
-    border:1.5px solid var(--card-frame);color:#e8eaf0;width:28px;height:28px;
-    border-radius:50%;font:800 16px/1 inherit;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;z-index:10;
-    transition:background .12s,transform .12s}
-  .info-close:hover{background:var(--card-frame);color:#000;transform:scale(1.1)}
-
-  /* Art window */
-  .info-art{
-    margin:0 14px;
-    aspect-ratio: 1 / 1;
-    background:radial-gradient(ellipse at 50% 45%, rgba(255,255,255,.06) 0%, rgba(0,0,0,.5) 80%);
-    border:2px solid var(--card-frame);
-    border-radius:10px;
-    display:flex;align-items:center;justify-content:center;
-    overflow:hidden;position:relative;
-    box-shadow:inset 0 2px 8px rgba(0,0,0,.6);
-  }
-  .info-art img{width:88%;height:88%;object-fit:contain;
-    filter:drop-shadow(0 6px 18px rgba(0,0,0,.6))}
-  .info-art svg{width:70%;height:70%}
-  .info-art .art-tier-badge{
-    position:absolute;top:8px;left:8px;
-    background:var(--card-frame);color:#000;
-    font:900 10px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
-    padding:3px 8px;border-radius:6px;
-    box-shadow:0 2px 4px rgba(0,0,0,.4);
-  }
-  .info-art .art-status{
-    position:absolute;bottom:8px;right:8px;
-    background:rgba(0,0,0,.7);color:#e8eaf0;
-    font:800 10px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
-    padding:4px 9px;border-radius:6px;border:1px solid rgba(255,255,255,.15);
-  }
-  .info-art .art-status.owned{color:#3ad07a;border-color:rgba(58,208,122,.4)}
-  .info-art .art-status.mastered{color:#c084fc;border-color:rgba(192,132,252,.4)}
-
-  /* Body — ability boxes + stats. No internal scroll — card grows to fit. */
-  .info-body{padding:10px 14px 12px}
-
-  /* Ability box — mimic Pokemon's move-description box */
-  .info-move{
-    background:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(0,0,0,.15) 100%);
-    border:1.5px solid rgba(255,255,255,.14);
-    border-radius:8px;
-    padding:9px 11px;
-    margin-bottom:8px;
-    position:relative;
-  }
-  .info-move-hdr{
-    display:flex;align-items:center;gap:8px;margin-bottom:5px;
-  }
-  .info-move-hdr .icon{
-    width:22px;height:22px;border-radius:50%;
-    background:var(--card-frame);color:#000;
-    display:flex;align-items:center;justify-content:center;
-    font:900 14px/1 inherit;flex-shrink:0;
-  }
-  .info-move-hdr .name{
-    font:900 12.5px/1.1 inherit;color:#f5f0ff;flex:1;
-    text-transform:uppercase;letter-spacing:.04em;
-  }
-  .info-move-hdr .power{
-    font:900 12.5px/1 inherit;color:var(--card-frame);
-    text-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.2));
-  }
-  .info-move-desc{
-    font:500 11.5px/1.4 inherit;color:#d5d8e0;margin:0;
-  }
-  /* Per-level scaling table under the ability description */
-  .lvl-list{
-    display:grid;
-    grid-template-columns:auto 1fr;
-    gap:3px 8px;
-    margin-top:6px;
-    padding-top:6px;
-    border-top:1px dashed rgba(255,255,255,.08);
-  }
-  .lvl-tag{
-    font:900 9.5px/1.35 inherit;letter-spacing:.05em;text-transform:uppercase;
-    color:var(--card-frame);
-    background:rgba(0,0,0,.35);
-    padding:2px 7px;border-radius:4px;
-    text-align:center;white-space:nowrap;align-self:center;
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);
-  }
-  .lvl-val{
-    color:#e4e7ee;font:600 11px/1.4 inherit;
-    align-self:center;
-  }
-  /* On the /sprites/info ability table use neutral color (no card-frame var) */
-  .audit-table .lvl-list{border-top-color:rgba(123,92,255,.15)}
-  .audit-table .lvl-tag{color:var(--purple);background:rgba(123,92,255,.12)}
-
-  /* Stats strip — mimic Pokemon's weakness/retreat row */
-  .info-stats{
-    display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;
-    padding:8px;
-    background:rgba(0,0,0,.35);
-    border:1px solid rgba(255,255,255,.08);
-    border-radius:6px;
-    margin-bottom:8px;
-  }
-  .info-stat{text-align:center}
-  .info-stat b{display:block;font:900 14px/1 inherit;color:var(--card-frame);margin-bottom:2px;
-    text-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.2))}
-  .info-stat .lbl{font:800 8px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
-    color:#a9b6d0;opacity:.85}
-
-  /* XP progress bar */
-  .info-progress{height:5px;background:rgba(0,0,0,.5);border-radius:3px;overflow:hidden;
-    margin:6px 0 3px;border:1px solid rgba(255,255,255,.05)}
-  .info-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--card-frame),#fff);
-    transition:width .3s;box-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.4))}
-  .info-progress-lbl{font:700 10px/1 inherit;text-align:center;color:#a9b6d0;
-    letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
-
-  /* Footer with rarity dot + codename */
-  .info-foot{
-    display:flex;align-items:center;justify-content:space-between;gap:8px;
-    padding:6px 14px 10px;
-    font:600 9px/1.2 inherit;color:#7a8395;
-    border-top:1px solid rgba(255,255,255,.05);
-  }
-  .info-foot .codename{
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    font-size:9.5px;opacity:.8;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    flex:1;min-width:0;
-  }
-  .info-foot .rarity-dot{
-    display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
-    font:900 9px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--card-frame);
-  }
-  .info-foot .rarity-dot::before{
-    content:'';width:8px;height:8px;border-radius:50%;
-    background:var(--card-frame);
-    box-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.3));
-  }
-
-  /* Special-status ribbons that appear as banners over the art */
-  .info-ribbon{
-    position:absolute;top:12px;right:-30px;
-    background:var(--card-frame);color:#000;
-    padding:3px 34px;font:900 10px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
-    transform:rotate(35deg);
-    box-shadow:0 2px 4px rgba(0,0,0,.35);z-index:3;
-  }
-  .info-ribbon.vaulted{background:#ff5b6e;color:#fff}
-  .info-ribbon.mastered{background:linear-gradient(90deg,#ffcf3a,#c084fc);color:#000}
-
-  /* Compact mobile tweaks */
-  @media(max-width:420px){
-    .info-card{width:96vw;max-height:95vh}
-    .info-hdr .fam-name{font-size:17px}
-    .info-hdr .level-badge{min-width:48px;padding:4px 8px 3px}
-    .info-hdr .level-badge .lvl-num{font-size:16px}
-    .info-body{padding:8px 12px 10px}
-  }
-  /* ── /sprites/cards catalogue grid ─────────────────────────────────────── */
-  .cards-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:end;
-    background:rgba(0,0,0,.2);border:1px solid var(--line);
-    border-radius:10px;padding:12px 14px;margin-top:12px}
-  .cards-toolbar label{display:flex;flex-direction:column;gap:4px;
-    font:800 10.5px/1 inherit;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--muted);min-width:130px}
-  .cards-toolbar select{background:#0e0f13;border:1px solid var(--line);
-    color:var(--txt);border-radius:8px;padding:8px 10px;font:600 13px/1 inherit;
-    cursor:pointer;min-width:130px}
-  .cards-toolbar button{margin-left:6px}
-  .cards-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
-    gap:22px;
-    margin-top:16px;
-  }
-  /* Catalogue cards render inline (not as modal) — remove animation + shadows
-     tuned for modal-in-viewport, add a subtle hover lift. */
-  .catalogue-card{
-    width:100%!important;
-    max-height:none!important;
-    max-width:400px;
-    margin:0 auto;
-    animation:none;
-    transition:transform .18s ease-out, box-shadow .18s ease-out;
-  }
-  .catalogue-card:hover{
-    transform:translateY(-4px) scale(1.01);
-    box-shadow:
-      0 0 0 3px var(--card-frame,#3a3550),
-      0 0 0 5px rgba(0,0,0,.35),
-      0 20px 40px rgba(0,0,0,.7),
-      0 0 30px var(--card-glow, rgba(123,92,255,.4));
-  }
-  @media(max-width:600px){
-    .cards-grid{grid-template-columns:1fr;gap:16px}
-    .cards-toolbar label{min-width:100%}
-    .cards-toolbar select{width:100%}
-  }
-  /* PNG download button per card */
-  .card-dl{
-    position:absolute;top:8px;right:8px;z-index:10;
-    background:rgba(0,0,0,.6);border:1.5px solid var(--card-frame,#7b5cff);
-    color:var(--card-frame,#e8eaf0);
-    width:30px;height:30px;border-radius:50%;
-    font:900 15px/1 inherit;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
-    transition:transform .12s, background .12s, color .12s;
-    opacity:.7;
-  }
-  .card-dl:hover{opacity:1;background:var(--card-frame,#7b5cff);color:#000;transform:scale(1.12)}
-  .card-dl.working{background:var(--card-frame);color:#000;animation:card-in .5s ease-in-out infinite alternate}
-  .card-dl.done{background:#3ad07a;border-color:#3ad07a;color:#000}
-  /* Bulk-download bar */
-  .cards-bulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-    background:rgba(123,92,255,.08);border:1px solid rgba(123,92,255,.3);
-    border-radius:10px;padding:10px 14px;margin-top:12px}
-  .cards-bulk .dl-all{background:var(--purple);color:#fff;border:0;
-    border-radius:8px;padding:8px 14px;font:800 12.5px/1 inherit;cursor:pointer;
-    letter-spacing:.04em;text-transform:uppercase}
-  .cards-bulk .dl-all:hover{background:#8f70ff}
-  .cards-bulk .dl-status{color:var(--muted);font:600 12.5px/1 inherit;flex:1}
-  .cards-bulk progress{height:8px;flex:1;max-width:280px;
-    background:#0e0f13;border:1px solid var(--line);border-radius:4px;
-    overflow:hidden;appearance:none;-webkit-appearance:none}
-  .cards-bulk progress::-webkit-progress-bar{background:#0e0f13}
-  .cards-bulk progress::-webkit-progress-value{background:var(--purple)}
-  .cards-bulk progress::-moz-progress-bar{background:var(--purple)}
-  /* ── Shared layout pass (2026-11-18): one header + tab row on every page,
-     readable contrast, visible keyboard focus, no squeezed hero on phones. ── */
-  :root{--muted:#9ca3b8;--link:#ab98ff}
-  html{background:var(--bg)}
-  body{min-height:100vh}
-  a{color:var(--link)}
-  .navlink{color:var(--link)}
-  :where(a,button,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid var(--link);outline-offset:2px}
-  header.st-header{display:block;padding:0;position:sticky;top:0;z-index:30;background:#0c0d12;border-bottom:1px solid var(--line)}
-  .st-bar{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:12px 26px}
-  .st-bar .logo{white-space:nowrap}
-  .st-bar .nav{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .st-tabs{display:flex;gap:2px;padding:0 20px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  .st-tabs::-webkit-scrollbar{display:none}
-  .st-tabs a{flex:none;padding:9px 12px 10px;color:var(--muted);font-weight:700;font-size:13.5px;text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap}
-  .st-tabs a:hover{color:var(--txt)}
-  .st-tabs a[aria-current="page"]{color:var(--txt);border-bottom-color:var(--purple)}
-  .cfn-here{margin-left:auto;font-size:10px;color:var(--muted);font-weight:600}
-  .nav .navlink[aria-current="page"]{background:#161922;color:var(--txt)}
-  .btn,.nav .navlink.primary,.nav .navlink.primary:hover{background:linear-gradient(90deg,#6744f0,#7a5cf6);color:#fff}
-  .btn:hover{filter:brightness(1.08)}
-  .btn.btn-quiet{background:#262a37;color:var(--txt)}
-  .st-input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid #2f3446;background:#12141b;color:var(--txt);font:inherit;margin:0}
-  .st-input:focus{border-color:var(--purple)}
-  .st-field{display:grid;gap:4px}
-  .st-field > span:first-child{font-weight:600}
-  .st-hint{font-size:12px;color:var(--muted)}
-  main input:not([type=checkbox]):not([type=radio]),main select,main textarea{max-width:100%}
-  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .st-empty{text-align:center;color:var(--muted);padding:22px 12px;margin:0}
-  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-  .stats{flex:1 1 320px;min-width:0}
-  .browse-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
-  .browse-actions .btn[disabled]{opacity:.5;cursor:not-allowed;filter:none}
-  .catalogue-card .info-hdr{padding-right:44px}
-  .table-scroll{overflow-wrap:normal;word-break:normal}
-  .table-scroll > table{min-width:880px}
-  @media (max-width:600px){
-    header.st-header{position:static}
-    .st-bar{padding:10px 14px;gap:8px 10px}
-    .st-bar .nav{margin-left:0}
-    .st-tabs{padding:0 6px;flex-wrap:wrap;overflow:visible}
-    .st-tabs a{padding:8px 10px 9px;font-size:13px}
-    .hero{gap:14px;padding:14px 16px}
-    .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;flex-basis:100%}
-    .stat,.stat b{overflow-wrap:normal;word-break:normal}
-    .stat b{font-size:19px}
-  }`;
 
 // Client-side filter + sort + copy-share (CSP allows inline script via 'unsafe-inline').
 // Server-rendered SHELL for the Buffs & Drops strip — shared between
@@ -2515,7 +1520,7 @@ const SCRIPT = `<script>(function(){
         : (summon >= 6750 ? 'Mythic' : summon >= 4500 ? 'Legendary' : summon >= 2700 ? 'Epic' : 'Rare');
 
       // Card level display — for owned, show numeric level (1-5 based on XP).
-      // For locked, show padlock. Unreleased = clock. Vaulted = 🚫.
+      // For locked, show padlock. Unreleased = clock. Vaulted = .
       var lvl = Math.max(1, Math.min(5, Math.ceil(xp / 800)));  // 800 XP/lvl, mastered=5
       var lvlNumHtml, lvlLblHtml;
       if (vaulted && !owned) { lvlNumHtml = '🚫'; lvlLblHtml = 'Vaulted'; }
@@ -2527,8 +1532,8 @@ const SCRIPT = `<script>(function(){
       // Image / placeholder for the art window
       var imgHtml = img
         ? '<img src="/sprites/img/' + esc(img) + '.png" alt="' + esc(name) + '" onerror="this.style.display=\\'none\\'; this.parentNode.querySelector(\\'.art-fallback\\').style.display=\\'block\\'">'
-          + '<svg class="art-fallback" style="display:none" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="' + esc(tierColor) + '">' + esc((tierLabel||'?')[0]) + '</text></svg>'
-        : '<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="' + esc(tierColor) + '">' + esc((tierLabel||'?')[0]) + '</text></svg>';
+          + '<svg class="art-fallback" style="display:none" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="' + esc(tierColor) + '">' + esc((tierLabel||'?')[0]) + '</text></svg>'
+        : '<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="' + esc(tierColor) + '">' + esc((tierLabel||'?')[0]) + '</text></svg>';
 
       // Art window overlays
       var artStatusHtml = '';
@@ -2598,14 +1603,14 @@ const SCRIPT = `<script>(function(){
       // Datamined / vaulted flavor text
       var flavorHtml = '';
       if (pakDatamined) {
-        flavorHtml = '<div class="info-move" style="border-color:rgba(192,132,252,.3);background:linear-gradient(180deg,rgba(192,132,252,.06),rgba(0,0,0,.15))">'
-          + '<div class="info-move-hdr"><span class="icon" style="background:#c084fc">i</span>'
+        flavorHtml = '<div class="info-move" style="border-color:color-mix(in srgb, var(--cf-accent) 30%, transparent);background:color-mix(in srgb, var(--cf-accent) 6%, transparent)">'
+          + '<div class="info-move-hdr"><span class="icon i-info">i</span>'
           + '<span class="name">Datamined</span></div>'
-          + '<p class="info-move-desc" style="font-style:italic;color:#c084fc">Defined in Fortnite\\'s pak files but not yet enabled server-side. Confirmed real — just not extractable from matches yet.</p>'
+          + '<p class="info-move-desc" style="font-style:italic;color:var(--cf-accent-fg)">Defined in Fortnite\\'s pak files but not yet enabled server-side. Confirmed real — just not extractable from matches yet.</p>'
         + '</div>';
       } else if (vaulted && !owned) {
-        flavorHtml = '<div class="info-move" style="border-color:rgba(255,91,110,.3)">'
-          + '<div class="info-move-hdr"><span class="icon" style="background:#ff5b6e">!</span>'
+        flavorHtml = '<div class="info-move" style="border-color:color-mix(in srgb, var(--cf-danger) 30%, transparent)">'
+          + '<div class="info-move-hdr"><span class="icon i-bad">!</span>'
           + '<span class="name">Vaulted</span></div>'
           + '<p class="info-move-desc" style="font-style:italic">Currently not appearing in Battle Royale matches. Prior-window copies still count.</p>'
         + '</div>';
@@ -2619,10 +1624,10 @@ const SCRIPT = `<script>(function(){
       var noteHtml = '';
       var note = META.notes && META.notes[famToken];
       if (note) {
-        noteHtml = '<div class="info-move" style="border-color:rgba(255,207,58,.4);background:linear-gradient(180deg,rgba(255,207,58,.08),rgba(0,0,0,.15))">'
-          + '<div class="info-move-hdr"><span class="icon" style="background:#ffcf3a;color:#1a1613">⚠</span>'
+        noteHtml = '<div class="info-move" style="border-color:color-mix(in srgb, var(--sp-gold) 40%, transparent);background:color-mix(in srgb, var(--sp-gold) 8%, transparent)">'
+          + '<div class="info-move-hdr"><span class="icon warn">⚠</span>'
           + '<span class="name">' + esc(note.label) + '</span></div>'
-          + '<p class="info-move-desc" style="color:#ffcf3a">' + esc(note.text) + '</p>'
+          + '<p class="info-move-desc" style="color:var(--sp-gold)">' + esc(note.text) + '</p>'
         + '</div>';
       }
 
@@ -2839,10 +1844,10 @@ const SCRIPT = `<script>(function(){
       return (et.ms>=SPREE_WEEK_START&&et.ms<SPREE_WEEK_END)?{end:SPREE_WEEK_END}:null;
     }
     var SPREE_HOURS = [
-      { s:wallMs(2026,8,16,9,0), e:wallMs(2026,8,17,9,0), label:'🌌 Galaxy Hours',   desc:'Galaxy Sprites appear more often — all day' },
-      { s:wallMs(2026,8,17,9,0), e:wallMs(2026,8,18,9,0), label:'💿 Holofoil Hours', desc:'Holofoil Sprites appear more often — equip one to help find other rare Sprites' },
-      { s:wallMs(2026,8,18,9,0), e:wallMs(2026,8,19,9,0), label:'⬢ Cube Hours',       desc:'Cube Sprites appear more often — equip one for Overdrive in the Storm' },
-      { s:wallMs(2026,8,19,9,0), e:wallMs(2026,8,20,7,0), label:'💎 Gem Hours',        desc:'Gem Sprites appear more often — equip one for −30% fall damage' }
+      { s:wallMs(2026,8,16,9,0), e:wallMs(2026,8,17,9,0), label:'Galaxy Hours',   desc:'Galaxy Sprites appear more often — all day' },
+      { s:wallMs(2026,8,17,9,0), e:wallMs(2026,8,18,9,0), label:'Holofoil Hours', desc:'Holofoil Sprites appear more often — equip one to help find other rare Sprites' },
+      { s:wallMs(2026,8,18,9,0), e:wallMs(2026,8,19,9,0), label:'Cube Hours',       desc:'Cube Sprites appear more often — equip one for Overdrive in the Storm' },
+      { s:wallMs(2026,8,19,9,0), e:wallMs(2026,8,20,7,0), label:'Gem Hours',        desc:'Gem Sprites appear more often — equip one for −30% fall damage' }
     ];
     function activeSpreeHours(et){
       for(var i=0;i<SPREE_HOURS.length;i++){ var h=SPREE_HOURS[i]; if(et.ms>=h.s&&et.ms<h.e) return h; }
@@ -2870,11 +1875,11 @@ const SCRIPT = `<script>(function(){
     //          /thread/holofoil-hours-july-11/MFCL (Jul 11 Holofoil)
     var SATURDAY_EVENTS = {
       '2026-07-04': {
-        label: '⚡ Gold & Gummy Hours',
+        label: 'Gold & Gummy Hours',
         description: 'Gold & Gummy variants appear more often · Mythic Gold Fish + Self-Revive on Bus drop · Faster leveling at Campfires'
       },
       '2026-07-11': {
-        label: '💿 Holofoil Hours',
+        label: 'Holofoil Hours',
         description: 'Holofoil variants appear more often · Shock Rocks (2× jump, drops more) + Self-Revive on Bus drop'
       },
       // Sprite Spree Week finale (CH7S3): Mythic Hours runs the Saturday
@@ -2882,23 +1887,23 @@ const SCRIPT = `<script>(function(){
       // /thread/whats-new-in-fortnite-runners-august-14/Gvie + vice.com
       // sprite-spree-week schedule. 11 AM–1 PM PT = 2–4 PM ET, 6–8 PM PT = 9–11 PM ET.
       '2026-08-15': {
-        label: '🟣 Mythic Hours',
+        label: 'Mythic Hours',
         description: 'Mythic Sprites appear far more often — two 2-hour windows (2–4 PM & 9–11 PM ET). Sprite Spree Week finale'
       },
       // Chapter 7 Season 4: Override — first Power Hours of the new season.
       // Source: beebom.com/fortnite-chapter-7-season-4-patch-notes (Aug 22, Gold).
       '2026-08-22': {
-        label: '⚡ Gold Hours',
+        label: 'Gold Hours',
         description: 'Gold Sprite variants appear more often — Season 4: Override Power Hours (2–4 PM & 9–11 PM ET)'
       },
       // Source: vice.com/fortnite-cheat-master-sprites-august-27-update — Sonic-themed
       // Power Hours the Saturday after the Aug 27 Cheat Master debut.
       '2026-08-29': {
-        label: '🦔 Sonic Power Hours',
+        label: 'Sonic Power Hours',
         description: 'Sonic-themed Power Hours — Sonic Sprite variants appear more often (2–4 PM & 9–11 PM ET)'
       }
     };
-    var DEFAULT_SAT_EVENT = { label:'⚡ Saturday Power Hour', description:'Variant Sprites boosted + unique gameplay modifiers' };
+    var DEFAULT_SAT_EVENT = { label:'Saturday Power Hour', description:'Variant Sprites boosted + unique gameplay modifiers' };
     function isoDateFromWallMs(ms){
       var d = new Date(ms);
       var pad = function(n){return (n<10?'0':'')+n;};
@@ -2926,48 +1931,48 @@ const SCRIPT = `<script>(function(){
       // only when no acute Hours/Saturday event is live.
       if(sh){
         bufCur.className='cf-buffs-panel power';
-        elCurTitle.textContent='🎉 Sprite Spree — active event';
+        elCurTitle.textContent='Sprite Spree — active event';
         elCurHead.textContent=sh.label;
         elCurSub1.textContent=sh.desc;
         elCurSub2Wrap.style.display='';
         elCurCd.textContent=fmtDelta(sh.e-et.ms);
       } else if(sat){
         bufCur.className='cf-buffs-panel power';
-        elCurTitle.textContent='💿 Active event';
+        elCurTitle.textContent='Active event';
         elCurHead.textContent=sat.theme.label+' ('+sat.window+')';
         elCurSub1.textContent=sat.theme.description;
         elCurSub2Wrap.style.display='';
         elCurCd.textContent=fmtDelta(sat.end-et.ms);
       } else if(cu){
         bufCur.className='cf-buffs-panel power';
-        elCurTitle.textContent='🎯 Active event';
+        elCurTitle.textContent='Active event';
         elCurHead.textContent='Catch-Up Day';
         elCurSub1.textContent='Legendary Sprites drop at 4× the normal rate — hunt rare Sprites while the boost is live';
         elCurSub2Wrap.style.display='';
         elCurCd.textContent=fmtDelta(cu.end-et.ms);
       } else if(mm){
         bufCur.className='cf-buffs-panel mastery';
-        elCurTitle.textContent='🟢 Active buff';
+        elCurTitle.textContent='Active buff';
         elCurHead.textContent='Mastery Monday';
         elCurSub1.textContent='2× XP · 2× Dust · Legendary/Mythic spawn boosted';
         elCurSub2Wrap.style.display='';
         elCurCd.textContent=fmtDelta(mm.end-et.ms);
       } else if(sw){
         bufCur.className='cf-buffs-panel mastery';
-        elCurTitle.textContent='🎉 Sprite Spree Week';
+        elCurTitle.textContent='Sprite Spree Week';
         elCurHead.textContent='Runners finale — all-week bonuses';
         elCurSub1.textContent=SPREE_WEEK_DESC;
         elCurSub2Wrap.style.display='';
         elCurCd.textContent=fmtDelta(sw.end-et.ms);
       } else if(ov){
         bufCur.className='cf-buffs-panel power';
-        elCurTitle.textContent='🎮 New season';
+        elCurTitle.textContent='New season';
         elCurHead.textContent='Chapter 7 Season 4: Override';
         elCurSub1.textContent=OVERRIDE_DESC;
         elCurSub2Wrap.style.display='none';
       } else if(gw){
         bufCur.className='cf-buffs-panel power';
-        elCurTitle.textContent='🌴 Active event';
+        elCurTitle.textContent='Active event';
         elCurHead.textContent='Summer Hits the Island: Gone Wild';
         elCurSub1.textContent='Golden fishing spots · Firework Flaregun · summer Sprite variants boosted · faster leveling at Campfires';
         elCurSub2Wrap.style.display='';
@@ -2985,8 +1990,8 @@ const SCRIPT = `<script>(function(){
       // Thursday drop" — that was speculation; only add specific announced
       // Thursday events (Catch-Up Day, Holofoil arrival, etc.).
       var candidates=[];
-      if(CATCHUP_START>et.ms) candidates.push({label:'🎯 Catch-Up Day (Legendary 4×)',at:CATCHUP_START,precise:true});
-      if(CHEATCODE_DAY>et.ms) candidates.push({label:'🎟️ Cheat Code Day',at:CHEATCODE_DAY,precise:true});
+      if(CATCHUP_START>et.ms) candidates.push({label:'Catch-Up Day (Legendary 4×)',at:CATCHUP_START,precise:true});
+      if(CHEATCODE_DAY>et.ms) candidates.push({label:'Cheat Code Day',at:CHEATCODE_DAY,precise:true});
       // NOTE: the 4 "New Sprite Day" Cheat Masters (Klombo/Shadow/Jackrabbit/Killswitch)
       // released EARLY (grabbable in-game by Aug 25, ahead of the Aug 27 announce), so the
       // Aug-27 countdown was pulled — no confirmed content left for that date, and a
@@ -3012,13 +2017,13 @@ const SCRIPT = `<script>(function(){
       // automatically once the week ends (inSpree=false → Season 4 cadence).
       var inSpree = et.ms < SPREE_WEEK_END;
       SPREE_HOURS.forEach(function(h){ if(h.s>et.ms) candidates.push({label:h.label,at:h.s,precise:true}); });
-      MYTHIC_SESSIONS.forEach(function(t){ if(t>et.ms) candidates.push({label:'🟣 Mythic Hours',at:t,precise:true}); });
+      MYTHIC_SESSIONS.forEach(function(t){ if(t>et.ms) candidates.push({label:'Mythic Hours',at:t,precise:true}); });
       if(!inSpree){
-        candidates.push({label:'🟢 Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
+        candidates.push({label:'Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
         // Next Saturday event — figure out which window (afternoon or evening)
         // is soonest, then look up the theme for that Saturday's date. Themed
         // events (Gold & Gummy Hours, Holofoil Hours) get their specific label;
-        // unannounced Saturdays fall through to "⚡ Saturday Power Hour".
+        // unannounced Saturdays fall through to "Saturday Power Hour".
         var nextSat, nextSatWindow;
         if(et.wd===6){
           var mins=et.h*60+et.mi;
@@ -3032,7 +2037,7 @@ const SCRIPT = `<script>(function(){
       // Safety net: if every dated event has passed (e.g. mid-transition to a
       // new season before releases are re-seeded), fall back to the recurring
       // Mastery Monday so the panel never dereferences an empty list.
-      if(!candidates.length) candidates.push({label:'🟢 Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
+      if(!candidates.length) candidates.push({label:'Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
       candidates.sort(function(a,b){return a.at-b.at});
       var soonest=candidates[0];
       elNextHead.textContent=soonest.label;
@@ -3154,271 +2159,24 @@ const SCRIPT = `<script>(function(){
   }
 })();</script>`;
 
-function shell(title, body, meta = null) {
-  // OG/Twitter meta tags drive Discord (and Slack, Twitter, etc.) link unfurling.
-  // When someone pastes the page URL into Discord, Discord fetches these tags
-  // and renders a rich embed card with the title, description, image, and a
-  // color stripe. Caching is on Discord's side (~24h) — bust by including the
-  // synced_at as a query param on og:image so each sync gets a fresh URL.
-  const ogTags = meta ? `
-<meta property="og:type" content="${esc(meta.type || 'website')}">
-<meta property="og:site_name" content="CertiFried Sprite Tracker">
-<meta property="og:title" content="${esc(meta.title || title)}">
-<meta property="og:description" content="${esc(meta.description || '')}">
-${meta.url ? `<meta property="og:url" content="${esc(meta.url)}">` : ''}
-${meta.image ? `<meta property="og:image" content="${esc(meta.image)}">` : ''}
-${meta.image ? '<meta name="twitter:card" content="summary_large_image">' : '<meta name="twitter:card" content="summary">'}
-${meta.image ? `<meta name="twitter:image" content="${esc(meta.image)}">` : ''}
-<meta name="theme-color" content="${esc(meta.color || '#7b5cff')}">
-<meta name="twitter:title" content="${esc(meta.title || title)}">
-<meta name="twitter:description" content="${esc(meta.description || '')}">` : '';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ogTags}
-<style>${STYLE}</style></head><body>${body}</body></html>`;
-}
-// Section tabs shown on every Sprite Tracker page. `match` lists the paths that
-// mark a tab as the current one (set client-side from location.pathname, so no
-// route has to thread a "current page" argument through to chrome()).
-const SITE_TABS = [
-  { href: '/sprites', label: 'My collection', match: '/sprites /sprites/profile /sprites/account /sprites/discord-connect /sprites/admin' },
-  { href: '/sprites/browse', label: 'Compare', match: '/sprites/browse /sprites/compare' },
-  { href: '/sprites/cards', label: 'Cards', match: '/sprites/cards /sprites/override /sprites/garden' },
-  { href: '/sprites/codes', label: 'Codes', match: '/sprites/codes' },
-  { href: '/sprites/countdown', label: 'Next drop', match: '/sprites/countdown' },
-  { href: '/sprites/info', label: 'Catalog audit', match: '/sprites/info' },
-];
-function chrome(nav = '') {
-  // One header for every page: brand, the CertiFried Network menu (native
-  // <details>, no JS), page-specific actions on the right (user menu or a
-  // call to action), and the section tabs underneath.
-  const networkMenu = `<details class="cf-network">
-    <summary>CertiFried Network <span aria-hidden="true">▾</span></summary>
-    <div class="cf-network-menu">
-      <div class="cfn-section">Tools</div>
-      <a href="https://certifriedmultitool.com/">Home</a>
-      <a href="/dashboard">Bot dashboard</a>
-      <a href="/sprites">Sprite Tracker <span class="cfn-here">you are here</span></a>
-      <a href="/cah">Cards Against Humanity</a>
-      <div class="cfn-divider"></div>
-      <div class="cfn-section">Info</div>
-      <a href="/commands">Bot commands</a>
-      <a href="/status">Status</a>
-      <a href="/donate">Donate</a>
-      <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener">Discord server ↗</a>
-    </div>
-  </details>`;
-  const tabs = SITE_TABS.map((t) => `<a href="${t.href}" data-match="${t.match}">${t.label}</a>`).join('');
-  return `<header class="st-header">
-    <div class="st-bar">
-      <a href="/sprites" class="logo"><span class="c">Certi</span><span class="f">Fried</span> · Sprite Tracker</a>
-      ${networkMenu}
-      ${nav ? `<div class="nav">${nav}</div>` : ''}
-    </div>
-    <nav class="st-tabs" aria-label="Sprite Tracker sections">${tabs}</nav>
-  </header>
-  <script>(function(){var p=location.pathname.replace(/\\/+$/,'')||'/';document.querySelectorAll('.st-tabs a').forEach(function(a){if((a.getAttribute('data-match')||'').split(' ').indexOf(p)!==-1)a.setAttribute('aria-current','page');});})();</script>`;
-}
-
-// Avatar-style colored circle from a display name's first character. The hue is
-// derived from a stable hash of the full name so a given user always gets the
-// same color across pages.
-function avatarMarkup(displayName) {
-  const ch = (displayName || '?')[0].toUpperCase();
-  let hash = 0;
-  for (let i = 0; i < (displayName || '').length; i++) hash = (hash * 31 + displayName.charCodeAt(i)) & 0xffff;
-  const hue = hash % 360;
-  return `<span class="avatar" style="background:hsl(${hue},55%,42%)">${esc(ch)}</span>`;
-}
-
-// Logged-in user menu — top-nav dropdown for owner views. The Re-sync action
-// lives in the grid toolbar (next to Sort) rather than here, since it's an
-// "act on the data I'm looking at" action, not an account action.
-function userMenu({ displayName, isAdmin = false, currentPath = '' } = {}) {
-  const item = (href, icon, label, opts = {}) => {
-    const active = opts.active ? ' current' : '';
-    const danger = opts.danger ? ' danger' : '';
-    return `<a class="menu-item${active}${danger}" href="${esc(href)}"${opts.active ? ' aria-current="page"' : ''}>${esc(label)}</a>`;
+// Sends shell() pages through the site frame. Anything else (JSON, PNG, redirects, strings)
+// goes through res.send untouched.
+router.use((req, res, next) => {
+  const send = res.send.bind(res);
+  res.send = (body) => {
+    const page = body && typeof body === 'object' ? body[FRAMED_PAGE] : null;
+    if (!page) return send(body);
+    renderFramed(req, res, framedOptions(req, page)).then(
+      (html) => send(html),
+      (error) => {
+        logger.error(`[sprites] site frame render failed: ${error.message}`);
+        send(String(body));
+      },
+    );
+    return res;
   };
-  const formItem = (action, icon, label, opts = {}) => {
-    const danger = opts.danger ? ' danger' : '';
-    return `<form method="post" action="${esc(action)}" class="menu-form"><button class="menu-item${danger}" type="submit">${esc(label)}</button></form>`;
-  };
-  return `<details class="usermenu">
-    <summary>
-      ${avatarMarkup(displayName)}
-      <span class="usermenu-name">${esc(displayName)}</span>
-      <span class="usermenu-caret" aria-hidden="true">▾</span>
-    </summary>
-    <div class="usermenu-dropdown">
-      ${item('/sprites', '⬚', 'My collection', { active: currentPath === '/sprites' })}
-      ${item('/sprites/profile', '📊', 'My profile', { active: currentPath === '/sprites/profile' })}
-      ${item('/sprites/account', '🔑', 'Username & password', { active: currentPath === '/sprites/account' })}
-      ${isAdmin ? item('/sprites/admin', '⚙', 'Admin', { active: currentPath === '/sprites/admin' }) : ''}
-      <div class="menu-divider"></div>
-      ${formItem('/sprites/logout', '🚪', 'Log out', { danger: true })}
-    </div>
-  </details>`;
-}
-
-// Bookmarklet source: runs on Epic's /id/api/redirect JSON page. Reads the
-// authorizationCode from the response body, builds a hidden form, and submits
-// it cross-origin to /sprites/auth — same end-state as the manual paste, but
-// no copy needed. Wrapped in try/catch so clicking it from a non-Epic page
-// just alerts the user instead of failing silently.
-const BOOKMARKLET = `javascript:(function(){try{var t=document.body.innerText.trim();if(!t||t[0]!=='{')throw 0;var c=JSON.parse(t).authorizationCode;if(typeof c!=='string')throw 0;var f=document.createElement('form');f.method='POST';f.action='https://certifriedmultitool.com/sprites/auth';var i=document.createElement('input');i.type='hidden';i.name='code';i.value=c;f.appendChild(i);document.body.appendChild(f);f.submit();}catch(e){alert('CertiFried Sprite Tracker: To use this, sign into Epic first, then click this bookmark on the page that shows the JSON.');}})();`;
-
-function renderLogin({ error } = {}) {
-  // The href attribute is double-quoted, so we only need to escape the few
-  // chars that would close it or confuse HTML parsing: & " < >.
-  const bookmarkletHref = BOOKMARKLET
-    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return shell('Sign in — CertiFried Sprite Tracker', chrome() + `<main>
-    <a href="#first-time" style="display:block;text-decoration:none;color:inherit;margin-bottom:18px">
-      <div style="background:linear-gradient(90deg,#3a1f5c,#2a3f7c);border:1px solid #6b4cff;border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px">
-        <span style="font-size:28px">🆕</span>
-        <div style="flex:1">
-          <b style="font-size:15px;display:block;margin-bottom:2px">First time here? Start with Epic Setup ↓</b>
-          <span class="sub" style="font-size:13px;color:#d6c8ff">
-            The sign-in options below <b>will not work</b> until you've connected your Epic account at least once.
-            Click here or scroll down to the <b>Epic Setup</b> section.
-          </span>
-        </div>
-        <span class="sub" style="font-size:12px;white-space:nowrap">tap to jump ↓</span>
-      </div>
-    </a>
-    <div class="card" style="margin-bottom:18px">
-      <h2>Returning user · Sign in</h2>
-      <p class="sub">Already connected your Epic account here before? Use one of these to sign back in from any device.</p>
-      ${error ? `<p class="warn">${esc(error)}</p>` : ''}
-      <form method="post" action="/sprites/login" style="display:grid;gap:10px;max-width:360px">
-        <label style="display:grid;gap:4px">
-          <span style="font-weight:600">Username</span>
-          <input type="text" name="username" required autocomplete="username"
-            inputmode="text" minlength="3" maxlength="32" class="st-input">
-        </label>
-        <label style="display:grid;gap:4px">
-          <span style="font-weight:600">Password</span>
-          <input type="password" name="password" required autocomplete="current-password" class="st-input">
-        </label>
-        <button class="btn" type="submit">Sign in →</button>
-      </form>
-      ${EAS_CONFIGURED ? `
-        <div style="display:flex;align-items:center;gap:10px;margin:18px 0 12px;max-width:360px">
-          <div style="flex:1;height:1px;background:#2a2f3c"></div>
-          <span class="sub" style="font-size:12px">or</span>
-          <div style="flex:1;height:1px;background:#2a2f3c"></div>
-        </div>
-        <a href="/sprites/connect" class="btn btn-quiet" style="max-width:360px;text-align:center">Sign in with Epic</a>
-        <p class="sub" style="margin-top:8px;font-size:12px;color:#ffb87a">
-          ⚠️ <b>Returning users only.</b> If you've never connected here before, this button will bounce you back with a friendly error. Use <b>Epic Setup</b> below first.
-        </p>
-      ` : ''}
-    </div>
-    <div id="first-time" class="card" style="border:2px solid #6b4cff;background:linear-gradient(180deg,#15172a 0%,#161922 30%)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <span style="background:#6b4cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🆕 START HERE</span>
-        <span class="sub" style="font-size:12px">— first-time setup, ~30 seconds</span>
-      </div>
-      <h2 style="margin-top:6px">Epic Setup — Connect your Epic account</h2>
-      <p class="sub">Auto-sync your full Fortnite Sprite collection — owned, mastered, XP, and unreleased sprites. <b>You only do this once.</b></p>
-      <p class="warn" style="background:#3a1f0e;border-color:#7a4a1f;color:#ffd6a8">
-        <b>⚠️ This step is required for ALL new accounts.</b> You cannot use the "Sign in" form above (or the Epic sign-in button) until your account has been connected here at least once — those flows only verify <i>who</i> you are; this flow loads <i>what</i> you've collected.
-      </p>
-      <p class="once">🔒 After this one-time setup, you'll never paste anything again — your collection re-syncs automatically and you can sign in from anywhere with the username + password you set on your <a href="/sprites/account" style="color:#a6f0c2">account page</a>.</p>
-      <div class="step">
-        <span class="num">1</span>
-        <div class="stepbody">
-          <b>Get your code from Epic</b>
-          <p class="sub">Opens Epic in a new tab — sign in if it asks, then you'll see a small block of text appear.</p>
-          <a class="btn" href="${LOGIN_URL}" target="_blank" rel="noopener">🎮 Open Epic login →</a>
-        </div>
-      </div>
-      <div class="step">
-        <span class="num">2</span>
-        <div class="stepbody">
-          <b>Paste it back here</b>
-          <p class="sub">Select all of that text and paste it below — we'll pull out the code for you (the whole blob, a <code>?code=…</code> URL, or just the 32-character code all work).</p>
-          <form method="post" action="/sprites/auth">
-            <textarea name="code" rows="3" autocomplete="off" spellcheck="false" required
-              placeholder='Paste the {"authorizationCode":"…"} block here'></textarea>
-            <button class="btn" type="submit">Connect &amp; sync →</button>
-          </form>
-        </div>
-      </div>
-      <details class="alt-flow" style="margin-top:18px;padding:14px;border:1px solid #2a2f3c;border-radius:10px;background:#15171e">
-        <summary style="cursor:pointer;font-weight:700;color:#cfe">⚡ Skip the copy/paste — drag a bookmarklet to your bookmarks bar (optional, one-time setup)</summary>
-        <p class="sub" style="margin-top:10px">A bookmarklet is a tiny shortcut you save to your browser's bookmarks bar — no extension install, no permissions. After you save it, the flow becomes:</p>
-        <ol style="margin:8px 0 12px 18px;line-height:1.7">
-          <li>Drag the button below to your bookmarks bar (or right-click → "Bookmark this link"). This installs the bookmarklet.</li>
-          <li>Click <b>Open Epic login</b> above and sign in. You'll see the JSON page.</li>
-          <li>On that JSON page, click the bookmark you just saved — it auto-submits your code. No copying anything.</li>
-        </ol>
-        <p style="margin:10px 0 6px"><a class="btn" draggable="true" href="${bookmarkletHref}"
-            onclick="event.preventDefault();alert('Drag this button up to your bookmarks bar — clicking it here does nothing. On the Epic JSON page, click the bookmark you saved.');return false;"
-            style="background:#3a3f4d;color:#fff">🔖 CertiFried Auto-Login (drag me)</a></p>
-        <p class="sub" style="font-size:12px;color:#7a8395">Source visible — it just reads <code>authorizationCode</code> from Epic's JSON page and POSTs it to <code>/sprites/auth</code>. No copy/paste needed once installed.</p>
-      </details>
-      <p class="warn">We exchange your login server-side, store only an <b>encrypted refresh token</b>
-        for re-syncs, and never log token values.</p>
-    </div>
-    <p style="text-align:center;margin:22px 0 0;font-size:14px">
-      Want to see what's already here? <a href="/sprites/browse" class="navlink">🤝 Browse + compare public collections →</a>
-    </p>
-    <p style="text-align:center;margin:8px 0 0;font-size:13px;color:var(--muted)">
-      Curious what's real vs. datamined? <a href="/sprites/info" class="navlink">📋 Live catalog audit &amp; methodology →</a>
-    </p>
-    </main>`);
-}
-
-// /sprites/account — set/change username + password. Independent of share_id
-// (the public URL slug), so changing your login here will NOT break any
-// /sprites/u/<slug> link already shared. Requires the current password to
-// change anything once a password is set.
-function renderAccount({ displayName, currentUsername, hasPassword, passwordSetAt, isAdmin = false, viaEpic = false, error = null, success = null } = {}) {
-  const fmtTs = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
-  // Show the "current password" gate only when there IS a stored password AND
-  // the user signed in via username/password. Epic-paste login is sufficient
-  // ownership proof, so it skips the gate (recovery path for forgotten password).
-  const requireCurrent = hasPassword && !viaEpic;
-  const nav = userMenu({ displayName, isAdmin, currentPath: '/sprites/account' });
-  return shell('Username & password — CertiFried Sprite Tracker', chrome(nav) + `<main>
-    <div class="card">
-      <h2>Username & password</h2>
-      <p class="sub">Set these so you can sign in from any device or browser without re-pasting an Epic code.
-        ${displayName ? `Linked to your Epic display name <b>${esc(displayName)}</b>.` : ''}</p>
-      <p class="sub" style="font-size:13px">Your public share URL is independent of this username — changing your login here will not break any link you've already shared.</p>
-      ${error ? `<p class="warn">${esc(error)}</p>` : ''}
-      ${success ? `<p class="once" style="background:#0e2a1a;border-color:#1f6f3b;color:#a6f0c2">${esc(success)}</p>` : ''}
-      ${hasPassword && viaEpic ? `<p class="sub" style="font-size:13px;background:#0e2238;border:1px solid #1f487a;padding:10px;border-radius:8px">🔑 You're signed in via Epic, so you can reset your password here without knowing the old one.</p>` : ''}
-      <form method="post" action="/sprites/credentials" style="display:grid;gap:12px;max-width:420px;margin-top:12px">
-        <label style="display:grid;gap:4px">
-          <span style="font-weight:600">Username</span>
-          <input type="text" name="username" required minlength="3" maxlength="32"
-            autocomplete="username" pattern="[A-Za-z0-9][A-Za-z0-9_\\-]{1,30}[A-Za-z0-9]"
-            value="${esc(currentUsername || '')}" class="st-input">
-          <span class="sub" style="font-size:12px">3-32 chars, letters/digits/_/- only. Starts and ends with a letter or digit.</span>
-        </label>
-        ${requireCurrent ? `
-          <label style="display:grid;gap:4px">
-            <span style="font-weight:600">Current password</span>
-            <input type="password" name="current_password" required autocomplete="current-password" class="st-input">
-            <span class="sub" style="font-size:12px">Set ${esc(fmtTs(passwordSetAt))}. Required to change anything.</span>
-          </label>
-        ` : ''}
-        <label style="display:grid;gap:4px">
-          <span style="font-weight:600">${hasPassword ? 'New password' : 'Password'}</span>
-          <input type="password" name="password" required minlength="8" autocomplete="new-password" class="st-input">
-          <span class="sub" style="font-size:12px">At least 8 characters. Longer = stronger; we don't enforce complexity rules.</span>
-        </label>
-        <button class="btn" type="submit">${hasPassword ? 'Update credentials' : 'Save credentials'}</button>
-      </form>
-      <p class="sub" style="margin-top:18px;font-size:13px">
-        Forgot your password? Sign out, then on the sign-in page use <b>"Connect your Epic account"</b> — once you're back in via Epic, this page will let you set a new password without needing the old one.
-      </p>
-    </div>
-  </main>`);
-}
+  next();
+});
 
 function renderCollection(state, { readOnly = false, shareUrl = null, firstSyncedAt = null, needsRelogin = false, isAdmin = false, refreshExpiresAt = null, hasDeviceAuth = false, buybackList = [], seedBanner = null } = {}) {
   const s = state.summary;
@@ -3443,7 +2201,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
   // uses Base/Gold/Cheat Master, so the dead CH7S3 tiers (Gummy/Galaxy/Gem/
   // Holofoil/Cube/Quack) shouldn't show as empty columns. Dynamic = future-proof.
   const activeTiers = TIERS.filter((t) => state.groups.some((g) => g.variants[t.key]));
-  const head = activeTiers.map((t) => `<th style="color:${t.color}">${t.label}</th>`).join('');
+  const head = activeTiers.map((t) => `<th data-tier style="--tier:${t.color}">${t.label}</th>`).join('');
   // cellOpts is passed to cell() below inside the row map. Declared here so
   // it's available at the TIERS.map callback time (avoids TDZ against the
   // buybackSet declaration further down the function body).
@@ -3462,7 +2220,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     const full = obtainable > 0 && g.ownedCount === obtainable;
     const fullyVaulted = obtainable === 0 && vaultedCount > 0;
     const countLabel = fullyVaulted
-      ? '<span class="famcount-vaulted">🚫 Vaulted</span>'
+      ? '<span class="famcount-vaulted">Vaulted</span>'
       : `<span class="famcount ${full ? 'full' : ''}">${g.ownedCount}/${obtainable}${g.masteredCount ? ` · ${g.masteredCount}✦` : ''}</span>`;
     return `<tr data-order="${i}" data-name="${esc(g.label)}" data-owned="${g.ownedCount}" data-need="${need}" data-master="${g.masteredCount}" data-future="${futureCount}"${fullyVaulted ? ' data-vaulted="1"' : ''}>
       <th class="fam"><span class="famname">${esc(g.label)}</span>
@@ -3479,8 +2237,8 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
   // Stale-token banner: only shown on the owner's own view (readOnly === false).
   // Viewers of /u/:slug don't see it because it's not their problem to fix.
   const reloginBanner = (!readOnly && needsRelogin)
-    ? `<div class="relogin-banner">⚠️ <b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. To pick up newly collected sprites and XP changes, sign out and reconnect with a fresh Epic code.
-        <a href="/sprites/logout" class="btn" style="padding:7px 14px">Reconnect</a></div>`
+    ? `<div class="relogin-banner"><b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. To pick up newly collected sprites and XP changes, sign out and reconnect with a fresh Epic code.
+        <a href="/sprites/logout" class="btn btn-primary" style="padding:7px 14px">Reconnect</a></div>`
     : '';
   // Proactive token-expiry warning: yellow banner shown when the refresh token
   // has < 48 hours until Epic invalidates it. Lets users pre-empt instead of
@@ -3499,12 +2257,12 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     const label = hoursLeft < 1
       ? `${Math.round(ms / (60 * 1000))} minutes`
       : `${Math.round(hoursLeft)} hours`;
-    return `<div class="expiry-banner">⏳ <b>Your Epic connection expires in ${label}.</b> Visit your page now to trigger a re-sync — that mints a permanent device credential so this won't happen again.
-        <form method="post" action="/sprites/resync" style="display:inline;margin-left:12px"><button class="btn" style="background:#ffcf3a;color:#3a2a00">Refresh now →</button></form></div>`;
+    return `<div class="expiry-banner"><b>Your Epic connection expires in ${label}.</b> Visit your page now to trigger a re-sync — that mints a permanent device credential so this won't happen again.
+        <form method="post" action="/sprites/resync" style="display:inline;margin-left:12px"><button class="btn btn-primary" style="background:var(--sp-gold);color:var(--cf-surface)">Refresh now →</button></form></div>`;
   })();
   const banner = readOnly
-    ? `<div class="viewban">👀 Viewing <b>${esc(state.player)}</b>'s collection — ${s.owned}/${denom} collected, ${denom - s.owned} still needed${future ? ` · ${future} awaiting release` : ''} · <a href="/sprites">Track your own →</a></div>`
-    : (shareUrl ? `<div class="sharebar"><span>🔗 Share — paste in Discord for a rich embed</span>
+    ? `<div class="viewban">Viewing <b>${esc(state.player)}</b>'s collection — ${s.owned}/${denom} collected, ${denom - s.owned} still needed${future ? ` · ${future} awaiting release` : ''} · <a href="/sprites">Track your own →</a></div>`
+    : (shareUrl ? `<div class="sharebar"><span>Share — paste in Discord for a rich embed</span>
         <input id="shareurl" type="text" readonly value="${esc(shareUrl)}">
         <button id="copyshare" type="button">Copy link</button></div>` : '');
   // Slug for the Discord export download link — derived from shareUrl so
@@ -3524,10 +2282,10 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
   const buybackRows = buybackList.map((b) => {
     const imgHtml = b.imgId
       ? `<img loading="lazy" src="/sprites/img/${esc(b.imgId)}.png" alt="${esc(b.familyLabel)} ${esc(b.tierLabel)}" class="bb-thumb">`
-      : `<span class="bb-thumb bb-thumb-ph" style="color:${b.tierColor}">?</span>`;
+      : `<span class="bb-thumb bb-thumb-ph" data-tier style="--tier:${b.tierColor}">?</span>`;
     return `<tr class="bb-row" data-src="${esc(b.source)}">
       <td class="bb-cell-thumb">${imgHtml}</td>
-      <td class="bb-cell-label"><span class="bb-tier" style="color:${b.tierColor}">${esc(b.tierLabel)}</span> <b>${esc(b.familyLabel)}</b>${b.source === 'auto' ? ' <span class="bb-auto" title="Auto-added from an extraction detected on sync">auto</span>' : ''}</td>
+      <td class="bb-cell-label"><span class="bb-tier" data-tier style="--tier:${b.tierColor}">${esc(b.tierLabel)}</span> <b>${esc(b.familyLabel)}</b>${b.source === 'auto' ? ' <span class="bb-auto" title="Auto-added from an extraction detected on sync">auto</span>' : ''}</td>
       <td class="bb-cell-cost">${fmt(b.cost)} ✦</td>
       ${readOnly ? '' : `<td class="bb-cell-action">
         <form method="post" action="/sprites/buyback/toggle" style="margin:0">
@@ -3544,8 +2302,8 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     if (seedBanner.startsWith('added:')) {
       const m = seedBanner.match(/added:(\d+):skipped:(\d+)/);
       if (m) seedNote = `<p class="bb-seed-note">✓ Added ${m[1]} to list${+m[2] ? ` · skipped ${m[2]} unresolvable line(s) (check spelling)` : ''}.</p>`;
-    } else if (seedBanner === 'empty') seedNote = `<p class="bb-seed-note bb-seed-warn">⚠ Empty text — paste your list and try again.</p>`;
-    else if (seedBanner === 'error') seedNote = `<p class="bb-seed-note bb-seed-warn">⚠ Something went wrong — try again.</p>`;
+    } else if (seedBanner === 'empty') seedNote = `<p class="bb-seed-note bb-seed-warn">Empty text — paste your list and try again.</p>`;
+    else if (seedBanner === 'error') seedNote = `<p class="bb-seed-note bb-seed-warn">Something went wrong — try again.</p>`;
   }
   // Buy-back panel visibility:
   //   - Owner view (readOnly=false): always render (empty state prompts seed).
@@ -3559,11 +2317,11 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
   const buybackShareUrl = shareUrl && exportSlug ? `${shareUrl.replace(/\/+$/, '')}/buyback` : null;
   const buybackPanel = !showBuybackPanel ? '' : `<details class="bb-panel" ${buybackList.length ? 'open' : ''} data-synced-at="${state.syncedAt || ''}">
     <summary class="bb-summary">
-      <span>🎯 <b>${panelTitle}</b>${buybackList.length ? ` · ${buybackList.length} items` : ' — empty'}</span>
+      <span><b>${panelTitle}</b>${buybackList.length ? ` · ${buybackList.length} items` : ' — empty'}</span>
       <span class="bb-summary-stats">
         ${walletLabel} <b>${fmt(walletDust)}</b> ✦ · Need <b>${fmt(buybackDustTotal)}</b> ✦ ${buybackDustTotal > 0 ? `· <b>${buybackPct}%</b> funded` : ''}
         <span class="bb-fresh" id="bb-fresh" title="Time since last sync from Epic">· just now</span>
-        ${!readOnly && buybackShareUrl && buybackList.length ? `<a href="${esc(buybackShareUrl)}" class="bb-share" title="Public URL — paste in Discord for a rich embed" onclick="event.stopPropagation();navigator.clipboard?.writeText(this.href);this.textContent='✓ copied';setTimeout(()=>this.textContent='🔗 Share',1500);return false">🔗 Share</a>` : ''}
+        ${!readOnly && buybackShareUrl && buybackList.length ? `<a href="${esc(buybackShareUrl)}" class="bb-share" title="Public URL — paste in Discord for a rich embed" onclick="event.stopPropagation();navigator.clipboard?.writeText(this.href);this.textContent='✓ copied';setTimeout(()=>this.textContent='Share',1500);return false">Share</a>` : ''}
       </span>
     </summary>
     <div class="bb-panel-body">
@@ -3575,8 +2333,8 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
       ${readOnly ? '' : `<details class="bb-seed" ${buybackList.length ? '' : 'open'}>
         <summary>Bulk add from pasted text ↓</summary>
         <form method="post" action="/sprites/buyback/seed" style="margin-top:8px">
-          <textarea name="text" rows="4" placeholder="One per line, e.g.:&#10;- Gold Water (4k)&#10;- Gummy Earth (4k)&#10;- Zero Point (7.5k)&#10;- Galaxy Fishy (4k)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:#0e0f13;color:var(--txt);font:13px/1.5 ui-monospace,Menlo,Consolas,monospace"></textarea>
-          <button type="submit" class="btn" style="margin-top:6px">Add to list</button>
+          <textarea name="text" rows="4" placeholder="One per line, e.g.:&#10;- Gold Water (4k)&#10;- Gummy Earth (4k)&#10;- Zero Point (7.5k)&#10;- Galaxy Fishy (4k)" style="width:100%;padding:9px 11px;border-radius:var(--cf-radius);border:1px solid var(--cf-border);background:var(--cf-inset);color:var(--cf-text);font:13px/1.5 var(--cf-mono)"></textarea>
+          <button type="submit" class="btn btn-primary" style="margin-top:6px">Add to list</button>
           <span class="sub" style="font-size:12px;margin-left:10px">Tier is first word (Gold/Gummy/Galaxy/Basic/Holofoil/Gem). Family follows. Dust amount in parens is ignored — pulled from the catalog.</span>
         </form>
       </details>`}
@@ -3592,7 +2350,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     <label class="sortwrap">Sort
       <select id="sort"><option value="default">Default</option><option value="complete">Most complete</option>
       <option value="incomplete">Least complete</option><option value="az">A–Z</option></select></label>
-    ${exportSlug ? `<a class="resync-btn" href="/sprites/u/${esc(exportSlug)}/discord-export" download title="Download a PNG of this collection to drop into Discord">🖼️ Export PNG</a>` : ''}
+    ${exportSlug ? `<a class="resync-btn" href="/sprites/u/${esc(exportSlug)}/discord-export" download title="Download a PNG of this collection to drop into Discord">Export PNG</a>` : ''}
     ${!readOnly ? `<form method="post" action="/sprites/resync" class="resync-form" data-fp="${esc(`${state.summary?.owned ?? 0}:${state.summary?.mastered ?? 0}:${state.summary?.total ?? 0}`)}"><button type="submit" class="resync-btn" title="Pull fresh data from Epic right now">↻ Re-sync</button></form>` : ''}
     </div>`;
   // Build OG meta so pasting the share URL into Discord renders a rich embed
@@ -3607,7 +2365,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     image: `${shareUrl}/discord-export?v=${state.syncedAt ? Date.parse(state.syncedAt) : Date.now()}`,
     color: '#7b5cff',
   } : null;
-  return shell(`${state.player}'s Sprites — CertiFried`, chrome(nav) + `<main>
+  return shell(`${state.player}'s Sprites — CertiFried`, chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
     ${reloginBanner}
     ${expiryBanner}
     <section class="hero">
@@ -3621,8 +2379,8 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
           const eq = variantInfoFromName(state.summary?.equipped, state.groups);
           const st = variantInfoFromName(state.summary?.starter, state.groups);
           const parts = [];
-          if (eq) parts.push(`<span class="since">🎽 Equipped: <b style="color:${eq.tierColor}">${esc(eq.tierLabel)} ${esc(eq.familyLabel)}</b></span>`);
-          if (st) parts.push(`<span class="since">★ Started with: <b style="color:${st.tierColor}">${esc(st.familyLabel)}</b></span>`);
+          if (eq) parts.push(`<span class="since">Equipped: <b data-tier style="--tier:${eq.tierColor}">${esc(eq.tierLabel)} ${esc(eq.familyLabel)}</b></span>`);
+          if (st) parts.push(`<span class="since">Started with: <b data-tier style="--tier:${st.tierColor}">${esc(st.familyLabel)}</b></span>`);
           return parts.join('');
         })()}
       </div>
@@ -3636,8 +2394,8 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
         <div class="stat master"><b>${s.mastered}</b>Mastered</div>
         ${epic && epic.accountLevel ? `<div class="stat acct"><b>${fmt(epic.accountLevel)}</b>Account Level</div>` : ''}
         <div class="stat dust"><b>${fmt(s.dust) || '—'}</b>Sprite Dust ✦</div>
-        ${future ? `<div class="stat future"><b>${future}</b>🔜 Awaiting Release</div>` : ''}
-        ${vaulted ? `<div class="stat vaulted"><b>${vaulted}</b>🚫 Currently Vaulted</div>` : ''}
+        ${future ? `<div class="stat future"><b>${future}</b>Awaiting Release</div>` : ''}
+        ${vaulted ? `<div class="stat vaulted"><b>${vaulted}</b>Currently Vaulted</div>` : ''}
       </div>
       <div class="ring" style="--p:${pct}"><i>${pct}%</i></div>
     </section>
@@ -3649,10 +2407,10 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     <!-- Profile data has moved to /sprites/profile (or /sprites/u/<slug>/profile)
          so the sprite grid gets prime real estate. Link in the nav above. -->
     <div class="legend">
-      <span><i class="sw" style="background:var(--green)"></i>Collected</span>
-      <span><i class="sw" style="background:var(--purple)"></i>Mastered (max XP)</span>
-      <span><i class="sw" style="background:#5bf0ff"></i>Unreleased / future</span>
-      <span><i class="sw" style="background:#222634"></i>Not collected</span>
+      <span><i class="sw" style="background:var(--sp-owned)"></i>Collected</span>
+      <span><i class="sw" style="background:var(--sp-master)"></i>Mastered (max XP)</span>
+      <span><i class="sw" style="background:var(--sp-future)"></i>Unreleased / future</span>
+      <span><i class="sw" style="background:var(--cf-surface-2)"></i>Not collected</span>
     </div>
     <footer>Auto-synced from Epic's <code>extractablerelics</code> service${synced ? ` · ${synced}` : ''} ·
       ${denom} released variants across ${s.families} families${future ? ` (+${future} awaiting release)` : ''}.<br>
@@ -3756,10 +2514,10 @@ function renderBuybackPage(state, buybackList, { shareUrl = null, buybackShareUr
   const rows = buybackList.map((b) => {
     const imgHtml = b.imgId
       ? `<img loading="lazy" src="/sprites/img/${esc(b.imgId)}.png" alt="${esc(b.familyLabel)} ${esc(b.tierLabel)}" class="bb-thumb">`
-      : `<span class="bb-thumb bb-thumb-ph" style="color:${b.tierColor}">?</span>`;
+      : `<span class="bb-thumb bb-thumb-ph" data-tier style="--tier:${b.tierColor}">?</span>`;
     return `<tr class="bb-row">
       <td class="bb-cell-thumb">${imgHtml}</td>
-      <td class="bb-cell-label"><span class="bb-tier" style="color:${b.tierColor}">${esc(b.tierLabel)}</span> <b>${esc(b.familyLabel)}</b></td>
+      <td class="bb-cell-label"><span class="bb-tier" data-tier style="--tier:${b.tierColor}">${esc(b.tierLabel)}</span> <b>${esc(b.familyLabel)}</b></td>
       <td class="bb-cell-cost">${fmt(b.cost)} ✦</td>
     </tr>`;
   }).join('');
@@ -3773,16 +2531,16 @@ function renderBuybackPage(state, buybackList, { shareUrl = null, buybackShareUr
     image: buybackList.length ? `${buybackShareUrl}-export?v=${state.syncedAt ? Date.parse(state.syncedAt) : Date.now()}` : null,
     color: '#ffcf3a',
   } : null;
-  return shell(`${state.player}'s Buy-back List — CertiFried`, chrome(nav) + `<main>
+  return shell(`${state.player}'s Buy-back List — CertiFried`, chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
     <section class="hero" style="display:block;padding:22px 26px">
-      <div class="who" style="margin-bottom:8px">🎯 Buy-back list<b>${esc(state.player)}</b><span class="since">${buybackList.length} sprites wanted · ${fmt(totalDust)} ✦ needed · ${pct}% funded</span></div>
+      <div class="who" style="margin-bottom:8px">Buy-back list<b>${esc(state.player)}</b><span class="since">${buybackList.length} sprites wanted · ${fmt(totalDust)} ✦ needed · ${pct}% funded</span></div>
       ${totalDust > 0 ? `<div class="bb-progress" style="max-width:none"><i style="width:${pct}%"></i></div>` : ''}
-      <p class="sub" style="margin-top:12px">Wallet: <b style="color:#ffe48a">${fmt(walletDust)} ✦</b> · Sorted cheapest-first · Auto-updates when they play or trade.</p>
+      <p class="sub" style="margin-top:12px">Wallet: <b style="color:var(--sp-gold)">${fmt(walletDust)} ✦</b> · Sorted cheapest-first · Auto-updates when they play or trade.</p>
     </section>
     ${buybackList.length ? `<table class="bb-list-table" style="max-width:640px;margin:0 auto 24px">
       <tbody>${rows}</tbody>
     </table>` : '<p class="st-empty" style="margin:30px 0">No sprites on this buy-back list right now.</p>'}
-    <p style="text-align:center;margin:24px 0;font-size:13px;color:var(--muted)">
+    <p style="text-align:center;margin:24px 0;font-size:13px;color:var(--cf-text-3)">
       Traders — DM ${esc(state.player)} in Fortnite if you can spare any of these ·
       <a href="${esc(shareUrl || '/sprites')}" class="navlink">See their full collection →</a>
     </p>
@@ -3828,11 +2586,11 @@ function renderSpriteExtras(extras) {
     const barCls = donePct === 100 ? 'ct-fill completed' : 'ct-fill';
     return `<div class="sprite-quest-row">
       <div class="sqr-label"><b>${esc(label)}</b>
-        <span class="sub" style="font-size:11px;margin-left:6px">${done}/${total}${inProg ? ` · ${inProg} active` : ''}${s.unattainable ? ` · ${s.unattainable} 🔒 paid` : ''}</span>
+        <span class="sub" style="font-size:11px;margin-left:6px">${done}/${total}${inProg ? ` · ${inProg} active` : ''}${s.unattainable ? ` · ${s.unattainable} paid` : ''}</span>
       </div>
       <div class="ct-bar" style="margin-top:4px">
         <div class="${barCls}" style="width:${donePct}%"></div>
-        ${inProg ? `<div class="ct-fill" style="width:${inProgPct}%;background:#ffcf3a;opacity:.55;position:absolute;top:0;left:${donePct}%"></div>` : ''}
+        ${inProg ? `<div class="ct-fill" style="width:${inProgPct}%;background:var(--sp-gold);opacity:.55;position:absolute;top:0;left:${donePct}%"></div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -3856,16 +2614,16 @@ function renderSpriteExtras(extras) {
   const hasCosmetics = themeEntries.length > 0;
   return `
     <section class="sprite-extras" style="display:grid;grid-template-columns:${hasQuests && hasCosmetics ? '1fr 1fr' : '1fr'};gap:16px;margin-bottom:24px">
-      ${hasQuests ? `<div class="card" style="margin:0;background:var(--card);border:1px solid var(--line)">
-        <div class="cardhead">📋 Your sprite quests</div>
+      ${hasQuests ? `<div class="card" style="margin:0;background:var(--cf-surface);border:1px solid var(--cf-border)">
+        <div class="cardhead">Your sprite quests</div>
         <div class="sprite-quest-list">${questCards}</div>
         <p class="sub" style="font-size:11.5px;margin:12px 0 0">
           From your athena profile. Bar green = done, yellow = active, dark = remaining.
-          <b>🔒 paid</b> = quests that require the paid Battle Pass to claim rewards.
+          <b>paid</b> = quests that require the paid Battle Pass to claim rewards.
         </p>
       </div>` : ''}
-      ${hasCosmetics ? `<div class="card" style="margin:0;background:var(--card);border:1px solid var(--line)">
-        <div class="cardhead">🎨 Your sprite cosmetic locker</div>
+      ${hasCosmetics ? `<div class="card" style="margin:0;background:var(--cf-surface);border:1px solid var(--cf-border)">
+        <div class="cardhead">Your sprite cosmetic locker</div>
         <div class="sprite-cosmetic-list">${themeCards}</div>
         <p class="sub" style="font-size:11.5px;margin:12px 0 0">
           Sprite-adjacent cosmetics you own — extraction frames + character
@@ -3894,8 +2652,8 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
        <a class="navlink primary" href="/sprites">Track your collection</a>`
     : userMenu({ displayName: state.player, isAdmin, currentPath: '/sprites/profile' });
   const reloginBanner = (!readOnly && needsRelogin)
-    ? `<div class="relogin-banner">⚠️ <b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. Sign out and reconnect with a fresh Epic code to refresh it.
-        <a href="/sprites/logout" class="btn" style="padding:7px 14px">Reconnect</a></div>`
+    ? `<div class="relogin-banner"><b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. Sign out and reconnect with a fresh Epic code to refresh it.
+        <a href="/sprites/logout" class="btn btn-primary" style="padding:7px 14px">Reconnect</a></div>`
     : '';
   const expiryBanner = (() => {
     if (readOnly || needsRelogin || hasDeviceAuth || !refreshExpiresAt) return '';
@@ -3903,10 +2661,10 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
     const hoursLeft = ms / (60 * 60 * 1000);
     if (hoursLeft <= 0 || hoursLeft > 48) return '';
     const label = hoursLeft < 1 ? `${Math.round(ms / (60 * 1000))} minutes` : `${Math.round(hoursLeft)} hours`;
-    return `<div class="expiry-banner">⏳ <b>Your Epic connection expires in ${label}.</b> Visit your sprite page now to trigger a re-sync — that mints a permanent device credential so this won't happen again.
-        <form method="post" action="/sprites/resync" style="display:inline;margin-left:12px"><button class="btn" style="background:#ffcf3a;color:#3a2a00">Refresh now →</button></form></div>`;
+    return `<div class="expiry-banner"><b>Your Epic connection expires in ${label}.</b> Visit your sprite page now to trigger a re-sync — that mints a permanent device credential so this won't happen again.
+        <form method="post" action="/sprites/resync" style="display:inline;margin-left:12px"><button class="btn btn-primary" style="background:var(--sp-gold);color:var(--cf-surface)">Refresh now →</button></form></div>`;
   })();
-  return shell(`${state.player}'s Profile — CertiFried`, chrome(nav) + `<main>
+  return shell(`${state.player}'s Profile — CertiFried`, chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
     ${reloginBanner}
     ${expiryBanner}
     ${BUFFS_STRIP}
@@ -3921,8 +2679,8 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
           const eq = variantInfoFromName(state.summary?.equipped, state.groups);
           const st = variantInfoFromName(state.summary?.starter, state.groups);
           const parts = [];
-          if (eq) parts.push(`<span class="since">🎽 Equipped: <b style="color:${eq.tierColor}">${esc(eq.tierLabel)} ${esc(eq.familyLabel)}</b></span>`);
-          if (st) parts.push(`<span class="since">★ Started with: <b style="color:${st.tierColor}">${esc(st.familyLabel)}</b></span>`);
+          if (eq) parts.push(`<span class="since">Equipped: <b data-tier style="--tier:${eq.tierColor}">${esc(eq.tierLabel)} ${esc(eq.familyLabel)}</b></span>`);
+          if (st) parts.push(`<span class="since">Started with: <b data-tier style="--tier:${st.tierColor}">${esc(st.familyLabel)}</b></span>`);
           return parts.join('');
         })()}
       </div>
@@ -3945,9 +2703,9 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
         ${TIERS.filter((t) => (stats.tierStats[t.key]?.obtainable || 0) > 0).map((t) => {
           const ts = stats.tierStats[t.key];
           const w = ts.obtainable ? Math.round((ts.owned / ts.obtainable) * 100) : 0;
-          const vaultedNote = ts.vaulted ? ` <span class="tnote" title="${ts.vaulted} ${t.label} variant${ts.vaulted === 1 ? '' : 's'} currently vaulted">+${ts.vaulted} 🚫</span>` : '';
+          const vaultedNote = ts.vaulted ? ` <span class="tnote" title="${ts.vaulted} ${t.label} variant${ts.vaulted === 1 ? '' : 's'} currently vaulted">+${ts.vaulted} </span>` : '';
           return `<div class="tierrow">
-            <span class="tlabel" style="color:${t.color}">${esc(t.label)}</span>
+            <span class="tlabel" data-tier style="--tier:${t.color}">${esc(t.label)}</span>
             <div class="tbar"><div class="tfill" style="width:${w}%;background:${t.color}"></div></div>
             <span class="tcnt">${ts.owned}/${ts.obtainable}${vaultedNote}</span>
           </div>`;
@@ -3958,11 +2716,11 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
             return (ts.obtainable || 0) === 0 && (ts.future || 0) > 0;
           });
           if (!awaiting.length) return '';
-          return `<div class="cardhead" style="margin-top:18px">🔜 Awaiting release</div>
+          return `<div class="cardhead" style="margin-top:18px">Awaiting release</div>
             ${awaiting.map((t) => {
               const ts = stats.tierStats[t.key];
               return `<div class="tierrow muted">
-                <span class="tlabel" style="color:${t.color};opacity:.7">${esc(t.label)}</span>
+                <span class="tlabel" data-tier style="--tier:${t.color}">${esc(t.label)}</span>
                 <div class="tbar"><div class="tfill" style="width:0%;background:${t.color};opacity:.5"></div></div>
                 <span class="tcnt sub">${ts.future} unreleased</span>
               </div>`;
@@ -3972,36 +2730,36 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
       <div class="highlights">
         <div class="cardhead">Highlights</div>
         <ul>
-          ${vaulted && (s.vaultedFamilies?.length) ? `<li>🚫 <b>Currently vaulted:</b> ${esc(s.vaultedFamilies.join(', '))} ${s.vaultedFamilies.length === 1 ? 'family' : 'families'} — ${vaulted} ${vaulted === 1 ? 'variant' : 'variants'} not appearing in Battle Royale matches for extraction right now. <span class="sub" style="font-size:12px;color:#7a8395">(Epic may add them back to the loot pool in a future update.)</span></li>` : ''}
-          ${epic && epic.firstSeasonLabel ? `<li>🎂 <b>Playing since:</b> ${esc(epic.firstSeasonLabel)}${epic.seasonsPlayed ? ` · ${epic.seasonsPlayed} seasons under their belt` : ''}</li>` : ''}
-          ${epic && epic.hallOfFame ? `<li>👑 <b>Hall of Fame season:</b> ${esc(epic.hallOfFame.seasonLabel)} — Battle Pass Level ${epic.hallOfFame.bookLevel}${epic.hallOfFame.numWins ? ` · ${fmt(epic.hallOfFame.numWins)} wins that season` : ''}</li>` : ''}
-          ${epic && epic.completedPasses != null && epic.seasonsPlayed ? `<li>📚 <b>Battle Passes completed:</b> ${epic.completedPasses} of ${epic.seasonsPlayed} (${Math.round((epic.completedPasses / epic.seasonsPlayed) * 100)}% completion rate)</li>` : ''}
-          ${epic && (epic.seasonLabel || epic.seasonNum != null) ? `<li>🎮 <b>Current season:</b> ${esc(epic.seasonLabel || `Season ${epic.seasonNum}`)}${epic.passXp != null ? ` · ${fmt(epic.passXp)} XP this pass` : ''}</li>` : ''}
-          ${epic && epic.careerWins ? `<li>🏅 <b>Career wins:</b> ${fmt(epic.careerWins)}${epic.currentSeasonWins ? ` (${fmt(epic.currentSeasonWins)} this season)` : ''}</li>` : ''}
-          ${stats.fullyCompleted.length ? `<li>🏆 <b>Fully collected ${stats.fullyCompleted.length === 1 ? 'family' : `(${stats.fullyCompleted.length} families)`}:</b> ${stats.fullyCompleted.map((f) => esc(f.label)).join(', ')}</li>` : ''}
+          ${vaulted && (s.vaultedFamilies?.length) ? `<li><b>Currently vaulted:</b> ${esc(s.vaultedFamilies.join(', '))} ${s.vaultedFamilies.length === 1 ? 'family' : 'families'} — ${vaulted} ${vaulted === 1 ? 'variant' : 'variants'} not appearing in Battle Royale matches for extraction right now. <span class="sub" style="font-size:12px;color:var(--cf-text-3)">(Epic may add them back to the loot pool in a future update.)</span></li>` : ''}
+          ${epic && epic.firstSeasonLabel ? `<li><b>Playing since:</b> ${esc(epic.firstSeasonLabel)}${epic.seasonsPlayed ? ` · ${epic.seasonsPlayed} seasons under their belt` : ''}</li>` : ''}
+          ${epic && epic.hallOfFame ? `<li><b>Hall of Fame season:</b> ${esc(epic.hallOfFame.seasonLabel)} — Battle Pass Level ${epic.hallOfFame.bookLevel}${epic.hallOfFame.numWins ? ` · ${fmt(epic.hallOfFame.numWins)} wins that season` : ''}</li>` : ''}
+          ${epic && epic.completedPasses != null && epic.seasonsPlayed ? `<li><b>Battle Passes completed:</b> ${epic.completedPasses} of ${epic.seasonsPlayed} (${Math.round((epic.completedPasses / epic.seasonsPlayed) * 100)}% completion rate)</li>` : ''}
+          ${epic && (epic.seasonLabel || epic.seasonNum != null) ? `<li><b>Current season:</b> ${esc(epic.seasonLabel || `Season ${epic.seasonNum}`)}${epic.passXp != null ? ` · ${fmt(epic.passXp)} XP this pass` : ''}</li>` : ''}
+          ${epic && epic.careerWins ? `<li><b>Career wins:</b> ${fmt(epic.careerWins)}${epic.currentSeasonWins ? ` (${fmt(epic.currentSeasonWins)} this season)` : ''}</li>` : ''}
+          ${stats.fullyCompleted.length ? `<li><b>Fully collected ${stats.fullyCompleted.length === 1 ? 'family' : `(${stats.fullyCompleted.length} families)`}:</b> ${stats.fullyCompleted.map((f) => esc(f.label)).join(', ')}</li>` : ''}
           ${stats.closestGroup ? (stats.closestGroup.labels.length === 1
-              ? `<li>📈 <b>Closest to completion:</b> ${esc(stats.closestGroup.labels[0])} — ${stats.closestGroup.owned}/${stats.closestGroup.total} (${Math.round(stats.closestGroup.pct * 100)}%)</li>`
-              : `<li>📈 <b>Closest to completion (${stats.closestGroup.labels.length} families at ${stats.closestGroup.owned}/${stats.closestGroup.total}):</b> ${stats.closestGroup.labels.map((l) => esc(l)).join(', ')}</li>`
+              ? `<li><b>Closest to completion:</b> ${esc(stats.closestGroup.labels[0])} — ${stats.closestGroup.owned}/${stats.closestGroup.total} (${Math.round(stats.closestGroup.pct * 100)}%)</li>`
+              : `<li><b>Closest to completion (${stats.closestGroup.labels.length} families at ${stats.closestGroup.owned}/${stats.closestGroup.total}):</b> ${stats.closestGroup.labels.map((l) => esc(l)).join(', ')}</li>`
           ) : ''}
-          ${stats.highest && stats.highest.xp ? `<li>🎯 <b>Highest-XP sprite:</b> ${esc(stats.highest.familyLabel)} (${esc(stats.highest.tierLabel)}) — ${fmt(stats.highest.xp)} XP</li>` : ''}
-          <li>👥 <b>Families collected from:</b> ${s.families}</li>
-          ${s.equipped ? `<li>⭐ <b>Equipped:</b> ${esc(String(s.equipped).replace(/_/g, ' '))}</li>` : ''}
-          ${stats.totalDupes ? `<li>🃏 <b>Duplicates earned:</b> ${fmt(stats.totalDupes)} (extracting them yields Sprite Dust)</li>` : ''}
-          ${stats.totalXp ? `<li>✨ <b>Total sprite XP:</b> ${fmt(stats.totalXp)} across ${s.owned} owned sprites</li>` : ''}
+          ${stats.highest && stats.highest.xp ? `<li><b>Highest-XP sprite:</b> ${esc(stats.highest.familyLabel)} (${esc(stats.highest.tierLabel)}) — ${fmt(stats.highest.xp)} XP</li>` : ''}
+          <li><b>Families collected from:</b> ${s.families}</li>
+          ${s.equipped ? `<li><b>Equipped:</b> ${esc(String(s.equipped).replace(/_/g, ' '))}</li>` : ''}
+          ${stats.totalDupes ? `<li><b>Duplicates earned:</b> ${fmt(stats.totalDupes)} (extracting them yields Sprite Dust)</li>` : ''}
+          ${stats.totalXp ? `<li><b>Total sprite XP:</b> ${fmt(stats.totalXp)} across ${s.owned} owned sprites</li>` : ''}
         </ul>
       </div>
     </section>
     ${renderSpriteExtras(state.summary?.spriteExtras)}
     ${epic && epic.timeline && epic.timeline.length >= 2 ? `
     <section class="career-timeline">
-      <div class="cardhead">📊 Career timeline <span class="sub" style="margin-left:8px">${epic.timeline.length} season${epic.timeline.length === 1 ? '' : 's'} played · ${epic.completedPasses || 0} Battle Pass${epic.completedPasses === 1 ? '' : 'es'} completed</span></div>
+      <div class="cardhead">Career timeline <span class="sub" style="margin-left:8px">${epic.timeline.length} season${epic.timeline.length === 1 ? '' : 's'} played · ${epic.completedPasses || 0} Battle Pass${epic.completedPasses === 1 ? '' : 'es'} completed</span></div>
       <div class="ct-rows">
         ${epic.timeline.map((sn) => {
           const pct = Math.max(2, Math.min(100, sn.bookLevel));
           const cls = [sn.completed ? 'completed' : '', sn.isCurrent ? 'current' : ''].filter(Boolean).join(' ');
           const seasonLabel = sn.seasonLabel || `Season ${sn.seasonNumber}`;
           const winsLabel = sn.numWins ? ` · ${sn.numWins} win${sn.numWins === 1 ? '' : 's'}` : '';
-          const statusBadge = sn.completed ? '<span class="ct-status complete">🏆 100</span>' : (sn.isCurrent ? '<span class="ct-status current">● Current</span>' : '');
+          const statusBadge = sn.completed ? '<span class="ct-status complete">100</span>' : (sn.isCurrent ? '<span class="ct-status current">● Current</span>' : '');
           return `<div class="ct-row ${cls}">
             <span class="ct-season">${esc(seasonLabel)}</span>
             <div class="ct-bar"><div class="ct-fill ${cls}" style="width:${pct}%"></div></div>
@@ -4134,7 +2892,7 @@ router.get('/u/:shareId/buyback', async (req, res) => {
     );
     const row = rows[0];
     if (!row?.state_json) {
-      return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main>
+      return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
         <div class="card"><h2>Buy-back list not found</h2>
         <p class="sub">That share link doesn't exist or hasn't synced yet. <a href="/sprites">Track your own →</a></p></div></main>`));
     }
@@ -4148,7 +2906,7 @@ router.get('/u/:shareId/buyback', async (req, res) => {
     res.send(renderBuybackPage(state, buybackList, { shareUrl, buybackShareUrl }));
   } catch (e) {
     logger.warn(`[sprites] buyback view failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + `<main><div class="card"><h2>Something went wrong</h2></div></main>`));
+    res.status(500).send(shell('Error', chrome() + `<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Something went wrong</h2></div></main>`));
   }
 });
 
@@ -4162,7 +2920,7 @@ router.get('/u/:shareId/profile', async (req, res) => {
     );
     const row = rows[0];
     if (!row || !row.state_json) {
-      return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main>
+      return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
         <div class="card"><h2>Collection not found</h2>
         <p class="sub">That share link doesn't exist or hasn't synced yet.
           <a href="/sprites">Track your own →</a></p></div></main>`));
@@ -4177,7 +2935,7 @@ router.get('/u/:shareId/profile', async (req, res) => {
     }));
   } catch (e) {
     logger.warn(`[sprites] /u/:shareId/profile failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Something went wrong</h2></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Something went wrong</h2></div></main>'));
   }
 });
 
@@ -4226,7 +2984,7 @@ router.get('/u/:shareId', async (req, res) => {
       [String(req.params.shareId).slice(0, 64)]);
     const row = rows[0];
     if (!row || !row.state_json) {
-      return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main>
+      return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
         <div class="card"><h2>Collection not found</h2>
         <p class="sub">That share link doesn't exist or hasn't synced yet.
           <a href="/sprites">Track your own →</a></p></div></main>`));
@@ -4253,7 +3011,7 @@ router.get('/u/:shareId', async (req, res) => {
     }));
   } catch (e) {
     logger.warn(`[sprites] shared view failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + `<main><div class="card"><h2>Something went wrong</h2></div></main>`));
+    res.status(500).send(shell('Error', chrome() + `<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Something went wrong</h2></div></main>`));
   }
 });
 
@@ -4292,7 +3050,7 @@ router.get('/callback', async (req, res) => {
     // New user — we have their identity but no Fortnite token to fetch sprite
     // data. Point them at the paste-connect flow.
     res.send(renderLogin({
-      error: `Hi${displayName ? `, ${displayName}` : ''}! We verified your Epic account, but you haven't completed the one-time Epic Setup here yet — so we don't have your sprite collection to show you. Scroll down to the "🆕 START HERE — Epic Setup" section below to finish setup (it takes about 30 seconds). After that, this Sign in with Epic button will work instantly every time.`,
+      error: `Hi${displayName ? `, ${displayName}` : ''}! We verified your Epic account, but you haven't completed the one-time Epic Setup here yet — so we don't have your sprite collection to show you. Scroll down to the "START HERE — Epic Setup" section below to finish setup (it takes about 30 seconds). After that, this Sign in with Epic button will work instantly every time.`,
     }));
   } catch (e) {
     logger.warn(`[sprites] oauth callback failed: ${e.message}`);
@@ -4741,8 +3499,8 @@ router.get('/discord-connect', async (req, res) => {
     // Query-param status banners (?ok=linked / ?err=xxx)
     const statusBanner = (() => {
       if (req.query.ok === 'linked') {
-        return `<div class="card" style="background:rgba(58,208,122,.08);border:1px solid rgba(58,208,122,.35)">
-          <h3 style="margin-top:0;color:#3ad07a">✓ Discord connected!</h3>
+        return `<div class="card" style="background:color-mix(in srgb, var(--sp-owned) 8%, transparent);border:1px solid color-mix(in srgb, var(--sp-owned) 35%, transparent)">
+          <h3 style="margin-top:0;color:var(--sp-owned)">✓ Discord connected!</h3>
           <p>Head to a server with the CertiFried bot and run <code>/tools sprites embed collection</code> to post your first auto-updating tracker.</p>
         </div>`;
       }
@@ -4753,16 +3511,16 @@ router.get('/discord-connect', async (req, res) => {
         server: 'Something went wrong on our end. Try again in a minute.',
       };
       if (req.query.err && errs[req.query.err]) {
-        return `<div class="card" style="background:rgba(255,91,110,.08);border:1px solid rgba(255,91,110,.35)">
-          <h3 style="margin-top:0;color:#ff5b6e">⚠ Link failed</h3>
+        return `<div class="card" style="background:color-mix(in srgb, var(--cf-danger) 8%, transparent);border:1px solid color-mix(in srgb, var(--cf-danger) 35%, transparent)">
+          <h3 style="margin-top:0;color:var(--cf-danger)">Link failed</h3>
           <p>${errs[req.query.err]}</p>
         </div>`;
       }
       return '';
     })();
     const linkedInfo = existing.length
-      ? `<div class="card" style="background:rgba(58,208,122,.08);border:1px solid rgba(58,208,122,.35)">
-          <h3 style="margin-top:0;color:#3ad07a">✓ Already linked</h3>
+      ? `<div class="card" style="background:color-mix(in srgb, var(--sp-owned) 8%, transparent);border:1px solid color-mix(in srgb, var(--sp-owned) 35%, transparent)">
+          <h3 style="margin-top:0;color:var(--sp-owned)">✓ Already linked</h3>
           <p>Your sprite tracker is linked to Discord user <code>${esc(existing[0].discord_user_id)}</code>
              since ${new Date(existing[0].linked_at).toISOString().slice(0, 16).replace('T', ' ')} UTC.</p>
           <p>To move your link to a different Discord account: run <code>/tools sprites unlink</code> in Discord first,
@@ -4770,10 +3528,10 @@ router.get('/discord-connect', async (req, res) => {
         </div>`
       : '';
     const nav = `<a class="navlink" href="/sprites/profile">Profile</a>`;
-    const body = chrome(nav) + `<main>
-      <div class="card" style="background:linear-gradient(180deg,#1a1638 0%,#161922 60%);border:1px solid #6b4cff">
+    const body = chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
+      <div class="card" style="background:color-mix(in srgb, var(--sp-master) 10%, var(--cf-surface));border:1px solid var(--cf-accent-fg)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-          <span style="background:#5865F2;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🔗 DISCORD</span>
+          <span class="st-eyebrow">Discord</span>
         </div>
         <h1 style="margin:0 0 6px">Link to Discord</h1>
         <p class="sub">Connect this sprite account to a Discord user so the bot can post auto-updating tracker embeds in your servers.</p>
@@ -4782,12 +3540,10 @@ router.get('/discord-connect', async (req, res) => {
       ${linkedInfo}
       ${!existing.length ? `
       <div class="card">
-        <h2 style="margin-top:0">🚀 Sign in with Discord (recommended)</h2>
+        <h2 style="margin-top:0">Sign in with Discord (recommended)</h2>
         <p>One click — Discord's own OAuth confirms who you are, we save the link, done.</p>
-        <a href="/sprites/discord-oauth-init" style="display:inline-flex;align-items:center;gap:10px;background:#5865F2;color:#fff;border-radius:12px;padding:14px 22px;font:800 15px/1 inherit;text-decoration:none;margin:10px 0;box-shadow:0 4px 12px rgba(88,101,242,.35);transition:transform .1s, box-shadow .15s"
-           onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(88,101,242,.5)'"
-           onmouseout="this.style.transform='';this.style.boxShadow='0 4px 12px rgba(88,101,242,.35)'">
-          <svg width="20" height="20" viewBox="0 0 71 55" fill="#fff"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.4a41.3 41.3 0 0 0-1.9 3.8 54.1 54.1 0 0 0-16.2 0A41.3 41.3 0 0 0 25.5.4 58.5 58.5 0 0 0 10.9 4.9C1.6 18.7-.9 32.2.3 45.5a58.9 58.9 0 0 0 17.8 9c1.4-2 2.7-4.1 3.7-6.3a38 38 0 0 1-5.8-2.8l1.4-1.1a41.9 41.9 0 0 0 36.2 0l1.4 1.1a38 38 0 0 1-5.8 2.8c1.1 2.2 2.4 4.3 3.7 6.3a58.9 58.9 0 0 0 17.8-9c1.6-15.5-2.5-28.9-9.6-40.6zM23.7 37.3c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.2 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.2 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
+        <a href="/sprites/discord-oauth-init" class="btn btn-primary btn-lg" style="margin:10px 0">
+          <svg width="18" height="18" viewBox="0 0 71 55" fill="currentColor" aria-hidden="true"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.4a41.3 41.3 0 0 0-1.9 3.8 54.1 54.1 0 0 0-16.2 0A41.3 41.3 0 0 0 25.5.4 58.5 58.5 0 0 0 10.9 4.9C1.6 18.7-.9 32.2.3 45.5a58.9 58.9 0 0 0 17.8 9c1.4-2 2.7-4.1 3.7-6.3a38 38 0 0 1-5.8-2.8l1.4-1.1a41.9 41.9 0 0 0 36.2 0l1.4 1.1a38 38 0 0 1-5.8 2.8c1.1 2.2 2.4 4.3 3.7 6.3a58.9 58.9 0 0 0 17.8-9c1.6-15.5-2.5-28.9-9.6-40.6zM23.7 37.3c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.2 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.2 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
           Sign in with Discord to link
         </a>
         <p class="sub" style="font-size:12px;margin-bottom:0">You'll be redirected to Discord to authorize. We only ask for your basic profile — no server or DM access.
@@ -4797,11 +3553,11 @@ router.get('/discord-connect', async (req, res) => {
       <div class="card">
         <h2 style="margin-top:0">Or link with a code</h2>
         <p>If OAuth doesn't work (guild bots without OAuth scope, etc.), you can paste this code into any Discord server that has the CertiFried bot:</p>
-        <div style="background:#0e0f13;border:1px solid var(--line);border-radius:12px;padding:20px;text-align:center;margin:14px 0">
-          <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:36px;font-weight:900;letter-spacing:.14em;color:var(--purple);text-shadow:0 0 12px rgba(123,92,255,.4)">${code}</div>
-          <div style="margin-top:10px;font-size:12px;color:var(--muted)">Expires in 5 minutes · linked to <b>${esc(displayName)}</b></div>
+        <div style="background:var(--cf-inset);border:1px solid var(--cf-border);border-radius:var(--cf-radius-lg);padding:20px;text-align:center;margin:14px 0">
+          <div style="font-family:var(--cf-mono);font-size:36px;font-weight:600;color:var(--sp-master)">${code}</div>
+          <div style="margin-top:10px;font-size:12px;color:var(--cf-text-3)">Expires in 5 minutes · linked to <b>${esc(displayName)}</b></div>
         </div>
-        <div style="background:#0e0f13;border:1px solid var(--line);border-radius:8px;padding:14px 16px;font-family:ui-monospace,monospace;font-size:14px;margin:14px 0">
+        <div style="background:var(--cf-inset);border:1px solid var(--cf-border);border-radius:var(--cf-radius);padding:14px 16px;font-family:var(--cf-mono);font-size:14px;margin:14px 0">
           <code>/tools sprites link ${code}</code>
         </div>
         <p class="sub" style="font-size:12px">If your code expires, <a href="/sprites/discord-connect?method=code&new=1" class="navlink">get a new one</a>.</p>
@@ -4820,7 +3576,7 @@ router.get('/discord-connect', async (req, res) => {
     res.send(shell('Link to Discord — CertiFried Sprite Tracker', body));
   } catch (e) {
     logger.warn(`[sprites] /discord-connect failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Couldn\'t generate a code</h2><p class="sub">Try again in a minute.</p></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Couldn\'t generate a code</h2><p class="sub">Try again in a minute.</p></div></main>'));
   }
 });
 
@@ -4876,7 +3632,7 @@ router.get('/browse', async (req, res) => {
       const time = `<span class="feed-time">${esc(ago(e.created_at))}</span>`;
       let icon, text;
       if (e.event_type === 'new_sprites') {
-        icon = '✨';
+        icon = '';
         // Named-sprite rendering: prefer the actual variant names captured at
         // event time; fall back to the pre-migration count-only phrasing for
         // rows that were logged before we started capturing names.
@@ -4892,7 +3648,7 @@ router.get('/browse', async (req, res) => {
           text = `collected ${data.count} new sprite${data.count === 1 ? '' : 's'} (now at ${data.total} total)`;
         }
       } else if (e.event_type === 'pass_level') {
-        icon = '🎮';
+        icon = '';
         text = `leveled up to Battle Pass Level ${data.to}${data.season ? ` in ${data.season}` : ''}`;
       } else { icon = '·'; text = String(e.event_type || '').replace(/_/g, ' '); }
       return `<li class="feed-row"><span class="feed-icon" aria-hidden="true">${icon}</span> ${userLink} ${esc(text)} ${time}</li>`;
@@ -4909,7 +3665,7 @@ router.get('/browse', async (req, res) => {
           <span class="browse-count">${esc(r.owned ?? '?')}<span class="sub">/${esc(r.obtainable ?? '?')}</span></span>
         </label>
       </li>`).join('');
-    res.send(shell('Browse Collectors — CertiFried Sprite Tracker', chrome() + `<main>
+    res.send(shell('Browse Collectors — CertiFried Sprite Tracker', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
       <div class="card">
         <h2>Compare collections</h2>
         <p class="sub">Pick two or more collectors below and we'll show who has what others don't — perfect for finding trade partners.</p>
@@ -4920,12 +3676,12 @@ router.get('/browse', async (req, res) => {
           <input type="search" id="browse-search" placeholder="Search collectors by name" class="browse-search" autocomplete="off">
           <ul class="browse-list" id="browse-list">${list || '<li class="st-empty">No public collectors yet. Connect your Epic account to be the first.</li>'}</ul>
           <p class="st-empty" id="browse-nomatch" hidden>No collectors match that search.</p>
-          <div class="browse-actions"><button class="btn" type="submit" id="browse-go">Compare selected</button><span class="sub" id="browse-picked" aria-live="polite"></span></div>
+          <div class="browse-actions"><button class="btn btn-primary" type="submit" id="browse-go">Compare selected</button><span class="sub" id="browse-picked" aria-live="polite"></span></div>
         </form>
       </div>
       ${events.length ? `
       <div class="card" style="margin-top:24px">
-        <h2 style="display:flex;align-items:center;gap:10px;margin-bottom:6px">📰 <span>Recent activity</span> <span class="sub" style="font-weight:400;font-size:13px">(${events.length} event${events.length === 1 ? '' : 's'})</span></h2>
+        <h2 style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span>Recent activity</span> <span class="sub" style="font-weight:400;font-size:13px">(${events.length} event${events.length === 1 ? '' : 's'})</span></h2>
         <p class="sub" style="margin:0 0 14px">What other collectors have been up to lately.</p>
         <ul class="feed-list">${feed}</ul>
       </div>` : ''}
@@ -4954,7 +3710,7 @@ router.get('/browse', async (req, res) => {
     })();</script>`));
   } catch (e) {
     logger.warn(`[sprites] browse view failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Something went wrong</h2></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Something went wrong</h2></div></main>'));
   }
 });
 
@@ -5219,12 +3975,12 @@ function renderCountBreakdown(state) {
     <table class="audit-table" style="font-size:13px">
       <thead><tr><th>Bucket</th><th class="audit-num">Count</th><th>What it is</th></tr></thead>
       <tbody>
-        ${rows.map((r) => `<tr${r.primary ? ' style="background:rgba(58,208,122,.10)"' : ''}>
+        ${rows.map((r) => `<tr${r.primary ? ' style="background:color-mix(in srgb, var(--sp-owned) 10%, transparent)"' : ''}>
           <td data-label="Bucket">${r.primary ? `<b>${esc(r.bucket)}</b>` : esc(r.bucket)}</td>
           <td class="audit-num${r.primary ? '' : ' audit-hit'}" data-label="Count">${r.primary ? `<b>${r.count}</b>` : `+${r.count}`}</td>
           <td data-label="What it is">${r.what}</td>
         </tr>`).join('')}
-        <tr style="background:rgba(107,76,255,.12)">
+        <tr style="background:color-mix(in srgb, var(--cf-accent) 12%, transparent)">
           <td data-label="Bucket"><b>Catalog total</b></td>
           <td class="audit-num" data-label="Count"><b>${all.length}</b></td>
           <td data-label="What it is">Every variant Epic ships to this account, obtainable or not. <b>${owned}</b> currently collected.</td>
@@ -5640,7 +4396,7 @@ router.get('/info', async (req, res) => {
     res.send(await renderInfo());
   } catch (e) {
     logger.warn(`[sprites] /info render failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Info page unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Info page unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
   }
 });
 
@@ -5698,7 +4454,7 @@ router.get('/codes', async (req, res) => {
     if (!_codesCache || Date.now() - _codesLoadedAt > CODES_CACHE_TTL_MS) await loadCodesFromDB();
     const CODES = _codesCache || OVERRIDE_CODES;
     const cats = ['Sprites', 'Gizmos', 'XP & Dust', 'Cosmetics', 'Other'];
-    const catIcon = { 'Sprites': '\u{1F47E}', 'Gizmos': '\u{1F381}', 'XP & Dust': '✨', 'Cosmetics': '\u{1F3A8}' };
+    const catIcon = {};
     const sections = cats.map((cat) => {
       const items = CODES.filter((c) => c.cat === cat);
       if (!items.length) return '';
@@ -5714,30 +4470,30 @@ router.get('/codes', async (req, res) => {
       return `<section class="code-cat"><h2>${catIcon[cat] ? `<span aria-hidden="true">${catIcon[cat]}</span> ` : ''}${esc(cat)} <span class="sub" style="font-weight:600;font-size:13px">(${items.length})</span></h2><div class="code-list">${rows}</div></section>`;
     }).join('');
     const nav = '';
-    const body = `<main>
+    const body = `<main id="main-content" tabindex="-1" class="st-main">
       <section class="hero" style="display:block;padding:20px 26px">
-        <h1 style="margin:0 0 6px">\u{1F579}️ Override Cheat Codes</h1>
+        <h1 style="margin:0 0 6px">Override cheat codes</h1>
         <p class="sub" style="margin:0 0 10px">All <b>${CODES.length}</b> Admin Panel / Lobby Hack codes for Chapter 7 Season 4: Override — free Cheat Master sprites, gizmos, Sprite Dust, XP &amp; cosmetics, no grind.</p>
         <div class="code-howto"><b>How to redeem:</b> In the lobby, open the <b>…/ Admin Panel</b> prompt (top-right of the screen), type the code <b>exactly</b> (case-sensitive), and Submit. Most are <b>one-time</b>; the two Tetris codes are reusable. Redeeming a Sprite you already own grants <b>10,000 Sprite Dust</b> instead.</div>
       </section>
       ${sections || '<p class="st-empty">No codes are active right now. New ones show up here on their own.</p>'}
       <p class="sub" style="text-align:center;margin:16px 0 24px">Auto-tracked — this list refreshes itself from community sources (Dexerto, GamesRadar, PCGamesN, GameRant); new codes appear here on their own.${_codesCheckedAt ? ` Last checked ${new Date(_codesCheckedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC.` : ''} Tap any code to copy it.</p>
     </main>
-    <style>
+    <style>/* mapped:tokens */
       .code-cat{max-width:820px;margin:0 auto}
-      .code-cat h2{font-size:16px;margin:18px 16px 8px;color:#e8eaf0}
+      .code-cat h2{font-size:16px;margin:18px 16px 8px;color:var(--cf-text)}
       .code-list{display:flex;flex-direction:column;gap:8px;padding:0 16px}
-      .code-row{display:flex;align-items:center;gap:14px;background:#12141a;border:1px solid #2a2f3c;border-radius:10px;padding:10px 14px;flex-wrap:wrap}
-      .code-copy{display:inline-flex;align-items:center;gap:10px;background:#1a1d26;border:1px solid #3a4250;border-radius:8px;padding:7px 12px;cursor:pointer;color:#cbb5ff;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;font-size:14px;transition:all .12s;min-width:190px;justify-content:space-between}
-      .code-copy:hover{border-color:var(--purple,#8b5cf6);background:#211a34;color:#fff}
-      .code-copy.copied{border-color:#3ad07a;color:#3ad07a;background:#0f2a1a}
+      .code-row{display:flex;align-items:center;gap:14px;background:var(--cf-surface);border:1px solid var(--cf-border);border-radius:var(--cf-radius-lg);padding:10px 14px;flex-wrap:wrap}
+      .code-copy{display:inline-flex;align-items:center;gap:10px;background:var(--cf-surface-2);border:1px solid var(--cf-border-strong);border-radius:var(--cf-radius);padding:7px 12px;cursor:pointer;color:var(--sp-master);font-family:var(--cf-mono);font-weight:600;font-size:14px;transition:all .12s;min-width:190px;justify-content:space-between}
+      .code-copy:hover{border-color:var(--purple,var(--sp-master));background:var(--cf-surface-2);color:var(--cf-text)}
+      .code-copy.copied{border-color:var(--sp-owned);color:var(--sp-owned);background:var(--cf-surface-2)}
       .code-copy code{background:none;padding:0;color:inherit;font:inherit}
       .code-copy .copy-ic{opacity:.55;font-size:13px}
-      .code-reward{color:#c3cad6;font-size:14px;flex:1;min-width:180px}
-      .code-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#0f2a1a;color:#4fd77a;border:1px solid #1f5a36}
-      .code-tag.ends{background:#2a2410;color:#ffcf3a;border-color:#5a4a1f}
-      .code-howto{background:#0e0f13;border:1px solid #2a2f3c;border-radius:10px;padding:11px 14px;font-size:13px;color:#c3cad6;line-height:1.5}
-      .code-howto b{color:#e8eaf0}
+      .code-reward{color:var(--cf-text);font-size:14px;flex:1;min-width:180px}
+      .code-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:500;background:transparent;color:var(--sp-owned);border:1px solid color-mix(in srgb, var(--sp-owned) 40%, var(--cf-border))}
+      .code-tag.ends{background:transparent;color:var(--sp-gold);border-color:color-mix(in srgb, var(--sp-gold) 40%, var(--cf-border))}
+      .code-howto{background:var(--cf-inset);border:1px solid var(--cf-border);border-radius:var(--cf-radius-lg);padding:11px 14px;font-size:13px;color:var(--cf-text);line-height:1.5}
+      .code-howto b{color:var(--cf-text)}
     </style>
     <script>(function(){
       document.querySelectorAll('.code-copy').forEach(function(b){
@@ -5753,7 +4509,7 @@ router.get('/codes', async (req, res) => {
     res.send(shell('Override Cheat Codes — CertiFried Sprite Tracker', chrome(nav) + body));
   } catch (e) {
     logger.warn(`[sprites] /codes render failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Codes page unavailable</h2></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Codes page unavailable</h2></div></main>'));
   }
 });
 
@@ -5897,7 +4653,7 @@ router.get('/cards', async (req, res) => {
     res.send(await renderCardsCatalogue(req.query));
   } catch (e) {
     logger.warn(`[sprites] /cards render failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Catalogue unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Catalogue unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
   }
 });
 
@@ -5910,7 +4666,7 @@ router.get('/override', async (req, res) => {
     res.send(await renderCardsCatalogue(req.query, { column: 'override_json', legacy: true, collLabel: 'Override', formAction: '/sprites/override' }));
   } catch (e) {
     logger.warn(`[sprites] /override render failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Override archive unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Override archive unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
   }
 });
 router.get('/garden', async (req, res) => {
@@ -5918,7 +4674,7 @@ router.get('/garden', async (req, res) => {
     res.send(await renderCardsCatalogue(req.query, { column: 'garden_json', legacy: true, collLabel: 'Sprite Garden', formAction: '/sprites/garden' }));
   } catch (e) {
     logger.warn(`[sprites] /garden render failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Garden archive unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Garden archive unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
   }
 });
 
@@ -5940,8 +4696,8 @@ function renderCatalogueCard(v, opts = {}) {
   const tierIcon = { basic: 'A', gold: 'G', gummy: '★', galaxy: '✧', gem: '◆', holofoil: '✦', cube: '⬢', quack: '🦆' }[tierKey] || '?';
   const imgHtml = v.imgId
     ? `<img src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(v.name)}" onerror="this.style.display='none';this.parentNode.querySelector('.art-fallback').style.display='block'">
-       <svg class="art-fallback" style="display:none" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tierColor)}">${esc((tierLabel||'?')[0])}</text></svg>`
-    : `<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tierColor)}">${esc((tierLabel||'?')[0])}</text></svg>`;
+       <svg class="art-fallback" style="display:none" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tierColor)}">${esc((tierLabel||'?')[0])}</text></svg>`
+    : `<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tierColor)}">${esc((tierLabel||'?')[0])}</text></svg>`;
   const tierMoveHtml = tierMeta?.effect
     ? `<div class="info-move">
         <div class="info-move-hdr">
@@ -5963,12 +4719,12 @@ function renderCatalogueCard(v, opts = {}) {
   // modal so downloaded PNGs carry the disclaimer inline (which is the whole
   // point of a share-friendly card).
   const noteHtml = availabilityNote
-    ? `<div class="info-move" style="border-color:rgba(255,207,58,.4);background:linear-gradient(180deg,rgba(255,207,58,.08),rgba(0,0,0,.15))">
+    ? `<div class="info-move" style="border-color:color-mix(in srgb, var(--sp-gold) 40%, transparent);background:color-mix(in srgb, var(--sp-gold) 8%, transparent)">
         <div class="info-move-hdr">
-          <span class="icon" style="background:#ffcf3a;color:#1a1613">⚠</span>
+          <span class="icon warn">⚠</span>
           <span class="name">${esc(availabilityNote.label)}</span>
         </div>
-        <p class="info-move-desc" style="color:#ffcf3a">${esc(availabilityNote.text)}</p>
+        <p class="info-move-desc" style="color:var(--sp-gold)">${esc(availabilityNote.text)}</p>
       </div>` : '';
   // Filename for downloaded PNG — safe for cross-platform saves.
   const dlName = `${(familyLabel || v.familyToken).replace(/[^\w]+/g, '')}_${tierLabel || tierKey}.png`;
@@ -6019,7 +4775,7 @@ async function renderCardsCatalogue(query = {}, opts = {}) {
     `SELECT ${COLUMN} AS sj FROM epic_sprite_accounts WHERE ${COLUMN} IS NOT NULL ORDER BY synced_at DESC LIMIT 1`
   );
   if (!rows.length) {
-    return shell('Cards Catalogue — CertiFried', chrome() + `<main><div class="card"><h2>${esc(collLabel || 'Catalogue')} unavailable</h2><p class="sub">No ${legacy ? 'archived snapshot for this collection' : 'sync data'} yet.</p></div></main>`);
+    return shell('Cards Catalogue — CertiFried', chrome() + `<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>${esc(collLabel || 'Catalogue')} unavailable</h2><p class="sub">No ${legacy ? 'archived snapshot for this collection' : 'sync data'} yet.</p></div></main>`);
   }
   const state = JSON.parse(rows[0].sj);
   const groups = state.groups || [];
@@ -6094,17 +4850,17 @@ async function renderCardsCatalogue(query = {}, opts = {}) {
   // Legacy collections get a distinct (muted) banner + an archived note so nobody
   // mistakes a frozen snapshot for the live, collectable set.
   const badge = legacy
-    ? `<span style="background:#5a6072;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🗄 LEGACY${collLabel ? ' · ' + esc(collLabel.toUpperCase()) : ''}</span>`
-    : `<span style="background:#7b5cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🃏 CATALOGUE</span>`;
+    ? `<span class="st-eyebrow">LEGACY${collLabel ? ' · ' + esc(collLabel.toUpperCase()) : ''}</span>`
+    : `<span class="st-eyebrow">Catalogue</span>`;
   const heading = legacy ? `The ${esc(collLabel)} collection — archived` : 'The complete Sprite card catalogue';
   const blurb = legacy
-    ? `A frozen snapshot of the <b>${esc(collLabel)}</b> sprite collection as it stood when Epic rotated it out of the active lineup. Preserved read-only — it no longer live-syncs. Your current collection is on the <a href="/sprites/cards" style="color:#9b7bff">live catalogue →</a>`
+    ? `A frozen snapshot of the <b>${esc(collLabel)}</b> sprite collection as it stood when Epic rotated it out of the active lineup. Preserved read-only — it no longer live-syncs. Your current collection is on the <a href="/sprites/cards" style="color:var(--cf-accent-fg)">live catalogue →</a>`
     : `Every variant Epic serves in the live catalog, rendered as its own trading card.
         Holofoil / Gem / Cube / Quack tiers get the animated iridescent shimmer.
         No user state — pure showcase.`;
   const cardBorder = legacy ? '#4a5160' : '#6b4cff';
   const cardBg = legacy ? 'linear-gradient(180deg,#1c2030 0%,#161922 60%)' : 'linear-gradient(180deg,#1a1638 0%,#161922 60%)';
-  const body = chrome(nav) + `<main>
+  const body = chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
     <div class="card" style="background:${cardBg};border:1px solid ${cardBorder}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         ${badge}
@@ -6129,15 +4885,15 @@ async function renderCardsCatalogue(query = {}, opts = {}) {
             <option value="rarity" ${sortMode === 'rarity' ? 'selected' : ''}>Rarity (high → low)</option>
           </select>
         </label>
-        <button type="submit" class="resync-btn" style="background:var(--purple);color:#fff;border-color:var(--purple)">Apply</button>
+        <button type="submit" class="btn btn-primary">Apply</button>
         <a href="${formAction}" class="navlink" style="margin-left:auto">Reset</a>
       </form>
     </div>
     ${filtered.length === 0
       ? '<div class="card"><h3>No cards match those filters</h3><p class="sub">Try loosening the filter or hit Reset.</p></div>'
       : `<div class="cards-bulk">
-          <button class="dl-all" type="button" id="dl-all-btn">⬇ Download all ${filtered.length} as PNG</button>
-          <span class="dl-status" id="dl-status">Or click ⬇ on any individual card.</span>
+          <button class="dl-all" type="button" id="dl-all-btn">Download all ${filtered.length} as PNG</button>
+          <span class="dl-status" id="dl-status">Or click on any individual card.</span>
           <progress id="dl-progress" value="0" max="${filtered.length}" style="display:none"></progress>
         </div>
         <div class="cards-grid">${cardsHtml}</div>`}
@@ -6242,7 +4998,7 @@ async function renderCardsCatalogue(query = {}, opts = {}) {
           await new Promise(function(r){ setTimeout(r, 150); });
         }
         dlAllBtn.disabled = false;
-        dlAllBtn.textContent = '⬇ Download all ' + cards.length + ' as PNG';
+        dlAllBtn.textContent = 'Download all ' + cards.length + ' as PNG';
         dlStatus.textContent = 'Done — saved ' + ok + (failed ? ' · ' + failed + ' failed' : '') + '.';
       });
     }
@@ -6290,15 +5046,15 @@ function renderHotfixSection(hf) {
         const msUntil = dropDate.getTime() - Date.now();
         const hoursUntil = Math.round(msUntil / 3600000);
         const isPast = msUntil < 0;
-        return `<div style="background:rgba(255,207,58,.10);border:1px solid rgba(255,207,58,.35);border-radius:10px;padding:14px 16px;margin:10px 0">
+        return `<div style="background:color-mix(in srgb, var(--sp-gold) 10%, transparent);border:1px solid color-mix(in srgb, var(--sp-gold) 35%, transparent);border-radius:var(--cf-radius-lg);padding:14px 16px;margin:10px 0">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-            <span style="background:#ffcf3a;color:#000;font-size:11px;font-weight:800;letter-spacing:0.06em;padding:3px 9px;border-radius:999px">🕐 EPIC'S SCHEDULED TIME</span>
+            <span class="st-eyebrow">Epic's scheduled time</span>
             <b style="font-size:15px">${esc(iso)}</b>
             <span class="sub" style="font-size:12px">(${isPast ? Math.abs(hoursUntil) + ' h ago' : '~' + hoursUntil + ' h out'})</span>
           </div>
           <p class="sub" style="margin:0;font-size:12.5px">Epic's <code>ComingSoonTimestamp</code> — their <i>advertised</i> next-drop time, not a guarantee.
             <b>Epic frequently ships early</b> (v41.30 dropped ~2h ahead of this stamp), so sprites tied to this window may already be live — this tracker follows what's actually in the live catalog, not the clock.
-            <a href="/sprites/countdown" class="navlink" style="padding:0;color:#ffcf3a">→ Live countdown widget</a></p>
+            <a href="/sprites/countdown" class="navlink" style="padding:0;color:var(--sp-gold)">→ Live countdown widget</a></p>
         </div>`;
       })()
     : '';
@@ -6311,7 +5067,7 @@ function renderHotfixSection(hf) {
   const xpRows = xpKeys.filter((k) => hf.xp_curves && hf.xp_curves[k] != null).map((k) => `
     <tr><td><b>${esc(k.replace('XPPer', 'XP per '))}</b></td><td class="center audit-num">${hf.xp_curves[k]}</td></tr>`).join('');
 
-  return `<h2 style="margin-top:22px;font-size:16px">🔥 Live hotfix state</h2>
+  return `<h2 style="margin-top:22px;font-size:16px">Live hotfix state</h2>
     <p>
       Fortnite pushes runtime config overrides via <code>/cloudstorage/system/*.ini</code>
       files — same mechanism that flips sprite plugin availability + adjusts drop rates.
@@ -6355,7 +5111,7 @@ router.get('/countdown', (req, res) => {
   const hf = getHotfixCache();
   const nav = '';
   if (!hf || !hf.next_drop_ts) {
-    return res.send(shell('Next drop — CertiFried Sprite Tracker', chrome(nav) + `<main>
+    return res.send(shell('Next drop — CertiFried Sprite Tracker', chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
       <div class="card">
         <h1>Countdown unavailable</h1>
         <p class="sub">Waiting on the first hotfix poll — comes back in a minute or two after server startup.</p>
@@ -6375,10 +5131,10 @@ router.get('/countdown', (req, res) => {
   const STALE_GRACE_MS = 12 * 60 * 60 * 1000;
   if (dropTsMs < Date.now() - STALE_GRACE_MS) {
     const sinceDays = Math.floor((Date.now() - dropTsMs) / 86400000);
-    return res.send(shell('Next drop — CertiFried Sprite Tracker', chrome(nav) + `<main>
-      <div class="card" style="background:linear-gradient(180deg,#1f2330 0%,#161922 60%);border:1px solid #39405a;text-align:center">
+    return res.send(shell('Next drop — CertiFried Sprite Tracker', chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
+      <div class="card" style="background:var(--cf-surface-2);border:1px solid color-mix(in srgb, var(--cf-info) 40%, var(--cf-border));text-align:center">
         <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-          <span style="background:#39405a;color:#cdd3e0;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🕐 NEXT SCHEDULED DROP</span>
+          <span class="st-eyebrow">Next scheduled drop</span>
         </div>
         <h1 style="margin:10px 0">No drop currently scheduled</h1>
         <p class="sub" style="font-size:14px;line-height:1.7;max-width:460px;margin:0 auto">
@@ -6392,19 +5148,19 @@ router.get('/countdown', (req, res) => {
         </div>
       </div>
       <p style="text-align:center;margin:22px 0 0;font-size:14px">
-        <a href="/sprites/info" class="navlink">📋 Full audit &amp; drop rates</a>
+        <a href="/sprites/info" class="navlink">Full audit &amp; drop rates</a>
         &nbsp;·&nbsp;
-        <a href="/sprites" class="navlink">👾 Back to tracker</a>
+        <a href="/sprites" class="navlink">Back to tracker</a>
       </p>
     </main>`));
   }
-  const body = chrome(nav) + `<main>
-    <div class="card" style="background:linear-gradient(180deg,#2a2338 0%,#161922 60%);border:1px solid #ffcf3a;text-align:center">
+  const body = chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
+    <div class="card" style="background:var(--cf-surface-2);border:1px solid var(--sp-gold);text-align:center">
       <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-        <span style="background:#ffcf3a;color:#000;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🕐 NEXT SCHEDULED DROP</span>
+        <span class="st-eyebrow">Next scheduled drop</span>
         <span class="sub" style="font-size:12px">Live from Epic's DDSS hotfix service</span>
       </div>
-      <div id="cd-display" style="font-family:'Segoe UI',sans-serif;font-weight:900;font-size:56px;color:#ffcf3a;letter-spacing:0.02em;line-height:1.1;margin:20px 0 6px;text-shadow:0 2px 20px rgba(255,207,58,.25)">
+      <div id="cd-display" style="font-family:var(--cf-font);font-variant-numeric:tabular-nums;font-weight:600;font-size:56px;color:var(--sp-gold);line-height:1.1;margin:20px 0 6px">
         <span id="cd-d">—</span>d <span id="cd-h">—</span>h <span id="cd-m">—</span>m <span id="cd-s">—</span>s
       </div>
       <p style="font-size:14px;margin:6px 0 22px"><b>Drop time:</b> <span id="cd-drop-local">${esc(dropIso)}</span></p>
@@ -6417,9 +5173,9 @@ router.get('/countdown', (req, res) => {
       </div>
     </div>
     <p style="text-align:center;margin:22px 0 0;font-size:14px">
-      <a href="/sprites/info" class="navlink">📋 Full audit &amp; drop rates</a>
+      <a href="/sprites/info" class="navlink">Full audit &amp; drop rates</a>
       &nbsp;·&nbsp;
-      <a href="/sprites" class="navlink">👾 Back to tracker</a>
+      <a href="/sprites" class="navlink">Back to tracker</a>
     </p>
   </main>
   <script>(function(){
@@ -6435,7 +5191,7 @@ router.get('/countdown', (req, res) => {
     function tick() {
       var diff = dropMs - Date.now();
       if (diff <= 0) {
-        el.display.innerHTML = '<span style="color:#3ad07a">DROP LIVE — check the tracker</span>';
+        el.display.innerHTML = '<span style="color:var(--sp-owned)">DROP LIVE — check the tracker</span>';
         return;
       }
       var s = Math.floor(diff / 1000);
@@ -6500,7 +5256,7 @@ async function renderInfo() {
     }
     return [...seen.values()]
       .sort((a, b) => (b.live + b.locked) - (a.live + a.locked))
-      .map((t) => `<span class="audit-token" style="border-color:${esc(t.color)}55;color:${esc(t.color)}">${esc(t.label)}${t.locked ? ` <span class="sub" style="font-size:11px">${t.live ? `${t.live} live · ` : ''}${t.locked} locked</span>` : ''}</span>`)
+      .map((t) => `<span class="audit-token" data-tier style="--tier:${esc(t.color)}">${esc(t.label)}${t.locked ? ` <span class="sub" style="font-size:11px">${t.live ? `${t.live} live · ` : ''}${t.locked} locked</span>` : ''}</span>`)
       .join('');
   })();
   const liveFamilyPills = (state?.groups || [])
@@ -6542,10 +5298,10 @@ async function renderInfo() {
     ? rumorsAbsent.map((t) => `<span class="audit-token absent">${esc(t.name)}</span>`).join('')
     : '<span class="sub">Nothing on the watchlist is unaccounted for.</span>';
   const nav = '';
-  const body = chrome(nav) + `<main>
-    <div class="card" style="background:linear-gradient(180deg,#1a2438 0%,#161922 60%);border:1px solid #2a5aa8">
+  const body = chrome(nav) + `<main id="main-content" tabindex="-1" class="st-main">
+    <div class="card" style="background:color-mix(in srgb, var(--cf-info) 10%, var(--cf-surface));border:1px solid var(--cf-info)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-        <span style="background:#2a5aa8;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">📋 TRANSPARENCY</span>
+        <span class="st-eyebrow">Transparency</span>
         <span class="sub" style="font-size:12px">Audited ${esc(liveAuditStamp)}</span>
       </div>
       <h1>The definitive Sprite catalog audit</h1>
@@ -6556,7 +5312,7 @@ async function renderInfo() {
       </p>
     </div>
 
-    <div class="card" style="border:1px solid #6b1a24;background:linear-gradient(180deg,#2a1015 0%,#161922 40%)">
+    <div class="card" style="border:1px solid color-mix(in srgb, var(--cf-danger) 40%, var(--cf-border));background:var(--cf-surface-2)">
       <h2 style="margin-top:0">TL;DR — the tokens people ask about most</h2>
       ${rumorsAnnounced.length ? `<p style="margin:0 0 8px"><b>Confirmed, not out yet:</b>
         ${rumorsAnnounced.map((r) => `${esc(r.name)} <span class="sub">(releases ${esc(dateShort(r.releaseAt))}${r.rarity ? `, ${esc(r.rarity)}` : ''})</span>`).join(' · ')}</p>` : ''}
@@ -6685,9 +5441,9 @@ async function renderInfo() {
       </p>
     </div>
 
-    <div class="card" style="border:1px solid #6b4cff;background:linear-gradient(180deg,#1e1a2e 0%,#161922 60%)">
+    <div class="card" style="border:1px solid var(--cf-accent-fg);background:var(--cf-surface-2)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-        <span style="background:#6b4cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🗂 PAK AUDIT</span>
+        <span class="st-eyebrow">Pak audit</span>
         <span class="sub" style="font-size:12px">Extracted ${esc(pakAuditStamp)} · build ${esc(pakBuild)}</span>
       </div>
       <h2 style="margin-top:6px">What's in the pak but not on the server yet</h2>
@@ -6721,7 +5477,7 @@ async function renderInfo() {
             <td data-label="Family"><b>${esc(v.family)}</b></td>
             <td data-label="Tier"><span class="audit-token absent">${esc(v.tier)}</span></td>
             <td data-label="Definition asset"><code>ESD_${esc(v.family)}_Variant_${esc(v.tier)}.uasset</code></td>
-            <td class="center" data-label="UI icons?">${v.hasIcons ? '<span style="color:#3ad07a;font-weight:800">✓ shipped</span>' : '<span style="color:#ffcf3a;font-weight:800">⚠ missing</span>'}</td>
+            <td class="center" data-label="UI icons?">${v.hasIcons ? '<span style="color:var(--sp-owned);font-weight:600">✓ shipped</span>' : '<span style="color:var(--sp-gold);font-weight:600">missing</span>'}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -6730,8 +5486,8 @@ async function renderInfo() {
         — no UI icon textures — suggesting Epic isn't done with it yet. Every other
         unreleased variant has both large + small icon textures ready.
       </p>
-      <div style="background:rgba(107,76,255,.10);border:1px solid rgba(107,76,255,.25);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px">
-        <b style="color:#cbb5ff">🔓 Live in the tracker:</b>
+      <div style="background:color-mix(in srgb, var(--cf-accent) 10%, transparent);border:1px solid color-mix(in srgb, var(--cf-accent) 30%, transparent);border-radius:var(--cf-radius);padding:10px 14px;margin:12px 0;font-size:13px">
+        <b style="color:var(--cf-accent-fg)">Live in the tracker:</b>
         The 3 pak icons above (Punk Cube, Sleepy Cube, ZeroPoint Quack) were
         extracted from the pak's <code>UTexture2D</code> assets and are now
         rendered as <b>Unreleased</b> jail-barred cells in every collector's grid.
@@ -6758,8 +5514,8 @@ async function renderInfo() {
         ${shipped.length ? `<div class="audit-tokens" style="margin:8px 0 10px">
           ${shipped.map((r) => `<span class="audit-token present">${esc(r.name)}: shipped as <code>${esc(r.codename)}</code>${r.total ? ` · ${r.live}/${r.total} live` : ''}</span>`).join('')}
         </div>` : ''}
-        ${announced.map((r) => `<div class="info-move" style="margin:10px 0;border-color:rgba(91,240,255,.35);background:linear-gradient(180deg,rgba(91,240,255,.06),rgba(0,0,0,.15))">
-          <div class="info-move-hdr"><span class="icon" style="background:#5bf0ff;color:#04212a">◷</span>
+        ${announced.map((r) => `<div class="info-move" style="margin:10px 0;border-color:color-mix(in srgb, var(--sp-future) 35%, transparent);background:color-mix(in srgb, var(--sp-future) 6%, transparent)">
+          <div class="info-move-hdr"><span class="icon i-time">◷</span>
           <span class="name">${esc(r.name)} — confirmed, not out yet</span></div>
           <p class="info-move-desc" style="margin:2px 0 0">
             Releases <b>${esc(dateLong(r.releaseAt))}</b>${r.rarity ? ` · <b>${esc(r.rarity)}</b>` : ''}. Not in Epic's catalog or the current pak yet, so it has no grid tile — it appears automatically once it ships.
@@ -6800,9 +5556,9 @@ async function renderInfo() {
       </details>
     </div>
 
-    <div class="card" style="border:1px solid #6b4cff;background:linear-gradient(180deg,#1e1a2e 0%,#161922 60%)">
+    <div class="card" style="border:1px solid var(--cf-accent-fg);background:var(--cf-surface-2)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-        <span style="background:#6b4cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🔬 DEEP DIVE</span>
+        <span class="st-eyebrow">Deep dive</span>
         <span class="sub" style="font-size:12px">Full pak enumeration ${esc(pakAuditStamp)}</span>
       </div>
       <h2 style="margin-top:6px">What else the pak reveals</h2>
@@ -6850,9 +5606,9 @@ async function renderInfo() {
       </p>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin:14px 0 8px">
         ${PAK_SPRITE_BOONS.filter((b) => b.hasIcon).map((b) => `
-        <div style="background:#0e0f13;border:1px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center">
-          <img src="/sprites/img/boons/boon_${esc(b.name.toLowerCase())}.png" alt="${esc(b.display)}" style="width:56px;height:56px;image-rendering:pixelated;filter:invert(0.9) brightness(1.4);background:rgba(107,76,255,.12);border-radius:8px;padding:4px">
-          <div style="font-weight:800;font-size:12.5px;margin-top:6px;color:#e8eaf0">${esc(b.display)}</div>
+        <div style="background:var(--cf-inset);border:1px solid var(--cf-border);border-radius:var(--cf-radius-lg);padding:10px 8px;text-align:center">
+          <img src="/sprites/img/boons/boon_${esc(b.name.toLowerCase())}.png" alt="${esc(b.display)}" style="width:56px;height:56px;image-rendering:pixelated;filter:invert(0.9) brightness(1.4);background:color-mix(in srgb, var(--cf-accent) 12%, transparent);border-radius:var(--cf-radius);padding:4px">
+          <div style="font-weight:600;font-size:12.5px;margin-top:6px;color:var(--cf-text)">${esc(b.display)}</div>
           <div class="sub" style="font-size:10.5px;margin-top:2px">${esc(b.name)}</div>
         </div>`).join('')}
       </div>
@@ -6893,7 +5649,7 @@ async function renderInfo() {
         <tbody>
           ${PAK_SPECIAL_TIER_EFFECTS.map((t) => `
           <tr>
-            <td data-label="Tier"><span class="audit-token" style="color:${esc(t.color)};border-color:${esc(t.color)}66"><b>${esc(t.tier)}</b></span></td>
+            <td data-label="Tier"><span class="audit-token" data-tier style="--tier:${esc(t.color)}"><b>${esc(t.tier)}</b></span></td>
             <td data-label="Effect">${esc(t.effect)}</td>
           </tr>`).join('')}
         </tbody>
@@ -6935,7 +5691,7 @@ async function renderInfo() {
             return `
           <tr>
             <td data-label="Family"><b>${esc(a.family)}</b></td>
-            <td data-label="Rarity"><span class="audit-token" style="color:${rarityColor};border-color:${rarityColor}66;font-size:11px">${esc(a.rarity)}</span></td>
+            <td data-label="Rarity"><span class="audit-token" data-tier style="--tier:${rarityColor};font-size:11px">${esc(a.rarity)}</span></td>
             <td data-label="Ability" style="font-size:12.5px;line-height:1.5">${renderAbilityBody(a.ability)}</td>
           </tr>`;
           }).join('')}
@@ -6973,7 +5729,7 @@ async function renderInfo() {
       </ul>
     </div>
 
-    <div class="card" style="border:1px solid #2a5aa8;background:linear-gradient(180deg,#0e1a2e 0%,#161922 60%)">
+    <div class="card" style="border:1px solid var(--cf-info);background:color-mix(in srgb, var(--cf-info) 10%, var(--cf-surface))">
       <h2 style="margin-top:0">Methodology</h2>
       <p class="sub" style="margin:6px 0 4px">
         Four HTTPS calls against Death420's real account. Anyone with a valid
@@ -7004,9 +5760,9 @@ async function renderInfo() {
     </div>
 
     <p style="text-align:center;margin:22px 0 6px;font-size:14px">
-      <a href="/sprites" class="navlink">👾 Back to the tracker</a>
+      <a href="/sprites" class="navlink">Back to the tracker</a>
       &nbsp;·&nbsp;
-      <a href="/sprites/browse" class="navlink">🤝 Browse collectors</a>
+      <a href="/sprites/browse" class="navlink">Browse collectors</a>
     </p>
   </main>`;
   return shell('Sprite Catalog Audit — CertiFried Sprite Tracker', body, {
@@ -7037,7 +5793,7 @@ router.get('/compare', async (req, res) => {
       slugs,
     );
     if (rows.length < 2) {
-      return res.status(404).send(shell('Not enough collectors', chrome() + `<main>
+      return res.status(404).send(shell('Not enough collectors', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
         <div class="card"><h2>Couldn't find enough collectors</h2>
         <p class="sub">At least 2 of the slugs you picked don't have public profiles. <a href="/sprites/browse">← Back to browse</a></p>
         </div></main>`));
@@ -7148,22 +5904,22 @@ router.get('/compare', async (req, res) => {
     const hrefMode = (m) => `/sprites/compare?${slugQS}${focus ? `&as=${encodeURIComponent(focus.shareId)}` : ''}${m === 'mastery' ? '&mode=mastery' : ''}`;
     const modeToggle = `<div class="cb-modetoggle" role="tablist" aria-label="Compare by">
       <span class="cb-mode-lbl">Compare&nbsp;by</span>
-      <a class="cb-mchip ${isMastery ? '' : 'on'}" role="tab" aria-selected="${isMastery ? 'false' : 'true'}" href="${hrefMode('collection')}">🗃️ Collection</a>
-      <a class="cb-mchip ${isMastery ? 'on' : ''}" role="tab" aria-selected="${isMastery ? 'true' : 'false'}" href="${hrefMode('mastery')}">⭐ Mastery</a>
+      <a class="cb-mchip ${isMastery ? '' : 'on'}" role="tab" aria-selected="${isMastery ? 'false' : 'true'}" href="${hrefMode('collection')}">Collection</a>
+      <a class="cb-mchip ${isMastery ? 'on' : ''}" role="tab" aria-selected="${isMastery ? 'true' : 'false'}" href="${hrefMode('mastery')}">Mastery</a>
     </div>
-    <style>
+    <style>/* mapped:tokens */
       .cb-modetoggle{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px}
-      .cb-mode-lbl{font-size:12px;color:#8b93a3;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-      .cb-mchip{display:inline-flex;align-items:center;gap:5px;padding:7px 15px;border-radius:999px;border:1px solid #2a2f3c;background:#12141a;color:#c3cad6;font-weight:700;font-size:13px;text-decoration:none;transition:all .12s}
-      .cb-mchip:hover{border-color:#3a4250;color:#e8eaf0}
-      .cb-mchip.on{background:linear-gradient(180deg,#2a2140,#211a34);border-color:var(--purple,#8b5cf6);color:#fff;box-shadow:0 0 0 1px var(--purple,#8b5cf6) inset}
-      .cb-caveat{display:flex;gap:10px;align-items:flex-start;margin:0 0 12px;padding:10px 14px;background:#1a1508;border:1px solid #4a3a12;border-radius:10px;font-size:12.5px;color:#e8d9a8;line-height:1.45}
-      .cb-caveat b{color:#ffd479}
-      .cb-mtag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.02em;vertical-align:middle}
-      .cb-mtag.solo{background:#3a2a08;color:#ffd479;border:1px solid #5a4410}
-      .cb-tile.cb-solo{outline:1px solid #5a4410}
-      .cb-ctx.cb-mastered{color:#ffd479}
-      .cb-detail .cb-mast>span{color:#ffd479}
+      .cb-mode-lbl{font-size:12px;color:var(--cf-text-3);font-weight:600}
+      .cb-mchip{display:inline-flex;align-items:center;gap:5px;padding:7px 15px;border-radius:999px;border:1px solid var(--cf-border);background:var(--cf-surface);color:var(--cf-text);font-weight:600;font-size:13px;text-decoration:none;transition:all .12s}
+      .cb-mchip:hover{border-color:var(--cf-border-strong);color:var(--cf-text)}
+      .cb-mchip.on{background:color-mix(in srgb, var(--sp-master) 10%, var(--cf-surface));border-color:var(--purple,var(--sp-master));color:var(--cf-text);box-shadow:0 0 0 1px var(--purple,var(--sp-master)) inset}
+      .cb-caveat{display:flex;gap:10px;align-items:flex-start;margin:0 0 12px;padding:10px 14px;background:var(--cf-inset);border:1px solid color-mix(in srgb, var(--sp-gold) 40%, var(--cf-border));border-radius:var(--cf-radius-lg);font-size:12.5px;color:var(--sp-gold);line-height:1.45}
+      .cb-caveat b{color:var(--sp-gold)}
+      .cb-mtag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:600;vertical-align:middle}
+      .cb-mtag.solo{background:color-mix(in srgb, var(--sp-gold) 10%, var(--cf-surface));color:var(--sp-gold);border:1px solid color-mix(in srgb, var(--sp-gold) 40%, var(--cf-border))}
+      .cb-tile.cb-solo{outline:1px solid color-mix(in srgb, var(--sp-gold) 40%, var(--cf-border))}
+      .cb-ctx.cb-mastered{color:var(--sp-gold)}
+      .cb-detail .cb-mast>span{color:var(--sp-gold)}
     </style>`;
     const fmtRelative = (ts) => {
       if (!ts) return '—';
@@ -7185,10 +5941,10 @@ router.get('/compare', async (req, res) => {
       const v = b.v;
       const tc = v.tierColor || '#9aa6b2';
       const phLetter = esc((v.tierLabel || '?')[0]);
-      const phHtml = `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tc)}">${phLetter}</text></svg>`;
+      const phHtml = `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tc)}">${phLetter}</text></svg>`;
       const art = v.imgId
         ? `<img loading="lazy" src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(v.familyLabel)} ${esc(v.tierLabel)}" onerror="this.outerHTML=this.dataset.ph" data-ph="${esc(phHtml)}">`
-        : `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${tc}">${phLetter}</text></svg>`;
+        : `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" style="fill:var(--cf-surface-2)"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${tc}">${phLetter}</text></svg>`;
       const isDiffer = differ == null ? (b.obtainable && b.ownerCount > 0 && b.ownerCount < users.length) : differ;
       return `<div class="cb-tile ${cls}" data-tier="${esc(v.tierKey)}" data-tr="${tierRank[v.tierKey] ?? 99}" data-fam="${esc(v.familyLabel.toLowerCase())}" data-owners="${b.ownerCount}" data-differ="${isDiffer ? 1 : 0}" style="--tc:${tc}"${detail ? ' tabindex="0" role="button"' : ''}>
         <div class="cb-art">${art}</div>
@@ -7208,12 +5964,12 @@ router.get('/compare', async (req, res) => {
     // analysis perspective is the separate "Viewing as" row below, so the two
     // intents don't collide (and profile links aren't buried in tile popovers).
     const standingsHtml = standings.map((u, i) => `<a class="cb-stand ${focus && focus.shareId === u.shareId ? 'on' : ''}" href="/sprites/u/${esc(u.shareId)}" title="View ${esc(u.displayName)}'s full collection — ${u.ownedCount} owned, ${u.masteredCount} mastered">
-      <span class="cb-rank">#${i + 1}</span><b>${esc(u.displayName)}</b><span class="cb-stand-n" title="${isMastery ? 'mastered' : 'owned'}">${isMastery ? `⭐${u.masteredCount}` : u.ownedCount}</span><span class="cb-stand-go" aria-hidden="true">↗</span></a>`).join('');
+      <span class="cb-rank">#${i + 1}</span><b>${esc(u.displayName)}</b><span class="cb-stand-n" title="${isMastery ? 'mastered' : 'owned'}">${isMastery ? `${u.masteredCount}` : u.ownedCount}</span><span class="cb-stand-go" aria-hidden="true">↗</span></a>`).join('');
 
     // "Viewing as" selector — chips on wide screens, a <select> on narrow.
-    const chips = `<a class="cb-vchip ${focus ? '' : 'on'}" href="${hrefAs(null)}">👥 Whole group</a>` +
+    const chips = `<a class="cb-vchip ${focus ? '' : 'on'}" href="${hrefAs(null)}">Whole group</a>` +
       users.map((u) => `<a class="cb-vchip ${focus && focus.shareId === u.shareId ? 'on' : ''}" href="${hrefAs(u.shareId)}">${esc(u.displayName)}</a>`).join('');
-    const selectOpts = `<option value="${esc(hrefAs(null))}"${focus ? '' : ' selected'}>👥 Whole group</option>` +
+    const selectOpts = `<option value="${esc(hrefAs(null))}"${focus ? '' : ' selected'}>Whole group</option>` +
       users.map((u) => `<option value="${esc(hrefAs(u.shareId))}"${focus && focus.shareId === u.shareId ? ' selected' : ''}>${esc(u.displayName)}</option>`).join('');
     const viewingAs = `<div class="cb-viewas">
       <span class="cb-viewas-lbl" title="Switch whose gaps/trades the board shows. Tap a name in the leaderboard above to open their full profile instead.">Viewing as</span>
@@ -7225,7 +5981,7 @@ router.get('/compare', async (req, res) => {
     const controls = `<div class="cb-controls">
       <div class="cb-tiers">${TIERS.map((t) => `<label class="cb-tierpill" style="--tc:${t.color}"><input type="checkbox" checked data-tier="${esc(t.key)}"><span>${esc(t.label)}</span></label>`).join('')}</div>
       <div class="cb-ctl-row">
-        <input type="search" id="cb-search" placeholder="🔍 family…" autocomplete="off">
+        <input type="search" id="cb-search" placeholder="family…" autocomplete="off">
         <select id="cb-sort">
           <option value="rarity">Rarest first</option>
           <option value="family">By family</option>
@@ -7234,7 +5990,7 @@ router.get('/compare', async (req, res) => {
         ${focus ? '' : (isMastery
           ? '<label class="cb-toggle" title="Also show sprites nobody here has mastered yet and ones every owner already maxed — i.e. every owned sprite, not just the tradeable ones. Sprites nobody owns are never shown."><input type="checkbox" id="cb-showall"> ＋ show all owned</label>'
           : '<label class="cb-toggle" title="Also show sprites everyone here already owns. (Sprites nobody has are never shown.)"><input type="checkbox" id="cb-showall"> ＋ ones everyone has</label>')}
-        <a class="cb-csv" href="/sprites/compare?${slugQS}&format=csv${modeQS}" download>⬇ CSV</a>
+        <a class="cb-csv" href="/sprites/compare?${slugQS}&format=csv${modeQS}" download>CSV</a>
       </div>
     </div>`;
 
@@ -7261,14 +6017,14 @@ router.get('/compare', async (req, res) => {
       }
       canCap.sort((a, b) => a.b.masterCount - b.b.masterCount);   // rarest maxed-source first
 
-      heading = `<b>${esc(me.displayName)}</b> can cap <b style="color:var(--gold)">${canCap.length}</b> ${canCap.length === 1 ? 'sprite' : 'sprites'} with a maxed copy from someone here`;
+      heading = `<b>${esc(me.displayName)}</b> can cap <b style="color:var(--sp-gold)">${canCap.length}</b> ${canCap.length === 1 ? 'sprite' : 'sprites'} with a maxed copy from someone here`;
       const capTiles = canCap.map(({ b, from }) => {
         const links = from.slice(0, 3).map((u) => `<a href="/sprites/u/${esc(u.shareId)}" class="cb-fromlink">${esc(u.displayName)}</a>`).join(', ');
-        const ctx = `<span class="cb-ctx cb-from">⭐ max from ${links}${from.length > 3 ? ` +${from.length - 3}` : ''}</span>`;
+        const ctx = `<span class="cb-ctx cb-from">max from ${links}${from.length > 3 ? ` +${from.length - 3}` : ''}</span>`;
         return tile(b, { ctx, differ: true });
       }).join('');
       const soloTiles = soloCap.map(({ b }) => tile(b, {
-        ctx: `<span class="cb-ctx cb-mastered">⚠ solo only — auto-extracts at Lv5<span class="cb-mtag solo">DREAM</span></span>`,
+        ctx: `<span class="cb-ctx cb-mastered">solo only — auto-extracts at Lv5<span class="cb-mtag solo">DREAM</span></span>`,
         cls: 'cb-solo', differ: true,
       })).join('');
       const lendTiles = lend.map(({ b, needers }) => tile(b, {
@@ -7277,14 +6033,14 @@ router.get('/compare', async (req, res) => {
 
       boardHtml = canCap.length
         ? `<div class="cb-grid" id="cb-grid">${capTiles}</div>`
-        : `<div class="cb-empty">🎉 <b>${esc(me.displayName)}</b> has already mastered every sprite someone here could trade a Lv5 copy of. Nothing left to cap by trade.</div>`;
+        : `<div class="cb-empty"><b>${esc(me.displayName)}</b> has already mastered every sprite someone here could trade a Lv5 copy of. Nothing left to cap by trade.</div>`;
       footNote = `<p class="sub" style="margin:6px 0 0">Sprites <b>${esc(me.displayName)}</b> owns but hasn't mastered, where someone here holds a Lv5 to trade — tap a name to open their collection.</p>`;
       if (soloCap.length) {
-        boardHtml += `<details class="cb-lev" open><summary>⚠ ${soloCap.length} sprite${soloCap.length === 1 ? '' : 's'} that must be mastered solo (can't be traded at Lv5)</summary>
+        boardHtml += `<details class="cb-lev" open><summary>${soloCap.length} sprite${soloCap.length === 1 ? '' : 's'} that must be mastered solo (can't be traded at Lv5)</summary>
           <div class="cb-grid" style="margin-top:12px">${soloTiles}</div></details>`;
       }
       if (lend.length) {
-        boardHtml += `<details class="cb-lev"><summary>💪 ${lend.length} sprite${lend.length === 1 ? '' : 's'} <b>${esc(me.displayName)}</b> has maxed that others still need</summary>
+        boardHtml += `<details class="cb-lev"><summary>${lend.length} sprite${lend.length === 1 ? '' : 's'} <b>${esc(me.displayName)}</b> has maxed that others still need</summary>
           <div class="cb-grid" style="margin-top:12px">${lendTiles}</div></details>`;
       }
     } else if (isMastery) {
@@ -7293,20 +6049,20 @@ router.get('/compare', async (req, res) => {
       // reveals ones every owner already maxed (nothing left to trade).
       const showTiles = board.filter((b) => !b.v.future && !b.v.vaulted && b.ownerCount > 0);
       const masteryDifferSet = new Set(masteryDiffer.map((b) => b.v.name));
-      heading = `<b style="color:var(--gold)">${masteryDiffer.length}</b> sprites tradeable for mastery — someone's maxed, someone's still leveling`;
+      heading = `<b style="color:var(--sp-gold)">${masteryDiffer.length}</b> sprites tradeable for mastery — someone's maxed, someone's still leveling`;
       boardHtml = `<div class="cb-grid" id="cb-grid">${showTiles.map((b) => {
         const v = b.v;
         const laggards = b.owners.filter((u) => !u.mastered.has(v.name));
         const isDiff = masteryDifferSet.has(v.name);
         const uniq = b.masterCount === 1 && isDiff;
         const solo = noTrade(v);
-        const ctx = `<span class="cb-ctx cb-mastered">${uniq ? '⭐ ' : ''}${b.masterCount}/${b.ownerCount} mastered${solo ? '<span class="cb-mtag solo">SOLO</span>' : ''}</span>`;
-        const detail = `<div class="cb-detail"><div class="cb-has cb-mast"><span>⭐ mastered</span> ${b.masters.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>nobody yet</i>'}</div>
+        const ctx = `<span class="cb-ctx cb-mastered">${uniq ? '' : ''}${b.masterCount}/${b.ownerCount} mastered${solo ? '<span class="cb-mtag solo">SOLO</span>' : ''}</span>`;
+        const detail = `<div class="cb-detail"><div class="cb-has cb-mast"><span>mastered</span> ${b.masters.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>nobody yet</i>'}</div>
           <div class="cb-needs"><span>◔ leveling</span> ${laggards.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>all owners maxed</i>'}</div>
-          ${solo ? '<div class="cb-needs" style="color:#ffd479"><span>⚠</span> <i>Dream auto-extracts at Lv5 — cannot be traded; each owner must solo it.</i></div>' : ''}</div>`;
+          ${solo ? '<div class="cb-needs" style="color:var(--sp-gold)"><span></span> <i>Dream auto-extracts at Lv5 — cannot be traded; each owner must solo it.</i></div>' : ''}</div>`;
         return tile(b, { ctx, detail, cls: (uniq ? 'cb-uniq ' : '') + (solo ? 'cb-solo' : ''), differ: isDiff });
       }).join('')}</div>`;
-      footNote = `<p class="sub" style="margin:6px 0 0">Owners who've maxed a sprite can trade a Lv5 copy to owners still leveling it — that's how you both hit the cap. Tap a sprite for who's maxed / still leveling. ⭐ = only one person has mastered it. Toggle <b>＋ show all owned</b> to include not-yet-started and already-fully-mastered sprites.</p>`;
+      footNote = `<p class="sub" style="margin:6px 0 0">Owners who've maxed a sprite can trade a Lv5 copy to owners still leveling it — that's how you both hit the cap. Tap a sprite for who's maxed / still leveling. = only one person has mastered it. Toggle <b>＋ show all owned</b> to include not-yet-started and already-fully-mastered sprites.</p>`;
     } else if (focus) {
       const me = focus;
       const missing = [];
@@ -7327,7 +6083,7 @@ router.get('/compare', async (req, res) => {
       }
       missing.sort((a, b) => a.b.ownerCount - b.b.ownerCount);   // rarest source first
 
-      heading = `<b>${esc(me.displayName)}</b> is missing <b style="color:var(--gold)">${missing.length}</b> ${missing.length === 1 ? 'sprite' : 'sprites'} someone here can trade`;
+      heading = `<b>${esc(me.displayName)}</b> is missing <b style="color:var(--sp-gold)">${missing.length}</b> ${missing.length === 1 ? 'sprite' : 'sprites'} someone here can trade`;
       const missTiles = missing.map(({ b }) => {
         // Each owner links to their profile — the "who can I get this from" flow.
         const links = b.owners.slice(0, 3)
@@ -7343,11 +6099,11 @@ router.get('/compare', async (req, res) => {
 
       boardHtml = missing.length
         ? `<div class="cb-grid" id="cb-grid">${missTiles}</div>`
-        : `<div class="cb-empty">🎉 <b>${esc(me.displayName)}</b> already has every sprite anyone else here owns. Nothing to trade for.</div>`;
+        : `<div class="cb-empty"><b>${esc(me.displayName)}</b> already has every sprite anyone else here owns. Nothing to trade for.</div>`;
       footNote = `<p class="sub" style="margin:6px 0 0">Sprites <b>${esc(me.displayName)}</b> lacks that someone here owns — tap a name to open their collection. Sprites nobody here has (and vaulted / unreleased) are hidden.</p>`;
 
       if (leverage.length) {
-        boardHtml += `<details class="cb-lev"><summary>💪 ${leverage.length} sprite${leverage.length === 1 ? '' : 's'} <b>${esc(me.displayName)}</b> has that others still need</summary>
+        boardHtml += `<details class="cb-lev"><summary>${leverage.length} sprite${leverage.length === 1 ? '' : 's'} <b>${esc(me.displayName)}</b> has that others still need</summary>
           <div class="cb-grid" style="margin-top:12px">${levTiles}</div></details>`;
       }
     } else {
@@ -7358,16 +6114,16 @@ router.get('/compare', async (req, res) => {
       // Unreleased + vaulted are excluded too (not tradeable; the main grid still
       // shows those jail-barred).
       const showTiles = board.filter((b) => !b.v.future && !b.v.vaulted && b.ownerCount > 0);
-      heading = `<b style="color:var(--gold)">${differ.length}</b> tradeable sprites — someone has, someone needs`;
+      heading = `<b style="color:var(--sp-gold)">${differ.length}</b> tradeable sprites — someone has, someone needs`;
       boardHtml = `<div class="cb-grid" id="cb-grid">${showTiles.map((b) => {
         const needers = users.filter((u) => !u.owned.has(b.v.name));
         const uniq = b.ownerCount === 1 && b.obtainable;
-        const ctx = `<span class="cb-ctx">${uniq ? '⭐ ' : ''}${b.ownerCount}/${users.length} have it</span>`;
+        const ctx = `<span class="cb-ctx">${uniq ? '' : ''}${b.ownerCount}/${users.length} have it</span>`;
         const detail = `<div class="cb-detail"><div class="cb-has"><span>✓ has</span> ${b.owners.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>nobody</i>'}</div>
           <div class="cb-needs"><span>✗ needs</span> ${needers.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>everyone has it</i>'}</div></div>`;
         return tile(b, { ctx, detail, cls: uniq ? 'cb-uniq' : '' });
       }).join('')}</div>`;
-      footNote = `<p class="sub" style="margin:6px 0 0">Only sprites someone here owns are shown — ones nobody has are hidden. Tap a sprite for who has / needs it. ⭐ = only one owner. Toggle <b>＋ ones everyone has</b> to add the ones you all share.</p>`;
+      footNote = `<p class="sub" style="margin:6px 0 0">Only sprites someone here owns are shown — ones nobody has are hidden. Tap a sprite for who has / needs it. = only one owner. Toggle <b>＋ ones everyone has</b> to add the ones you all share.</p>`;
     }
 
     const groupMastered = obtainableCells.filter((b) => b.masterCount > 0).length;
@@ -7379,34 +6135,34 @@ router.get('/compare', async (req, res) => {
     const aggregate = `<div class="cb-agg">
       <div class="cb-agg-bar"><span style="width:${aggPct}%"></span></div>
       <div class="cb-agg-txt">Together this group ${isMastery ? 'has mastered' : 'holds'} <b>${aggHas}/${groupTotal}</b> obtainable sprites (${aggPct}%).
-      ${aggMissList.length ? `${isMastery ? 'Nobody here has mastered' : 'Still missing as a group'}: <b>${esc(missNames)}</b>${aggMissList.length > 4 ? ` +${aggMissList.length - 4} more` : ''}.` : (isMastery ? 'Between you, every obtainable sprite is mastered. 🏆' : 'You collectively own every obtainable sprite. 🏆')}</div>
+      ${aggMissList.length ? `${isMastery ? 'Nobody here has mastered' : 'Still missing as a group'}: <b>${esc(missNames)}</b>${aggMissList.length > 4 ? ` +${aggMissList.length - 4} more` : ''}.` : (isMastery ? 'Between you, every obtainable sprite is mastered. ' : 'You collectively own every obtainable sprite. ')}</div>
     </div>`;
 
-    res.send(shell(`Compare ${users.length} collectors — CertiFried`, chrome(`<a class="navlink" href="/sprites/browse?${slugs.map((s) => `preselect=${encodeURIComponent(s)}`).join('&amp;')}">Add or remove collectors</a>`) + `<main>
+    res.send(shell(`Compare ${users.length} collectors — CertiFried`, chrome(`<a class="navlink" href="/sprites/browse?${slugs.map((s) => `preselect=${encodeURIComponent(s)}`).join('&amp;')}">Add or remove collectors</a>`) + `<main id="main-content" tabindex="-1" class="st-main">
       <section class="hero" style="display:block;padding:18px 26px">
         <div class="who" style="margin-bottom:10px">Comparing <b style="font-size:18px">${users.length} collectors</b></div>
         <div class="cb-standings">${standingsHtml}</div>
         ${aggregate}
-        <div class="sub" style="margin:0 0 10px;font-size:12px">🔗 The more collectors linked, the faster this tracker sees exactly what's obtainable. <a href="/sprites" style="color:var(--purple);font-weight:700">Link your account →</a></div>
+        <div class="sub" style="margin:0 0 10px;font-size:12px">The more collectors linked, the faster this tracker sees exactly what's obtainable. <a href="/sprites" style="color:var(--sp-master);font-weight:600">Link your account →</a></div>
         ${modeToggle}
         ${viewingAs}
         <div id="cmp-refresh-bar" data-rendered-at="${Date.now()}" data-oldest-synced-at="${oldestSyncedAt || ''}"
-             style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px;padding:9px 14px;background:#0e0f13;border:1px solid #2a2f3c;border-radius:10px;font-size:12.5px">
+             style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px;padding:9px 14px;background:var(--cf-inset);border:1px solid var(--cf-border);border-radius:var(--cf-radius-lg);font-size:12.5px">
           <span style="display:flex;align-items:center;gap:6px">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3ad07a;animation:cmp-pulse 2s infinite"></span>
-            <b style="color:#e8eaf0">Live</b><span class="sub">— auto-refreshes every 5 min.</span>
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--sp-owned);animation:cmp-pulse 2s infinite"></span>
+            <b style="color:var(--cf-text)">Live</b><span class="sub">— auto-refreshes every 5 min.</span>
           </span>
-          <span id="cmp-refresh-countdown" class="sub" style="font-variant-numeric:tabular-nums;font-weight:600;color:#cfe">next refresh in 5:00</span>
-          <button id="cmp-pause-btn" type="button" class="cb-csv" style="margin-left:auto">⏸ Pause</button>
-          <button id="cmp-refresh-now" type="button" class="cb-csv">🔄 Refresh now</button>
+          <span id="cmp-refresh-countdown" class="sub" style="font-variant-numeric:tabular-nums;font-weight:600;color:var(--sp-owned)">next refresh in 5:00</span>
+          <button id="cmp-pause-btn" type="button" class="cb-csv" style="margin-left:auto">Pause</button>
+          <button id="cmp-refresh-now" type="button" class="cb-csv">Refresh now</button>
         </div>
         <style>@keyframes cmp-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}</style>
       </section>
 
       <section class="playercard" style="display:block">
-        <div class="cardhead" style="margin-bottom:8px">${focus ? '🎯 ' : (isMastery ? '⭐ ' : '🤝 ')}${heading} <span id="cb-count" class="sub" style="font-weight:600"></span></div>
+        <div class="cardhead" style="margin-bottom:8px">${focus ? '' : (isMastery ? '' : '')}${heading} <span id="cb-count" class="sub" style="font-weight:600"></span></div>
         ${controls}
-        ${isMastery ? `<div class="cb-caveat">⚠️ <div><b>Dream can't be traded at Level 5.</b> It explodes into legendary loot and auto-extracts the instant it maxes, so a Lv5 Dream can't be held or handed off — everyone has to master Dream solo. Every other sprite's mastery can be passed around freely.</div></div>` : ''}
+        ${isMastery ? `<div class="cb-caveat"><div><b>Dream can't be traded at Level 5.</b> It explodes into legendary loot and auto-extracts the instant it maxes, so a Lv5 Dream can't be held or handed off — everyone has to master Dream solo. Every other sprite's mastery can be passed around freely.</div></div>` : ''}
         ${boardHtml}
         ${footNote}
       </section>
@@ -7469,13 +6225,13 @@ router.get('/compare', async (req, res) => {
         countdownEl.textContent = 'next refresh in ' + fmtRemain(remain);
       }
       setInterval(tick, 1000); tick();
-      if (pauseBtn) pauseBtn.addEventListener('click', function(){ paused = !paused; pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause'; if(!paused) startedAt = Date.now(); });
+      if (pauseBtn) pauseBtn.addEventListener('click', function(){ paused = !paused; pauseBtn.textContent = paused ? '▶ Resume' : 'Pause'; if(!paused) startedAt = Date.now(); });
       if (refreshNowBtn) refreshNowBtn.addEventListener('click', function(){ location.reload(); });
       document.addEventListener('visibilitychange', tick);
     })();</script>`));
   } catch (e) {
     logger.warn(`[sprites] compare view failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Something went wrong</h2></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Something went wrong</h2></div></main>'));
   }
 });
 
@@ -7682,7 +6438,7 @@ function renderHealthAudit(a) {
     ? `<ul class="audit-list ${cls}">${arr.map((m) => `<li>${esc(m)}</li>`).join('')}</ul>`
     : '';
   return `<section class="playercard" style="display:block;margin-top:22px">
-    <div class="cardhead" style="margin-bottom:8px">🩺 Health &amp; accuracy audit ${verdict}</div>
+    <div class="cardhead" style="margin-bottom:8px">Health &amp; accuracy audit ${verdict}</div>
     <p class="sub" style="margin:0 0 10px">Auto-runs hourly (DMs the owner on any change) and on every visit here. Checks images on disk, codename leaks, ability coverage, availability contradictions, label drift, pipeline freshness, and reconciles our obtainable set against <b>Epic's own hotfix disable list</b> (the ground-truth availability feed). Reference: <b>${esc(AUDIT_ACCOUNT_LABEL)}</b> · ${a.stats.families} families / ${a.stats.variants} variants / ${a.stats.imageFiles} images.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       ${freshPill}
@@ -7693,8 +6449,8 @@ function renderHealthAudit(a) {
       <span class="pill ok">${pl.withState}/${pl.accounts} accounts synced</span>
       <span class="sub">reference synced ${esc(fmtTs(a.stats.refSyncedAt))}</span>
     </div>
-    ${a.problems.length ? `<div class="sub" style="color:#ff8aa6;font-weight:800;margin:4px 0">Problems</div>${list(a.problems, 'bad')}` : ''}
-    ${a.warnings.length ? `<div class="sub" style="color:#ffcf3a;font-weight:800;margin:8px 0 4px">Notes / warnings</div>${list(a.warnings, 'warn')}` : ''}
+    ${a.problems.length ? `<div class="sub" style="color:var(--cf-danger);font-weight:600;margin:4px 0">Problems</div>${list(a.problems, 'bad')}` : ''}
+    ${a.warnings.length ? `<div class="sub" style="color:var(--sp-gold);font-weight:600;margin:8px 0 4px">Notes / warnings</div>${list(a.warnings, 'warn')}` : ''}
     ${a.ok && !a.warnings.length ? '<p class="sub">Nothing to flag — every variant has a real name, image, ability, and consistent availability. 0% doubt. ✓</p>' : ''}
   </section>`;
 }
@@ -7773,8 +6529,8 @@ async function renderScheduleAdmin(req) {
         <span class="sub">${n ? `affects ${n} sprite${n === 1 ? '' : 's'}` : ''}</span>
       </div>
       <p class="sub" style="margin:6px 0 0">${why}</p>
-      ${epicWon ? `<p class="sub" style="margin:4px 0 0;color:#ffcf3a">⚠ Epic's own hotfix says <b>${esc(human(effAt))}</b>, so that is being used instead of the date below.</p>` : ''}
-      ${(r.note_label || r.note_text) ? `<p class="sub" style="margin:8px 0 0;padding:8px 10px;border-left:3px solid #ffcf3a;background:rgba(255,207,58,.07);border-radius:0 6px 6px 0">
+      ${epicWon ? `<p class="sub" style="margin:4px 0 0;color:var(--sp-gold)">Epic's own hotfix says <b>${esc(human(effAt))}</b>, so that is being used instead of the date below.</p>` : ''}
+      ${(r.note_label || r.note_text) ? `<p class="sub" style="margin:8px 0 0;padding:8px 10px;border-left:3px solid var(--sp-gold);background:color-mix(in srgb, var(--sp-gold) 7%, transparent);border-radius:0 6px 6px 0">
         <b>Note shown on this sprite:</b> ${r.note_label ? `<b>${esc(r.note_label)}</b>` : ''}${(r.note_label && r.note_text) ? ' — ' : ''}${esc(r.note_text || '')}</p>` : ''}
 
       <form method="post" action="/sprites/admin/schedule" style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -7782,11 +6538,11 @@ async function renderScheduleAdmin(req) {
         <input type="hidden" name="item_key" value="${esc(r.item_key)}">
         <label class="sub">${r.gate ? 'Unlocks at' : 'Note clears at'}
           <input type="datetime-local" name="release_at" value="${esc(msToDtLocal(r.release_at))}" style="margin-left:6px">
-          <span style="opacity:.7">UTC</span>
+          <span>UTC</span>
         </label>
-        <button class="btn" type="submit" name="action" value="save">Save date</button>
+        <button class="btn btn-primary" type="submit" name="action" value="save">Save date</button>
         ${(r.gate && !proven && (effAt == null || Date.now() < effAt))
-          ? '<button class="btn" type="submit" name="action" value="unlock" title="Mark available immediately">Unlock now</button>'
+          ? '<button class="btn btn-primary" type="submit" name="action" value="unlock" title="Mark available immediately">Unlock now</button>'
           : ''}
         <details style="width:100%;margin-top:4px">
           <summary class="sub" style="cursor:pointer">More options</summary>
@@ -7797,8 +6553,8 @@ async function renderScheduleAdmin(req) {
             <input type="text" name="label" aria-label="Countdown label" value="${esc(r.label || '')}" placeholder="Countdown label" size="24">
             <input type="text" name="note_label" aria-label="Note title" value="${esc(r.note_label || '')}" placeholder="Note title" size="16">
             <input type="text" name="note_text" aria-label="Note shown on the sprite" value="${esc(r.note_text || '')}" placeholder="Note shown on the sprite" size="34">
-            <button class="btn" type="submit" name="action" value="save">Save all</button>
-            <button class="btn" type="submit" name="action" value="delete"
+            <button class="btn btn-primary" type="submit" name="action" value="save">Save all</button>
+            <button class="btn btn-primary" type="submit" name="action" value="delete"
               onclick="return confirm('Remove this from the schedule? It will be treated as available.')">Remove row</button>
           </div>
         </details>
@@ -7826,10 +6582,10 @@ async function renderScheduleAdmin(req) {
       <form method="post" action="/sprites/admin/schedule" class="card" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <select name="scope"><option value="tier">a whole tier</option><option value="family">one sprite family</option></select>
         <input type="text" name="item_key" placeholder="e.g. cube  /  companystargazer" size="26" required>
-        <label class="sub">Unlocks at <input type="datetime-local" name="release_at" style="margin-left:6px"><span style="opacity:.7">UTC</span></label>
+        <label class="sub">Unlocks at <input type="datetime-local" name="release_at" style="margin-left:6px"><span>UTC</span></label>
         <label class="sub"><input type="checkbox" name="gate" value="1" checked> Lock until then</label>
         <input type="text" name="label" placeholder="Countdown label" size="20">
-        <button class="btn" type="submit" name="action" value="save">Add</button>
+        <button class="btn btn-primary" type="submit" name="action" value="save">Add</button>
         <p class="sub" style="width:100%;margin:2px 0 0">Leave the date blank for &quot;announced, no date yet&quot; — shows as Unreleased with no countdown.</p>
       </form>
     </details>
@@ -7841,8 +6597,8 @@ async function renderScheduleAdmin(req) {
 
     ${epicAt ? `<p class="sub" style="margin-top:12px">Epic&#39;s hotfix currently advertises the next drop as <b>${esc(human(epicAt))}</b>${epicAt <= Date.now() ? ' — in the past, so it is being ignored' : ''}.</p>` : ''}
 
-    ${discovered.length ? `<p class="sub" style="margin-top:12px;color:#ffcf3a">
-      ⚠ <b>New tier${discovered.length === 1 ? '' : 's'} spotted in Epic&#39;s catalog:</b> ${discovered.map((d) => `<code>${esc(d)}</code>`).join(', ')}.
+    ${discovered.length ? `<p class="sub" style="margin-top:12px;color:var(--sp-gold)">
+      <b>New tier${discovered.length === 1 ? '' : 's'} spotted in Epic&#39;s catalog:</b> ${discovered.map((d) => `<code>${esc(d)}</code>`).join(', ')}.
       Added to the grid automatically and shown as locked. Add a row above to give ${discovered.length === 1 ? 'it' : 'them'} a countdown.
     </p>` : ''}
   </section>`;
@@ -7873,7 +6629,7 @@ async function renderAnnouncedAdmin() {
   const fields = (r = {}) => `
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
         <input type="text" name="name" aria-label="Name" value="${esc(r.name || '')}" placeholder="Name, as Epic writes it" maxlength="80" size="22" required>
-        <label class="sub">Release <input type="datetime-local" name="release_at" value="${esc(msToDtLocal(r.release_at))}" style="margin-left:6px"><span style="opacity:.7">UTC</span></label>
+        <label class="sub">Release <input type="datetime-local" name="release_at" value="${esc(msToDtLocal(r.release_at))}" style="margin-left:6px"><span>UTC</span></label>
         <input type="text" name="rarity" aria-label="Rarity" value="${esc(r.rarity || '')}" placeholder="Rarity" maxlength="24" size="10" list="ann-rarities">
         <input type="text" name="family_token" aria-label="Catalog codename" value="${esc(r.family_token || '')}" placeholder="Catalog codename (when known)" maxlength="48" size="24">
       </div>
@@ -7902,11 +6658,11 @@ async function renderAnnouncedAdmin() {
         <input type="hidden" name="slug" value="${esc(r.slug)}">
         ${fields(r)}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-          <button class="btn" type="submit" name="action" value="save">Save</button>
+          <button class="btn btn-primary" type="submit" name="action" value="save">Save</button>
           ${r.enabled
-    ? '<button class="btn" type="submit" name="action" value="disable" formnovalidate title="Stop reporting it, keep the row">Hide</button>'
-    : '<button class="btn" type="submit" name="action" value="enable" formnovalidate>Show again</button>'}
-          <button class="btn" type="submit" name="action" value="delete" formnovalidate
+    ? '<button class="btn btn-primary" type="submit" name="action" value="disable" formnovalidate title="Stop reporting it, keep the row">Hide</button>'
+    : '<button class="btn btn-primary" type="submit" name="action" value="enable" formnovalidate>Show again</button>'}
+          <button class="btn btn-primary" type="submit" name="action" value="delete" formnovalidate
             onclick="return confirm('Remove this announced sprite?')">Remove</button>
         </div>
       </form>
@@ -7930,7 +6686,7 @@ async function renderAnnouncedAdmin() {
           <input type="text" name="slug" aria-label="Short id" placeholder="Short id, e.g. john-wick (made from the name if blank)" maxlength="48" size="44" pattern="[a-z0-9][a-z0-9-]*">
         </div>
         ${fields()}
-        <div style="margin-top:8px"><button class="btn" type="submit">Add</button></div>
+        <div style="margin-top:8px"><button class="btn btn-primary" type="submit">Add</button></div>
       </form>
     </details>`}
     ${rarityList}
@@ -8045,10 +6801,10 @@ router.post('/admin/schedule', async (req, res) => {
 router.get('/admin', async (req, res) => {
   const acct = req.session?.epicAccountId;
   if (!acct || !ADMIN_ACCOUNT_IDS.has(acct)) {
-    return res.status(403).send(shell('Forbidden — CertiFried', chrome() + `<main>
+    return res.status(403).send(shell('Forbidden — CertiFried', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
       <div class="card"><h2>403 — Forbidden</h2>
       <p class="sub">This page is only visible to the tracker's admin while logged in to the linked Epic account.</p>
-      <p style="margin-top:14px"><a class="btn" href="/sprites">← Back to tracker</a></p></div></main>`));
+      <p style="margin-top:14px"><a class="btn btn-primary" href="/sprites">← Back to tracker</a></p></div></main>`));
   }
   try {
     const [rows] = await pool.execute(
@@ -8074,18 +6830,18 @@ router.get('/admin', async (req, res) => {
       } catch { /* shrug */ }
       // Auth status pill — captures the credential tier at a glance.
       //   DEAD  = needs_relogin set, no working credential
-      //   🔒 Forever = device_auth on file, syncs permanently
+      //   Forever = device_auth on file, syncs permanently
       //   ↻ Refresh = refresh_token only, expires in <refresh_expires_at>
-      //   ⏳ Expiring = refresh_token only AND <24h to expiry
+      //   Expiring = refresh_token only AND <24h to expiry
       let authPill;
       if (r.needs_relogin) {
         authPill = '<span class="pill bad">DEAD — needs relogin</span>';
       } else if (r.has_device) {
-        authPill = `<span class="pill ok" title="device_auth minted ${esc(fmtTs(r.device_auth_at))}">🔒 Forever (device)</span>`;
+        authPill = `<span class="pill ok" title="device_auth minted ${esc(fmtTs(r.device_auth_at))}">Forever (device)</span>`;
       } else if (r.refresh_expires_at) {
         const hoursLeft = (new Date(r.refresh_expires_at).getTime() - Date.now()) / 3600000;
         if (hoursLeft <= 0) authPill = '<span class="pill bad">expired</span>';
-        else if (hoursLeft < 24) authPill = `<span class="pill warn">⏳ Refresh · ${Math.round(hoursLeft)}h left</span>`;
+        else if (hoursLeft < 24) authPill = `<span class="pill warn">Refresh · ${Math.round(hoursLeft)}h left</span>`;
         else authPill = `<span class="pill warn">↻ Refresh · ${Math.round(hoursLeft)}h left</span>`;
       } else authPill = '<span class="pill warn">unknown</span>';
       const slugLink = r.share_id
@@ -8107,8 +6863,8 @@ router.get('/admin', async (req, res) => {
     const dead = rows.filter((r) => r.needs_relogin).length;
     const permanent = rows.filter((r) => r.has_device && !r.needs_relogin).length;
     const ephemeral = rows.filter((r) => !r.has_device && !r.needs_relogin).length;
-    const summary = `${rows.length} accounts · 🔒 ${permanent} permanent (device_auth) · ↻ ${ephemeral} refresh-only · ✗ ${dead} need re-login`;
-    res.send(shell('Admin — CertiFried Sprite Tracker', chrome() + `<main>
+    const summary = `${rows.length} accounts · ${permanent} permanent (device_auth) · ↻ ${ephemeral} refresh-only · ✗ ${dead} need re-login`;
+    res.send(shell('Admin — CertiFried Sprite Tracker', chrome() + `<main id="main-content" tabindex="-1" class="st-main">
       <section class="hero" style="display:block">
         <div class="who" style="margin-bottom:6px">Tracker Admin<b>All connected accounts</b><span class="since">${summary}</span></div>
       </section>
@@ -8119,7 +6875,7 @@ router.get('/admin', async (req, res) => {
         </tr></thead>
         <tbody>${tableRows || '<tr><td colspan="10" class="sub" style="text-align:center;padding:24px">No accounts yet.</td></tr>'}</tbody>
       </table></div>
-      <p class="sub" style="margin-top:14px">🔒 <b>Forever</b> = device_auth on file, permanent until user revokes from Epic account settings. ↻ <b>Refresh</b> = refresh_token only (48h rotating); back-fills to device_auth on next sync. ✗ <b>DEAD</b> = needs a manual re-paste to recover.</p>
+      <p class="sub" style="margin-top:14px"><b>Forever</b> = device_auth on file, permanent until user revokes from Epic account settings. ↻ <b>Refresh</b> = refresh_token only (48h rotating); back-fills to device_auth on next sync. ✗ <b>DEAD</b> = needs a manual re-paste to recover.</p>
       ${renderHealthAudit(await runSpriteHealthAudit().catch((e) => {
     logger.warn(`[sprites] health audit failed: ${e.message}`);
     return { ok: false, problems: [`audit crashed: ${e.message}`], warnings: [], stats: { families: 0, variants: 0, imageFiles: 0, refSyncedAt: null }, pipeline: { accounts: 0, withState: 0, dead: 0, stale: 0, newestAgeMin: null } };
@@ -8131,7 +6887,7 @@ router.get('/admin', async (req, res) => {
     </main>`));
   } catch (e) {
     logger.warn(`[sprites] admin view failed: ${e.message}`);
-    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Something went wrong</h2></div></main>'));
+    res.status(500).send(shell('Error', chrome() + '<main id="main-content" tabindex="-1" class="st-main"><div class="card"><h2>Something went wrong</h2></div></main>'));
   }
 });
 

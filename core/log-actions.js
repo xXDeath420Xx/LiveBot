@@ -125,7 +125,6 @@ export const LOG_ACTIONS = Object.freeze({
         { key: 'owoRareCatch.mythical', label: 'Mythical', color: hex('#FF9800') },
         { key: 'owoRareCatch.legendary', label: 'Legendary', color: hex('#F44336') },
         { key: 'owoRareCatch.fabled', label: 'Fabled', color: hex('#E91E63') },
-        { key: 'owoRareCatch.hidden', label: 'Hidden', color: hex('#673AB7') },
     ],
     owoAdminAction: [
         { key: 'owoAdminAction.reset', label: 'Reset', color: hex('#F44336') },

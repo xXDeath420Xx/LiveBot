@@ -1,4 +1,4 @@
-<%- include('_head', { pageTitle: 'Commands for ' + channel.channel_name, csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Commands for ' + channel.channel_name, csrfToken, kickUser: user, kickTab: 'channels' }) %>
 <%
   // Master-switch state: chat commands are opt-in (off unless explicitly true).
   var _feats = {};

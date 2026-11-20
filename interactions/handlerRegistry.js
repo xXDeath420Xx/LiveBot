@@ -46,7 +46,7 @@ import { handleTreeGrow, handleTreeRefresh } from './buttons/tree_grow.js';
 import { handleTradeButton as handleDigimonTrade } from '../commands/games/digimon.js';
 import { handleTreeCatch } from './buttons/tree_catch.js';
 import { handleCatGameButton, handleCatQuestButton } from './buttons/catbot_game.js';
-import { handleGuildBossButton } from './buttons/owo_guildboss.js';
+import { handleBossButton as handleGuildBossButton } from '../core/critters/views.js';
 import { handleTakeoverButton } from '../commands/admin/takeover.js';
 import { handleCommissionReview } from './buttons/commission_review.js';
 import { handleCommissionFalsePositive } from './buttons/commission_false_positive.js';
@@ -110,6 +110,7 @@ import { handleConfessModal } from '../commands/fun/fun-confess-handler.js';
 import { handleBulkCreateModal } from '../commands/admin/admin-roles-handler.js';
 import { handleTheaterBrowse, handleTheaterBrowsePage, handleTheaterPick, handleTheaterSearchModal, handleTheaterResultSelect } from '../handlers/cinema/theater-panel.js';
 import { handleCinemaButton, handleCinemaSeekModal, handleCinemaSelect, handleCinemaStart, handleCinemaSeasonSelect, handleCinemaEpisodeSelect, handleCinemaEpiPage, handleCinemaPlaySeason, handleCinemaPlayFrom, handleCinemaShowFrom, handleCinemaPlayShow } from '../handlers/cinema/panel.js';
+import { handleActivityOpen } from '../handlers/activities/launch.js';
 import { handleFishAgain, handleFishSellAll, handleFishInv } from './buttons/fish_actions.js';
 import { handleSoundboardPlay, handleSoundboardPage } from './buttons/soundboard_play.js';
 import { handleSteamLibraryButton, handleSteamLibraryPasteModal } from './buttons/steam_library.js';
@@ -123,6 +124,13 @@ import {
 } from './modmail-handlers.js';
 import { handleReviewButton as handleDmSpamReportReview } from '../core/dm-spam-reports.js';
 import { handleDmReportModal } from '../commands/context/report-dm-spam.js';
+
+// /music lastfm link: the Verify button, lastfm_verify:<discord id>:<token> (handlers/music/lastfm.js, fix wave 7).
+// Loaded on first use; the customId carries everything, so it works after a restart within the token's hour.
+async function handleLastfmVerify(interaction) {
+  const mod = await import('../handlers/music/lastfm.js');
+  return mod.handleVerifyButton(interaction);
+}
 
 /**
  * Button handler registry
@@ -284,7 +292,8 @@ export const buttonHandlers = {
   'cbg:': handleCatGameButton,
   'cbq:': handleCatQuestButton,
 
-  // OwO guild boss: guildboss_fight | guildboss_leaderboard | guildboss_inspect (static ids).
+  // Critters guild boss: guildboss_fight | guildboss_leaderboard | guildboss_inspect (static ids; the handler checks
+  // the game is on, the boss switch and the game channels / blocked roles first).
   'guildboss_': handleGuildBossButton,
 
   // Takeover plan confirm/cancel (tko:apply | tko:cancel)
@@ -330,6 +339,8 @@ export const buttonHandlers = {
   'cinema_stop': handleCinemaButton,
   'cinema_skip': handleCinemaButton,
   'cinema_start:': handleCinemaStart,
+  // Discord Activities: "Open Watch Together" / "Play Greenhouse Tycoon" (handlers/activities/launch.js)
+  'activity_open:': handleActivityOpen,
   'cinema_epi_page:': handleCinemaEpiPage,
   'cinema_play_season:': handleCinemaPlaySeason,
   'cinema_play_from:': handleCinemaPlayFrom,
@@ -358,6 +369,7 @@ export const buttonHandlers = {
   'mmail_cancel': handleModmailCancel,
   'mmail_close:': handleModmailClose,
   'mmail_block:': handleModmailBlock,
+  'lastfm_verify:': handleLastfmVerify,
 };
 
 /**

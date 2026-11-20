@@ -87,6 +87,23 @@ test('viewer export: events about them and their values, from any streamer', asy
     assert.equal(await p.exportFor('sbtest-nobody'), null);
 });
 
+test('H-772: a viewer signed in with Twitch or Kick (no CertiFried account) gets only their own viewer rows, from every streamer', async () => {
+    const p = createStreamBotPrivacy({ store, db: fakeDb });
+    const out = await p.exportForAccounts([{ platform: 'twitch', id: '555001' }, { platform: 'kick', id: '777001' }]);
+    assert.equal(out.tables[`${T.prefix}events_about_you`].rows.length, 3);
+    assert.equal(out.tables[`${T.prefix}values_for_you`].rows[0].key_name, 'points');
+    assert.ok(!Object.keys(out.tables).some((t) => /profiles|devices|grants|tip_sources|automations|runs/.test(t)), 'never a streamer profile');
+    assert.deepEqual(Object.keys((await p.exportForAccounts([{ platform: 'kick', id: '555001' }])).tables), [], 'the platform matters: a Twitch id is not a Kick id');
+
+    const tw = normaliseTwitch('channel.follow', { broadcaster_user_id: '900000002', user_id: '444001', user_login: 'u444', user_name: 'U444', followed_at: new Date().toISOString() });
+    await store.insertEvent(other.id, tw);
+    await store.variableStore.set(profile.id, 'twitch:444001', 'points', '3');
+    const d = await p.deleteForAccounts([{ platform: 'twitch', id: '444001' }]);
+    assert.deepEqual([d.deleted[`${T.prefix}events`], d.deleted[`${T.prefix}variables`]], [1, 1]);
+    assert.deepEqual((await p.deleteForAccounts([{ platform: 'twitch', id: '444001' }])).deleted, {}, 'nothing the second time');
+    assert.ok(await store.getProfile(profile.id), 'streamers untouched');
+});
+
 test('delete: the viewer\'s rows go from every profile; the streamer\'s whole profile goes', async () => {
     const p = createStreamBotPrivacy({ store, db: fakeDb });
     const v = await p.deleteFor(VIEWER);

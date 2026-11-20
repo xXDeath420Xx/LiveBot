@@ -1,10 +1,12 @@
 /*
  * Stream bot overlays: the overlay types, their settings, and which alert an event shows (pure; design §9).
  *
- *   OVERLAY_TYPES                 alerts, chat, events, goal, counter, nowplaying, canvas: label, the OBS source name
+ *   OVERLAY_TYPES                 alerts, chat, events, goal, counter, nowplaying, canvas, scene: label, the OBS source name
  *                                 CertiFried Studio gives it, and which overlay actions it carries out
  *   ALERT_KINDS                   the alert box's event types (follow, sub tier, resub months, gift count, Bits, raid,
- *                                 redemption, power-up, tip, hype train, Kick follow / sub / gift)
+ *                                 redemption, power-up, tip, hype train, Kick follow / sub / gift, YouTube Super Chat,
+ *                                 new member, member milestone and gift memberships)
+ *   CHAT_PLATFORMS                what a Chat overlay can show (YouTube only reaches it once YouTube is set up, §13.1)
  *   alertKeyFor(ev, general)      the alert an event shows, or null
  *   alertAmount(key, ev)          the number a min-amount variation compares (tier, months, count, Bits, viewers …)
  *   pickVariation(alert, amount)  the alert's own settings with the highest matching variation laid over them
@@ -14,7 +16,8 @@
  *   goalIncrement(metric, ev)     how much an event moves an automatic goal
  *   sampleFor(key)                the event a Test button shows for an alert
  *
- * Every overlay page is a transparent 1920×1080 canvas; widgets sit at one of nine positions with a margin.
+ * Every overlay page is a transparent 1920×1080 canvas; widgets sit at one of nine positions with a margin. A scene screen
+ * (`scene`) fills the canvas with the streamer's artwork (cover fit) and places everything in % of that artwork.
  * Tested in tests/stream-bot-overlays.test.js.
  */
 import { TIP_SOURCES } from '../events.js';
@@ -31,8 +34,8 @@ export const FONTS = Object.freeze({
     georgia: { label: 'Georgia (serif)', css: 'Georgia, "Times New Roman", serif' },
     mono: { label: 'Cascadia Mono (monospace)', css: '"Cascadia Mono", Consolas, monospace' },
 });
-export const LAYOUTS = Object.freeze(['stacked', 'side', 'banner', 'text']);
-export const LAYOUT_LABEL = Object.freeze({ stacked: 'Image above the text', side: 'Image beside the text', banner: 'Lower-third banner', text: 'Text only' });
+export const LAYOUTS = Object.freeze(['stacked', 'side', 'banner', 'over', 'text']);
+export const LAYOUT_LABEL = Object.freeze({ stacked: 'Image above the text', side: 'Image beside the text', banner: 'Lower-third banner', over: 'Text over the image', text: 'Text only' });
 export const ANIMATIONS = Object.freeze(['rise', 'fade', 'pop', 'slide', 'none']);
 export const ANIMATION_LABEL = Object.freeze({ rise: 'Rise in', fade: 'Fade', pop: 'Scale in', slide: 'Slide from the side', none: 'No animation' });
 export const PLATES = Object.freeze(['none', 'soft', 'solid']);
@@ -53,6 +56,8 @@ export const OVERLAY_TYPES = Object.freeze([
         description: 'The song request playing now: the same card as the music player, shown on its own.' },
     { type: 'canvas', label: 'Text and media', sourceName: 'CertiFried Canvas', capabilities: ['show'], audio: true,
         description: 'An empty layer for the Show text and Show an image or video actions.' },
+    { type: 'scene', label: 'Scene screen', sourceName: 'CertiFried Scene', capabilities: ['show'], audio: false,
+        description: 'A full-screen starting soon, be right back or ending screen: your artwork, a title, a scrolling line, a countdown and weather effects.' },
 ]);
 const TYPE = new Map(OVERLAY_TYPES.map((t) => [t.type, t]));
 export const overlayType = (t) => TYPE.get(t) || null;
@@ -63,8 +68,20 @@ export const typesFor = (capability) => OVERLAY_TYPES.filter((t) => t.capabiliti
 export const LIMITS = Object.freeze({
     overlays: 20, name: 80, template: 300, variations: 10, durationMs: [2000, 30000], volume: [0, 100], fontSize: [16, 120],
     margin: [0, 400], width: [160, 1920], chatMessages: [1, 50], chatFade: [0, 600], events: [1, 20], goalTarget: [1, 1e9], gapMs: [0, 5000],
-    ttsMin: [0, 1e6], ttsChars: 200,
+    ttsMin: [0, 1e6], ttsChars: 200, mediaScale: [10, 200], textDelayMs: [0, 5000],
 });
+
+/** Scene screens (type `scene`): a title style, effect ranges, and the most glows. Positions are % of the artwork. */
+export const TITLE_STYLES = Object.freeze(['plain', 'glow', 'shimmer']);
+export const TITLE_STYLE_LABEL = Object.freeze({ plain: 'Plain, with a shadow', glow: 'Glowing', shimmer: 'Glowing, with a moving shine' });
+export const GLOW_STYLES = Object.freeze(['pulse', 'flicker', 'lantern']);
+export const GLOW_STYLE_LABEL = Object.freeze({ pulse: 'Slow pulse', flicker: 'Pulse and flicker (eyes)', lantern: 'Fast flicker (flame)' });
+export const SCENE_LIMITS = Object.freeze({
+    title: 80, subtitle: 160, socials: 200, glows: 6, titleSize: [24, 200], subtitleSize: [12, 80], pct: [0, 100], size: [0.5, 30],
+    kenBurnsScale: [100, 130], kenBurnsSec: [5, 120], marqueeSec: [4, 120], minutes: [1, 180], embers: [0, 150], effect: [0, 100], grain: [0, 30],
+});
+export const NOWPLAYING_BACKGROUNDS = Object.freeze(['panel', 'cover']);
+export const NOWPLAYING_BACKGROUND_LABEL = Object.freeze({ panel: 'Dark panel', cover: 'The song\'s cover art, blurred, under a dark wash' });
 
 // ── alerts ─────────────────────────────────────────────────────────────────────────────────
 
@@ -83,8 +100,17 @@ export const ALERT_KINDS = Object.freeze({
     kick_follow: f('Follow (Kick)', { platform: 'kick', amountLabel: null, message: '{user.name} followed', detail: '' }),
     kick_sub: f('Subscription (Kick)', { platform: 'kick', amountLabel: 'Months at least', message: '{user.name} subscribed', detail: '' }),
     kick_gift: f('Gift subs (Kick)', { platform: 'kick', amountLabel: 'Gifts at least', message: '{user.name} gifted {count} subs', detail: '' }),
+    // YouTube (design §13.10). The editor lists them only when YouTube is set up on the server (youtube/config.js).
+    yt_superchat: f('Super Chat or Super Sticker (YouTube)', { platform: 'youtube', amountLabel: 'Amount at least', message: '{user.name} sent {amount} {currency}', detail: '', showMessage: true, ttsCapable: true }),
+    yt_member: f('New member (YouTube)', { platform: 'youtube', amountLabel: null, message: '{user.name} became a member', detail: '{tier}' }),
+    yt_milestone: f('Member milestone (YouTube)', { platform: 'youtube', amountLabel: 'Months at least', message: '{user.name} has been a member for {months} months', detail: '', showMessage: true }),
+    yt_gift: f('Gift memberships (YouTube)', { platform: 'youtube', amountLabel: 'Gifts at least', message: '{user.name} gifted {count} memberships', detail: '' }),
 });
 export const ALERT_KEYS = Object.freeze(Object.keys(ALERT_KINDS));
+/** Alert kinds the editor offers: the YouTube ones only when YouTube is set up (youtubeBotConfig().enabled). */
+export const alertKeysFor = ({ youtube = false } = {}) => ALERT_KEYS.filter((k) => youtube || ALERT_KINDS[k].platform !== 'youtube');
+/** Platforms a Chat overlay can show. */
+export const CHAT_PLATFORMS = Object.freeze(['twitch', 'kick', 'youtube']);
 
 /** The alert an event shows (null: none). Test events from the automation editor are not alerts. */
 export function alertKeyFor(ev, general = {}) {
@@ -98,12 +124,20 @@ export function alertKeyFor(ev, general = {}) {
             if (p !== 'twitch') return null;
             return m.isGift && !general.showGiftedSubs ? null : 'sub';
         case 'resub': return p === 'twitch' ? 'resub' : p === 'kick' ? 'kick_sub' : null;
-        case 'gift_sub': return p === 'twitch' ? 'gift_sub' : p === 'kick' ? 'kick_gift' : null;
+        case 'gift_sub': return p === 'twitch' ? 'gift_sub' : p === 'kick' ? 'kick_gift' : p === 'youtube' ? 'yt_gift' : null;
         case 'cheer': return p === 'twitch' ? 'cheer' : null;
         case 'raid': return p === 'twitch' ? 'raid' : null;
         case 'redemption': return p === 'twitch' ? 'redemption' : null;
         case 'bits.used': return p === 'twitch' && m.kind === 'power_up' ? 'powerup' : null;
-        case 'tip': return TIP_SOURCES.includes(p) ? 'tip' : null;
+        case 'tip':
+            // YouTube Super Chats and Super Stickers have their own alert (§13.10); Jewels stay a tip alert, like the other tip services.
+            if (p === 'youtube') return m.kind === 'super_chat' || m.kind === 'super_sticker' ? 'yt_superchat' : 'tip';
+            return TIP_SOURCES.includes(p) ? 'tip' : null;
+        case 'membership':
+            if (p !== 'youtube') return null;
+            if (m.kind === 'milestone') return 'yt_milestone';
+            if (m.kind === 'gift') return general.showGiftedSubs ? 'yt_member' : null;   // a gift shows once, as Gift memberships
+            return 'yt_member';
         case 'hype_train.begin': case 'hype_train.end': return p === 'twitch' ? 'hype_train' : null;
         default: return null;
     }
@@ -124,6 +158,9 @@ export function alertAmount(key, ev) {
         case 'sub': return tierNumber(m.tier);
         case 'resub': return num(m.months) ?? num(ev.amount) ?? 0;
         case 'kick_sub': return num(m.months) ?? num(ev.amount) ?? 1;
+        case 'yt_milestone': return num(m.months) ?? num(ev.amount) ?? 1;
+        case 'yt_gift': return num(m.count) ?? num(ev.amount) ?? 1;
+        case 'yt_member': return 0;
         case 'hype_train': return num(m.level) ?? num(ev.amount) ?? 1;
         case 'follow': case 'kick_follow': return 0;
         default: return num(ev?.amount) ?? 0;
@@ -146,6 +183,7 @@ export function pickVariation(alert, amount) {
 /** The event a Test button shows (invented viewers, like the stream bot's own samples). */
 export function sampleFor(key, amount = null) {
     const fan = { id: '100000001', login: 'maplefan_88', name: 'MapleFan_88', roles: ['subscriber'] };
+    const yt = { id: 'UCmApLeFaN0000000000000a', login: 'maplefan_88', name: 'MapleFan_88', roles: ['subscriber'] };
     const base = { channelId: null, user: fan, amount: null, currency: null, message: null, metadata: {}, occurredAt: new Date(), dedupeKey: null, raw: null };
     const ev = (platform, type, o = {}) => ({ ...base, platform, type, ...o, metadata: { ...(o.metadata || {}) } });
     const a = (d) => (amount == null ? d : amount);
@@ -163,6 +201,10 @@ export function sampleFor(key, amount = null) {
         case 'kick_follow': return ev('kick', 'follow', { user: { id: '200000001', login: 'pipsqueak', name: 'Pipsqueak', roles: [] } });
         case 'kick_sub': return ev('kick', 'sub', { user: { id: '200000001', login: 'pipsqueak', name: 'Pipsqueak', roles: ['subscriber'] }, metadata: { months: a(1) } });
         case 'kick_gift': return ev('kick', 'gift_sub', { user: { id: '200000001', login: 'pipsqueak', name: 'Pipsqueak', roles: [] }, amount: a(3), currency: 'subs', metadata: { count: a(3) } });
+        case 'yt_superchat': return ev('youtube', 'tip', { user: yt, amount: a(5), currency: 'USD', message: 'Coffee is on me', metadata: { kind: 'super_chat', display: '$5.00' } });
+        case 'yt_member': return ev('youtube', 'membership', { user: yt, metadata: { kind: 'new', tier: 'Lantern Club', months: 1, isGift: false } });
+        case 'yt_milestone': return ev('youtube', 'membership', { user: yt, amount: a(6), currency: 'months', message: 'Half a year already', metadata: { kind: 'milestone', tier: 'Lantern Club', months: a(6), isGift: false } });
+        case 'yt_gift': return ev('youtube', 'gift_sub', { user: yt, amount: a(5), currency: 'subs', metadata: { count: a(5), tier: 'Lantern Club' } });
         default: return null;
     }
 }
@@ -173,7 +215,7 @@ function defaultAlert(key) {
     const k = ALERT_KINDS[key];
     return {
         enabled: true, layout: 'stacked', animation: 'rise', message: k.message, detail: k.detail || '', showMessage: !!k.showMessage,
-        media: '', sound: '', volume: 70, durationMs: 6000, tts: false, ttsMin: 0, variations: [],
+        media: '', sound: '', volume: 70, durationMs: 6000, tts: false, ttsMin: 0, mediaScale: 100, textDelayMs: 0, variations: [],
     };
 }
 
@@ -189,14 +231,26 @@ const DEFAULTS = {
         alerts: Object.fromEntries(ALERT_KEYS.map((k) => [k, defaultAlert(k)])),
     }),
     chat: () => ({ ...COMMON, width: 460, font: 'system', fontSize: 22, textColor: '#ffffff', plate: 'soft', maxMessages: 12, fadeAfterSec: 0,
-        showBadges: true, showPlatform: true, hideCommands: false, hideUsers: '', platforms: ['twitch', 'kick'] }),
+        showBadges: true, showPlatform: true, hideCommands: false, hideUsers: '', platforms: ['twitch', 'kick', 'youtube'] }),
     events: () => ({ ...COMMON, position: 'top-right', width: 440, font: 'system', fontSize: 20, textColor: '#ffffff', accentColor: '#b4e04f', plate: 'soft', max: 5,
         types: ['follow', 'sub', 'resub', 'gift_sub', 'cheer', 'raid', 'tip'] }),
     goal: () => ({ ...COMMON, position: 'bottom', width: 720, font: 'system', fontSize: 22, textColor: '#ffffff', barColor: '#b4e04f', plate: 'soft',
         title: 'Follower goal', metric: 'followers', target: 100, showNumbers: true }),
     counter: () => ({ ...COMMON, position: 'top-left', font: 'system', fontSize: 40, textColor: '#ffffff', accentColor: '#b4e04f', plate: 'none', key: 'deaths', label: 'Deaths' }),
-    nowplaying: () => ({ ...COMMON, showArt: true, showRequester: true }),
+    nowplaying: () => ({ ...COMMON, showArt: true, showRequester: true, width: 440, titleSize: 16, barColor: '#2fbf71', background: 'panel', showTimes: false }),
     canvas: () => ({ font: 'system', textColor: '#ffffff', fontSize: 56, plate: 'none' }),
+    scene: () => ({
+        font: 'georgia', title: 'Starting soon', subtitle: '', subtitleMode: 'marquee', marqueeSec: 18,
+        titleSize: 110, subtitleSize: 28, titleColor: '#ffffff', titleStyle: 'glow', glowColor: '#b4e04f', subtitleColor: '#f4f4f5', titleY: 70, subtitleY: 79,
+        background: '', kenBurns: true, kenBurnsScale: 106, kenBurnsSec: 38, dim: 0,
+        inset: { media: '', x: 70, y: 40, w: 10, h: 15 },
+        window: { enabled: false, x: 60, y: 40, w: 20, h: 25, feather: 0.4 },
+        glows: [],
+        smoke: { enabled: false, x: 50, y: 50, intensity: 100 },
+        embers: 0, emberArea: 'all', rain: 0, lightning: false, fog: 0, vignette: 40, grain: 0,
+        countdown: { enabled: false, minutes: 5, label: 'Starting in', endText: 'Starting now', y: 88 },
+        socials: '', socialsY: 94,
+    }),
 };
 export const defaultConfig = (type) => (DEFAULTS[type] ? DEFAULTS[type]() : {});
 
@@ -240,6 +294,8 @@ function cleanAlert(raw, key, ids, errors) {
         durationMs: clampInt(r.durationMs, LIMITS.durationMs, d.durationMs),
         tts: ALERT_KINDS[key].ttsCapable ? bool(r.tts, false) : false,
         ttsMin: ALERT_KINDS[key].ttsCapable ? Math.min(LIMITS.ttsMin[1], Math.max(0, Number(r.ttsMin) || 0)) : 0,
+        mediaScale: clampInt(r.mediaScale, LIMITS.mediaScale, d.mediaScale),
+        textDelayMs: clampInt(r.textDelayMs, LIMITS.textDelayMs, d.textDelayMs),
         variations: [],
     };
     const vars = Array.isArray(r.variations) ? r.variations : [];
@@ -276,6 +332,68 @@ const textStyle = (r, d) => ({
     plate: pick(r.plate, PLATES, d.plate),
 });
 
+const num1 = (v, [lo, hi], d) => { const n = Number(v); return v === '' || v == null || !Number.isFinite(n) ? d : Math.min(hi, Math.max(lo, Math.round(n * 10) / 10)); };
+const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+/** A list sent as an array, or as an object with numbered keys (the settings form's "glows.0.x" fields). */
+const listOf = (v) => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.keys(v).filter((k) => /^\d{1,2}$/.test(k)).sort((a, b) => a - b).map((k) => v[k]) : []);
+
+/** Scene screen settings: positions are % of the artwork, so they stay put whatever its size. */
+function cleanScene(r, d, ids, errors) {
+    const L = SCENE_LIMITS;
+    const pct = (v, dv) => num1(v, L.pct, dv);
+    const mediaId = (v, what) => {
+        const s = String(v ?? '');
+        if (!s) return '';
+        if (!MEDIA_ID.test(s) || (ids.mediaIds && !ids.mediaIds.has(s))) { errors?.push(`Scene screen: the ${what} is no longer in your media.`); return ''; }
+        return s;
+    };
+    const ins = obj(r.inset); const di = d.inset;
+    const win = obj(r.window); const dw = d.window;
+    const sm = obj(r.smoke); const ds = d.smoke;
+    const cd = obj(r.countdown); const dc = d.countdown;
+    const glows = [];
+    for (const g of listOf(r.glows)) {
+        if (!g || typeof g !== 'object' || g.on === false || g.on === 'false') continue;
+        if (glows.length >= L.glows) { errors?.push(`Scene screen: at most ${L.glows} glows.`); break; }
+        glows.push({ x: pct(g.x, 50), y: pct(g.y, 50), size: num1(g.size, L.size, 4), color: color(g.color, '#ffb256'), style: pick(g.style, GLOW_STYLES, 'pulse') });
+    }
+    return {
+        font: pick(r.font, Object.keys(FONTS), d.font),
+        title: text(r.title, L.title, d.title).trim(),
+        subtitle: text(r.subtitle, L.subtitle, d.subtitle).trim(),
+        subtitleMode: pick(r.subtitleMode, ['marquee', 'still'], d.subtitleMode),
+        marqueeSec: clampInt(r.marqueeSec, L.marqueeSec, d.marqueeSec),
+        titleSize: clampInt(r.titleSize, L.titleSize, d.titleSize),
+        subtitleSize: clampInt(r.subtitleSize, L.subtitleSize, d.subtitleSize),
+        titleColor: color(r.titleColor, d.titleColor),
+        titleStyle: pick(r.titleStyle, TITLE_STYLES, d.titleStyle),
+        glowColor: color(r.glowColor, d.glowColor),
+        subtitleColor: color(r.subtitleColor, d.subtitleColor),
+        titleY: pct(r.titleY, d.titleY),
+        subtitleY: pct(r.subtitleY, d.subtitleY),
+        background: mediaId(r.background, 'background'),
+        kenBurns: bool(r.kenBurns, d.kenBurns),
+        kenBurnsScale: clampInt(r.kenBurnsScale, L.kenBurnsScale, d.kenBurnsScale),
+        kenBurnsSec: clampInt(r.kenBurnsSec, L.kenBurnsSec, d.kenBurnsSec),
+        dim: clampInt(r.dim, [0, 90], d.dim),
+        inset: { media: mediaId(ins.media, 'picture in the frame'), x: pct(ins.x, di.x), y: pct(ins.y, di.y), w: pct(ins.w, di.w), h: pct(ins.h, di.h) },
+        window: { enabled: bool(win.enabled, dw.enabled), x: pct(win.x, dw.x), y: pct(win.y, dw.y), w: pct(win.w, dw.w), h: pct(win.h, dw.h), feather: num1(win.feather, [0, 10], dw.feather) },
+        glows,
+        smoke: { enabled: bool(sm.enabled, ds.enabled), x: pct(sm.x, ds.x), y: pct(sm.y, ds.y), intensity: clampInt(sm.intensity, [10, 300], ds.intensity) },
+        embers: clampInt(r.embers, L.embers, d.embers),
+        emberArea: pick(r.emberArea, ['all', 'centre'], d.emberArea),
+        rain: clampInt(r.rain, L.effect, d.rain),
+        lightning: bool(r.lightning, d.lightning),
+        fog: clampInt(r.fog, L.effect, d.fog),
+        vignette: clampInt(r.vignette, L.effect, d.vignette),
+        grain: clampInt(r.grain, L.grain, d.grain),
+        countdown: { enabled: bool(cd.enabled, dc.enabled), minutes: clampInt(cd.minutes, L.minutes, dc.minutes), label: text(cd.label, 40, dc.label).trim(),
+            endText: text(cd.endText, 60, dc.endText).trim(), y: pct(cd.y, dc.y) },
+        socials: text(r.socials, L.socials, d.socials).trim(),
+        socialsY: pct(r.socialsY, d.socialsY),
+    };
+}
+
 /**
  * Stored or submitted settings → complete settings. `errors` (an array) collects plain-words problems for a save;
  * `ids` ({ mediaIds, soundIds } Sets) check that chosen media and sounds still exist (skipped when not given).
@@ -303,15 +421,15 @@ export function withDefaults(type, raw, ids = {}, errors = null) {
             };
         }
         case 'chat': {
-            const platforms = Array.isArray(r.platforms) ? ['twitch', 'kick'].filter((p) => r.platforms.includes(p)) : d.platforms;
-            if (Array.isArray(r.platforms) && !platforms.length) errors?.push('Chat: show at least one of Twitch or Kick.');
+            const platforms = Array.isArray(r.platforms) ? CHAT_PLATFORMS.filter((p) => r.platforms.includes(p)) : d.platforms;
+            if (Array.isArray(r.platforms) && !platforms.length) errors?.push('Chat: show at least one platform.');
             return {
                 ...cleanBox(r, d), ...textStyle(r, d),
                 width: clampInt(r.width, LIMITS.width, d.width),
                 maxMessages: clampInt(r.maxMessages, LIMITS.chatMessages, d.maxMessages),
                 fadeAfterSec: clampInt(r.fadeAfterSec, LIMITS.chatFade, d.fadeAfterSec),
                 showBadges: bool(r.showBadges, d.showBadges), showPlatform: bool(r.showPlatform, d.showPlatform), hideCommands: bool(r.hideCommands, d.hideCommands),
-                hideUsers: text(r.hideUsers, 500).split(/[\s,]+/).map((x) => x.replace(/^@/, '').toLowerCase()).filter((x) => /^[a-z0-9_]{1,40}$/.test(x)).slice(0, 30).join(', '),
+                hideUsers: text(r.hideUsers, 500).split(/[\s,]+/).map((x) => x.replace(/^@/, '').toLowerCase()).filter((x) => /^[a-z0-9_.-]{1,40}$/.test(x)).slice(0, 30).join(', '),   // YouTube handles allow . and -
                 platforms: platforms.length ? platforms : d.platforms,
             };
         }
@@ -336,9 +454,13 @@ export function withDefaults(type, raw, ids = {}, errors = null) {
                 label: text(r.label, 60, d.label).trim() };
         }
         case 'nowplaying':
-            return { ...cleanBox(r, d), showArt: bool(r.showArt, d.showArt), showRequester: bool(r.showRequester, d.showRequester) };
+            return { ...cleanBox(r, d), showArt: bool(r.showArt, d.showArt), showRequester: bool(r.showRequester, d.showRequester),
+                width: clampInt(r.width, [240, 1920], d.width), titleSize: clampInt(r.titleSize, [12, 48], d.titleSize), barColor: color(r.barColor, d.barColor),
+                background: pick(r.background, NOWPLAYING_BACKGROUNDS, d.background), showTimes: bool(r.showTimes, d.showTimes) };
         case 'canvas':
             return { ...textStyle(r, d) };
+        case 'scene':
+            return cleanScene(r, d, ids, errors);
         default:
             return {};
     }
@@ -373,6 +495,7 @@ export function goalIncrement(metric, ev) {
 }
 
 export default {
-    OVERLAY_TYPES, ALERT_KINDS, ALERT_KEYS, POSITIONS, FONTS, LAYOUTS, ANIMATIONS, PLATES, GOAL_METRICS, EVENT_LIST_TYPES, LIMITS,
+    OVERLAY_TYPES, ALERT_KINDS, ALERT_KEYS, alertKeysFor, CHAT_PLATFORMS, POSITIONS, FONTS, LAYOUTS, ANIMATIONS, PLATES, GOAL_METRICS, EVENT_LIST_TYPES, LIMITS,
+    TITLE_STYLES, GLOW_STYLES, SCENE_LIMITS, NOWPLAYING_BACKGROUNDS,
     overlayType, isOverlayType, typesFor, alertKeyFor, alertAmount, pickVariation, sampleFor, defaultConfig, withDefaults, validateConfig, goalIncrement, tierNumber,
 };

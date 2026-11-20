@@ -99,6 +99,28 @@ export default class AchievementManager {
   }
 
   /**
+   * Like trackAchievement, for a count the feature already keeps (Pokémon caught, animal pictures seen, Last.fm
+   * scrobbles): progress is raised to `total`, never added to, so the same total twice changes nothing (H-817).
+   */
+  async recordTotal(userId, guildId, achievementKey, total, eventData = {}) {
+    const achievement = this.achievementCache.get(achievementKey);
+    const n = Math.floor(Number(total));
+    if (!achievement || !(n > 0)) return null;
+    try {
+      const [[row]] = await pool.execute(
+        'SELECT progress FROM user_achievements WHERE user_id = ? AND guild_id = ? AND achievement_id = ?',
+        [userId, guildId, achievement.id]
+      );
+      const delta = n - (Number(row?.progress) || 0);
+      if (delta <= 0) return null;
+      return await this.trackAchievement(userId, guildId, achievementKey, delta, eventData);
+    } catch (error) {
+      logger.error('[Achievement Manager] Error recording a total', { error: error.message, userId, achievementKey });
+      return null;
+    }
+  }
+
+  /**
    * Check if achievement requirements are met
    * @param {Object} achievement - Achievement object
    * @param {number} progress - Current progress
@@ -419,9 +441,11 @@ export default class AchievementManager {
 
       const totalAchievements = countResult[0].count;
 
-      // Check completionist achievement (50 achievements)
-      if (totalAchievements >= 50) {
-        await this.trackAchievement(userId, guildId, 'completionist', 50, { completed: true });
+      // Completionist: its own requirement_value (migration 468: 10; it said 50 of 26 achievements, H-808)
+      const completionist = this.achievementCache.get('completionist');
+      const need = Number(completionist?.requirement_value) || 50;
+      if (completionist && totalAchievements >= need) {
+        await this.trackAchievement(userId, guildId, 'completionist', need, { completed: true });
       }
     } catch (error) {
       logger.error('[Achievement Manager] Error checking meta-achievements', {

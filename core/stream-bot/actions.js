@@ -22,7 +22,7 @@ const f = (name, kind, label, extra = {}) => ({ name, kind, label, ...extra });
 
 export const ACTION_TYPES = [   // not frozen: registerActionType() adds feature actions (core/stream-bot/music)
     { type: 'chat.send', label: 'Send a chat message', target: 'server', group: 'Chat',
-        fields: [f('platform', 'select', 'Where', { options: ['event', 'twitch', 'kick', 'all'], default: 'event' }), f('text', 'template', 'Message')], templates: ['text'] },
+        fields: [f('platform', 'select', 'Where', { options: ['event', 'twitch', 'kick', 'youtube', 'all'], default: 'event' }), f('text', 'template', 'Message')], templates: ['text'] },
     { type: 'discord.post', label: 'Post in Discord', target: 'server', group: 'Discord',
         fields: [f('guildId', 'guild', 'Server'), f('channelId', 'channel', 'Channel'), f('text', 'template', 'Message')], templates: ['text'] },
     { type: 'delay', label: 'Wait', target: 'server', group: 'Flow', fields: [f('seconds', 'number', 'Seconds', { min: 0.1, max: LIMITS.delayMax })] },
@@ -66,7 +66,7 @@ export const ACTION_TYPES = [   // not frozen: registerActionType() adds feature
     { type: 'stream.shoutout', label: 'Shout out a channel', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch', 'kick'],
         fields: [f('platform', 'select', 'Where', { options: ['event', 'twitch', 'kick', 'all'], default: 'event' }), f('target', 'template', 'Channel, such as {arg1}')], templates: ['target'] },
     { type: 'chat.clear', label: 'Clear chat', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch'], fields: [] },
-    { type: 'chat.delete', label: 'Delete the message that triggered this', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch', 'kick'], fields: [] },
+    { type: 'chat.delete', label: 'Delete the message that triggered this', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch', 'kick', 'youtube'], fields: [] },
 
     { type: 'obs.scene', label: 'OBS: switch scene', target: 'studio', capability: 'obs', group: 'OBS', phase: 2,
         fields: [f('scene', 'text', 'Scene name', { suggest: 'scenes' })], templates: ['scene'] },
@@ -107,7 +107,8 @@ export const ACTION_TYPES = [   // not frozen: registerActionType() adds feature
     { type: 'studio.hotkey', label: 'Press a hotkey', target: 'studio', capability: 'hotkey', group: 'Studio', phase: 2,
         fields: [f('keys', 'text', 'Keys, e.g. Ctrl+Shift+F1')] },
     { type: 'light.set', label: 'Set a light', target: 'studio', capability: 'light', group: 'Lights', phase: 5,
-        fields: [f('device', 'text', 'Light (empty: all)', { optional: true }), f('color', 'color', 'Colour', { default: '#9146ff' }), f('brightness', 'number', 'Brightness (0-100)', { min: 0, max: 100, default: 100 }), f('durationMs', 'number', 'For (ms, 0 = stay)', { min: 0, max: 600000, default: 0 })] },
+        // Phase 5: the device field is the light picker (Studio's lights and cloud lights; core/stream-bot/devices). More light actions register there.
+        fields: [f('device', 'light', 'Light', { optional: true }), f('color', 'color', 'Colour', { default: '#9146ff' }), f('brightness', 'number', 'Brightness (0-100)', { min: 0, max: 100, default: 100 }), f('durationMs', 'number', 'For (ms, 0 = stay)', { min: 0, max: 600000, default: 0 })] },
     { type: 'overlay.alert', label: 'Show an overlay alert', target: 'overlay', capability: 'alert', group: 'Overlay', phase: 3,
         fields: [f('title', 'template', 'Title'), f('message', 'template', 'Message', { optional: true }), f('durationMs', 'number', 'Show for (ms)', { min: 1000, max: 60000, default: 6000 }), f('style', 'text', 'Style', { optional: true, default: 'default' })], templates: ['title', 'message'] },
 ];
@@ -179,7 +180,7 @@ export function validateActions(list, ctx = {}, depth = 0) {
         const err = (m) => errors.push(`${def.label}: ${m}`);
         switch (s.type) {
             case 'chat.send':
-                out.platform = ['event', 'twitch', 'kick', 'all'].includes(s.platform) ? s.platform : 'event';
+                out.platform = ['event', 'twitch', 'kick', 'youtube', 'all'].includes(s.platform) ? s.platform : 'event';
                 out.text = txt(s.text, LIMITS.template).trim();
                 if (!out.text) err('enter the message.');
                 break;
@@ -390,7 +391,8 @@ export function validateActions(list, ctx = {}, depth = 0) {
                 if (!/^[A-Za-z0-9+ _-]{1,60}$/.test(out.keys)) err('write the keys like Ctrl+Shift+F1.');
                 break;
             case 'light.set': {
-                out.device = txt(s.device, 100).trim();
+                out.device = txt(s.device, 160).trim();
+                if (out.device === 'all') out.device = '';
                 out.color = COLOR.test(String(s.color || '')) ? String(s.color).toLowerCase() : '#9146ff';
                 const b = num(s.brightness ?? 100);
                 const d = num(s.durationMs ?? 0);

@@ -25,7 +25,7 @@
     <main id="main-content" tabindex="-1" class="cfs-main">
         <div class="cfs-pagehead">
             <h1>Privacy Policy</h1>
-            <p class="cfs-meta">Last updated November 19, 2026</p>
+            <p class="cfs-meta">Last updated November 20, 2026</p>
         </div>
         <div class="cfs-doc">
             <nav class="cfs-toc" aria-label="On this page">
@@ -37,6 +37,7 @@
                     <li><a href="#administrator-access-disclosure">Administrator Access Disclosure</a></li>
                     <li><a href="#information-sharing">4. Information Sharing</a></li>
                     <li><a href="#data-security">5. Data Security</a></li>
+                    <li><a href="#where-data-is-kept">Where Your Data Is Kept</a></li>
                     <li><a href="#data-retention">6. Data Retention</a></li>
                     <li><a href="#your-rights">7. Your Rights</a></li>
                     <li><a href="#children-s-privacy">8. Children's Privacy</a></li>
@@ -118,19 +119,29 @@
                     <li><strong>Your data:</strong> on the website, the <strong>Your data</strong> card in the game&rsquo;s Profile lets you download a copy of your save or delete it, whichever platform you sign in with (see Your Rights below).</li>
                     <li><strong>The old game:</strong> Greenhouse Tycoon replaces CertiFried Tycoon, the earlier game on this site, which is closed. Nothing carries over from it. Its data was deleted from our database on November 19, 2026; one offline backup, kept only in case the change had to be undone, is deleted on February 17, 2027.</li>
                 </ul>
-                <h3 id="stream-bot-data">Stream bot (your own Twitch and Kick channels)</h3>
+                <h3 id="activities">Discord Activities (Watch Together and Greenhouse Tycoon in Discord)</h3>
+                <ul>
+                    <li><strong>Signing in:</strong> the first time you open CertiFried&rsquo;s Activity, Discord asks you to share your basic profile: your user ID, username, display name and avatar. We use it to know who you are in the Activity and who hosts. Discord&rsquo;s access token is handed back to the Activity once and not stored. Discord also tells us which voice channel the Activity runs in and who is connected, which we check and do not keep.</li>
+                    <li><strong>Watch Together:</strong> for each session we keep the server, the voice channel, the Activity&rsquo;s ID, who hosted, the title playing, the position and the queue, so a film carries on if our server restarts. Who is watching right now, and whether their video is still loading, is held in memory only and shown to the others in the session with your name and avatar.</li>
+                    <li><strong>Video:</strong> films come from the CertiFried film library (a Jellyfin server) and are streamed through our server. Requests from the Activity reach us through Discord&rsquo;s proxy, which does not pass your IP address on. The Activity remembers your volume in its local storage in your Discord app.</li>
+                    <li><strong>Greenhouse Tycoon in Discord</strong> is the same game and the same save as signing in with Discord on the website (see above).</li>
+                    <li>What a server plays is that server&rsquo;s responsibility; servers should only show what they have the right to show.</li>
+                </ul>
+                <h3 id="stream-bot-data">Stream bot (your own Twitch, Kick and YouTube channels)</h3>
                 <p>The stream bot belongs to your CertiFried account, not to a Discord server. If you use it, we keep:</p>
                 <ul>
-                    <li><strong>Profile and channels:</strong> your settings, the Twitch and Kick channels you linked, and the Discord channels you chose for posts.</li>
+                    <li><strong>Profile and channels:</strong> your settings, the Twitch, Kick and YouTube channels you linked, and the Discord channels you chose for posts.</li>
                     <li><strong>Twitch Stream bot grant:</strong> access and refresh tokens and the permissions you approved, encrypted. The grant never asks for the list of channels you follow or for your earnings.</li>
                     <li><strong>Tip services:</strong> which services you connected (StreamElements, Streamlabs, Ko-fi, Buy Me a Coffee, Throne, Fourthwall) and, for StreamElements and Streamlabs, your token, encrypted. We only receive notifications of tips, memberships and orders; CertiFried never processes a payment and never sees payment details.</li>
                     <li><strong>Event log:</strong> follows, subs, cheers, raids, channel point redemptions, polls, tips, OBS events and voice command phrases, each with the viewer&rsquo;s platform ID, login and display name where there is one, the amount and the message, and the notification as the platform sent it (up to 16 KB). Chat messages are only kept if you turn on <strong>Keep chat in the event log</strong>; otherwise chat runs your automations and is not stored.</li>
                     <li><strong>Your setup:</strong> automations, timers, counters and stored values, sounds you upload, overlay settings and the images and videos you upload for alerts, and the reports of Firebot or Streamer.bot imports (passwords and tokens are removed before anything is stored).</li>
                     <li><strong>Run history</strong> (what each automation did) and the actions sent to CertiFried Studio and overlays, with their results.</li>
+                    <li><strong>Viewer records</strong> (the Viewers tab): for each viewer of your channels, their platform ID, login and display name, first and last seen, watch time, chat message count, points, rank, the follows, subs, gift subs, Bits, raids and tips that came from them (counts and amounts as notified; CertiFried never handles money), and a history of point changes. Watch time is counted every 5 minutes while you are live: on Twitch from the list of people in your chat (the Stream bot grant&rsquo;s chatters permission), on Kick, which offers no such list, from who chatted in the last 10 minutes.</li>
+                    <li id="youtube-api"><strong>YouTube (when you link it):</strong> your Google sign-in for the channel (access and refresh tokens and the one permission asked for, to manage your YouTube chat), encrypted; the current broadcast and where the chat reader got to, so a restart carries on; and how many YouTube API units your channel used each day (kept 30 days). CertiFried uses YouTube API Services to find your live broadcast and read and act in its chat: linking YouTube means you agree to the <a href="https://www.youtube.com/t/terms" rel="noopener">YouTube Terms of Service</a>, and Google&rsquo;s handling of your data is covered by the <a href="https://policies.google.com/privacy" rel="noopener">Google Privacy Policy</a>. You can remove CertiFried&rsquo;s access at any time on <a href="https://security.google.com/settings/security/permissions" rel="noopener">Google&rsquo;s security settings page</a>; unlinking the channel on Connections also revokes it, and <code>/privacy delete</code> deletes our copy.</li>
                     <li><strong>Paired devices:</strong> each device&rsquo;s name, app version, what it can do, when it was last seen, and a SHA-256 hash of its token (never the token itself).</li>
                 </ul>
                 <h3 id="viewer-data">Viewers in a streamer&rsquo;s channel</h3>
-                <p>If you chat, follow, cheer, tip or request songs in the channel of a streamer who uses the stream bot, that streamer&rsquo;s stream bot records the event with your platform ID, login and display name, and what you typed for a song request. The streamer can see it. You can export or delete it with <code>/privacy</code> if your Twitch or Kick account is linked to CertiFried; otherwise email us (see Contact below).</p>
+                <p>If you chat, follow, cheer, tip or request songs in the channel of a streamer who uses the stream bot, that streamer&rsquo;s stream bot records the event with your platform ID, login and display name, and what you typed for a song request. It also keeps a viewer record for you in that channel: when you were first and last seen, how long you watched, how many chat messages you sent, your points and rank, and how many follows, subs, gift subs, Bits, raids and tips came from you. On YouTube that includes your Super Chats, Super Stickers, Jewels gifts and memberships, as YouTube notified them (CertiFried never handles money). The streamer can see it. Someone else&rsquo;s event can also name you: a chat reply to you or an @mention (where the streamer keeps chat), a gift sub you received, or a raid into your channel. Exports include those, and deleting your data removes your name and ID from them while the other person&rsquo;s event stays. You can export or delete it with <code>/privacy</code> if your Twitch, Kick or YouTube account is linked to CertiFried, or without an account on <a href="/privacy/viewer">Your viewer data</a>; otherwise email us (see Contact below).</p>
                 <h3 id="song-requests">Song requests</h3>
                 <ul>
                     <li>A request stores who asked (platform ID, login and display name), what they typed, the song found and what happened to it. A viewer&rsquo;s <code>!like</code> is stored too.</li>
@@ -174,8 +185,9 @@
                 <p>Some game information is visible to other players by design: Greenhouse Tycoon leaderboards and season results show the name you play under, your level, your Replant count and your season score, and a server's admins can see on the dashboard which of their members play with Discord.</p>
                 <p>We integrate with third-party APIs (Discord, Twitch, Kick, YouTube, TikTok, Rumble, Bluesky, X through FxTwitter, SoundCloud, Spotify, Steam, Buy Me a Coffee, Throne, Fourthwall and Ko-fi) to provide features. Weather commands send the place or ZIP code you give to Open-Meteo, Zippopotam.us and the US National Weather Service. Lookup and fun commands (dictionary, game prices, movies, GIFs and the like) send only what you type to the service that answers them. These services have their own privacy policies.</p>
                 <p>AI features (AI chat replies, the D&amp;D Dungeon Master, generated card covers and schedule images) send the text you give them to Google&rsquo;s Gemini API. Generated images go to Hugging Face&rsquo;s image service instead when Gemini cannot make them. Some AI replies run on language models on our own servers first, and voice transcription runs only on our own servers: that audio is never sent to a third party or stored (the transcript text is kept as described under Data Retention).</p>
-                <p>For the stream bot, we call Twitch and Kick on your behalf with the permissions you gave (reading your channel&rsquo;s events, sending chat, changing your title or category, making clips and the like), and connect to StreamElements or Streamlabs with your token to receive tip notifications. Song lookups send what was typed to Spotify (catalogue search only), YouTube and SoundCloud, as described above. Twitch, Kick, OBS, Spotify, YouTube, SoundCloud and the tip services each have their own privacy policies.</p>
+                <p>For the stream bot, we call Twitch, Kick and YouTube on your behalf with the permissions you gave (reading your channel&rsquo;s events, sending chat, changing your title or category, making clips and the like), and connect to StreamElements or Streamlabs with your token to receive tip notifications. Song lookups send what was typed to Spotify (catalogue search only), YouTube and SoundCloud, as described above. Twitch, Kick, OBS, Spotify, YouTube, SoundCloud and the tip services each have their own privacy policies.</p>
                 <p>Our website and its connections (including CertiFried Studio&rsquo;s) are served through Cloudflare, which processes visitors&rsquo; IP addresses and request details to deliver and protect the site.</p>
+                <p>CertiFried&rsquo;s Discord Activities run inside Discord, which delivers them through its own Activity proxy (discordsays.com); Discord&rsquo;s privacy policy covers that.</p>
                 <p>We may disclose information if required by law.</p>
             </div>
 
@@ -191,6 +203,11 @@
                     <li><strong>Rate Limiting:</strong> Protection against abuse on all API endpoints</li>
                     <li><strong>Regular Updates:</strong> Security patches applied promptly</li>
                 </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="where-data-is-kept">Where Your Data Is Kept</h2>
+                <p>CertiFried&rsquo;s servers and database are hosted in the United Kingdom. Our website and its connections are delivered through Cloudflare&rsquo;s global network (a content delivery network), so a request may pass through a Cloudflare data centre near you before it reaches our servers. The services we connect to for you (Discord, Twitch, Kick, Google Gemini and the others named under Information Sharing) handle data in their own locations under their own policies.</p>
             </div>
 
             <div class="legal-section">
@@ -238,9 +255,14 @@
                         <tr><td>Stream bot pairing codes (stored as hashes; each works for 10 minutes)</td><td>1 day</td></tr>
                         <tr><td>Stream bot stored values (<code>{db:…}</code> and <code>{sdb:…}</code>)</td><td>Deleted after 400 days without being changed</td></tr>
                         <tr><td>Firebot and Streamer.bot import reports</td><td>400 days</td></tr>
+                        <tr><td>Stream bot viewer records (watch time, messages, points, rank and support counts of each viewer)</td><td>400 days after the viewer was last seen, then deleted</td></tr>
+                        <tr><td>Stream bot viewer point history</td><td>400 days</td></tr>
+                        <tr><td>Stream bot YouTube quota use (the YouTube API units each linked YouTube channel used per day)</td><td>30 days</td></tr>
                         <tr><td>Song requests (who asked, what they typed, the song)</td><td>365 days</td></tr>
                         <tr><td>Song likes (<code>!like</code>)</td><td>400 days</td></tr>
-                        <tr><td>Stream bot profile, linked channels, grant, automations, timers, uploaded sounds and media, overlays, playlists, banned songs and paired devices</td><td>Until you delete them or use <code>/privacy delete</code>. A revoked device stays listed as revoked</td></tr>
+                        <tr><td>Stream bot profile, linked channels, Twitch grant, YouTube sign-in and live state, automations, timers, uploaded sounds and media, overlays, playlists, banned songs and paired devices</td><td>Until you delete them or use <code>/privacy delete</code>. Remove on the Devices page deletes a device at once</td></tr>
+                        <tr><td>Revoked stream bot devices (CertiFried Studio, overlay tokens and OBS dock keys you revoked)</td><td>30 days after they were revoked, then deleted</td></tr>
+                        <tr><td>Channels a broadcaster&rsquo;s Twitch account followed (read once on October 28, 2026 for two broadcasters; no longer collected)</td><td>Kept while that broadcaster still has a Twitch connection to CertiFried, and deleted once none is left; removed earlier by <code>/privacy delete</code> or on <a href="/privacy/viewer">Your viewer data</a></td></tr>
                         <tr><td>What CertiFried Studio last reported about your OBS (names only)</td><td>Only the latest report is kept, until you delete your stream bot data</td></tr>
                         <tr><td>CertiFried Studio&rsquo;s files on your PC (settings, encrypted secrets, logs)</td><td>On your PC until you delete them; logs rotate at 1 MB, keeping 5 old files. See <a href="/studio/privacy">Studio privacy</a></td></tr>
                         <tr><td>Voice channel recordings started by a server's staff (who started it, where and when, and the audio file)</td><td>365 days</td></tr>
@@ -249,6 +271,7 @@
                         <tr><td>Greenhouse Tycoon daily reward claims and sign-in link history</td><td>180 days</td></tr>
                         <tr><td>Greenhouse Tycoon quest progress</td><td>90 days</td></tr>
                         <tr><td>Greenhouse Tycoon orders</td><td>30 days after the order closes</td></tr>
+                        <tr><td>Watch Together sessions (server, voice channel, host, title and position)</td><td>30 days after the last change</td></tr>
                         <tr><td>Greenhouse Tycoon notifications</td><td>30 days</td></tr>
                         <tr><td>Greenhouse Tycoon season results</td><td>Kept as the season's history; deleted with your save</td></tr>
                         <tr><td>Greenhouse Tycoon market history (no user IDs)</td><td>400 days</td></tr>
@@ -272,17 +295,26 @@
                     <li><code>/privacy delete</code> &mdash; deletes your cached messages, activity and statistics, levels, economy, game progress, preferences and linked accounts in every server (asks you to confirm; cannot be undone). Moderation and safety records, copies of messages a server logged as deleted, tickets and forms you sent to a server, and payment records are kept.</li>
                     <li>For Greenhouse Tycoon, <code>/privacy export</code> and <code>/privacy delete</code> cover the save linked to your Discord account, including the Twitch and Kick sign-ins linked to it.</li>
                     <li>On the Greenhouse Tycoon website, open <strong>Profile</strong> and use the <strong>Your data</strong> card. It works whether you sign in with Discord, Twitch or Kick, so you do not need Discord. <strong>Download my data</strong> saves a JSON file of your save and every sign-in linked to it (up to three times an hour). <strong>Delete my save</strong> deletes the same and signs you out on every device; you type DELETE to confirm, and it cannot be undone. Hybrids you bred first stay in the game&rsquo;s shared list of varieties without your name.</li>
-                    <li>For the stream bot, <code>/privacy export</code> includes your stream bot profile and everything under it (without tokens, hashes or keys) and, as a viewer, events, song requests and likes about you in other streamers&rsquo; channels, found through the Twitch and Kick accounts you linked to CertiFried. <code>/privacy delete</code> deletes your stream bot profile and everything under it, including uploaded sound files; as a viewer it deletes those events and likes and removes your name and what you typed from song requests (the streamer keeps a nameless line). Viewers without a linked account can email us.</li>
-                    <li>To disconnect a device, choose <strong>Revoke</strong> on the stream bot&rsquo;s <a href="/stream/bot/devices">Devices</a> page. To withdraw the Twitch grant, disconnect CertiFried in Twitch&rsquo;s Connections settings.</li>
+                    <li>For the stream bot, <code>/privacy export</code> includes your stream bot profile and everything under it (without tokens, hashes or keys) and, as a viewer, events, song requests and likes about you in other streamers&rsquo; channels, found through the Twitch and Kick accounts you linked to CertiFried. <code>/privacy delete</code> deletes your stream bot profile and everything under it, including uploaded sound files; as a viewer it deletes those events and likes, removes your name and what you typed from song requests (the streamer keeps a nameless line), and removes your name and ID from other people&rsquo;s events and song requests that name you. Viewers without a CertiFried account can do the same on <a href="/privacy/viewer">Your viewer data</a>: sign in there with Twitch (no permissions asked) or Kick (<code>user:read</code> only) to download or delete the stream bot data held about that account in every streamer&rsquo;s channel.</li>
+                    <li>To disconnect a device, choose <strong>Revoke</strong> on the stream bot&rsquo;s <a href="/stream/bot/devices">Devices</a> page (it is deleted 30 days later), or <strong>Remove</strong> to disconnect and delete it at once. To withdraw the Twitch grant, disconnect CertiFried in Twitch&rsquo;s Connections settings.</li>
                     <li><code>/privacy opt-out</code> / <code>/privacy opt-in</code> &mdash; stop or resume message logging (the bot keeps no copies of your messages) and appearing on leaderboards.</li>
                     <li><code>/privacy status</code> &mdash; see your current choices.</li>
                 </ul>
                 <p>Voice transcription and the chat reader have their own switch: <code>/voice privacy opt-out</code>. For anything the commands do not cover, including correcting inaccurate information, contact us through our Discord support server or at <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</p>
+                <h3 id="uk-eu-rights">If you are in the United Kingdom or the European Union</h3>
+                <p>Under the UK GDPR and the EU GDPR you have the right to access your personal data, to have it corrected (rectification), to have it erased, to receive it in a portable format (portability), and to object to how we use it, as well as to restrict its use and to withdraw consent where we rely on consent. To use them:</p>
+                <ul>
+                    <li>Access and portability: <code>/privacy export</code> (a JSON file), the Greenhouse Tycoon <strong>Your data</strong> card, or <a href="/privacy/viewer">Your viewer data</a> for stream bot viewers.</li>
+                    <li>Erasure: <code>/privacy delete</code>, the same Greenhouse card, or <a href="/privacy/viewer">Your viewer data</a>.</li>
+                    <li>Objection and restriction: <code>/privacy opt-out</code> and <code>/voice privacy opt-out</code>, or ask us.</li>
+                    <li>Rectification, or anything else: email <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>. We answer within one month.</li>
+                </ul>
+                <p>You can also complain to your data protection authority (in the UK, the Information Commissioner&rsquo;s Office), though we would like the chance to sort it out first.</p>
             </div>
 
             <div class="legal-section">
                 <h2 id="children-s-privacy">8. Children's Privacy</h2>
-                <p>CertiFried MultiTool is not intended for users under age 13. Discord requires users to be at least 13 years old (older in some countries). Twitch and Kick also require users to be at least 13, or older where local law says so, and expect users under 18 (or the age of majority) to have a parent&rsquo;s or guardian&rsquo;s permission or supervision. If you use the stream bot or CertiFried Studio, you must meet the minimum age of each platform you connect. If we become aware that we have collected data from a child under 13, we will delete it promptly.</p>
+                <p>CertiFried MultiTool is not intended for users under age 13. Discord requires users to be at least 13 years old (older in some countries). Twitch and Kick also require users to be at least 13, or older where local law says so (Twitch: 16 in Australia; Kick: the local age of digital consent), and let users under 18 (or the age of majority) use them only with a parent&rsquo;s or guardian&rsquo;s supervision and agreement. (Checked on November 19, 2026 against Twitch&rsquo;s Terms of Service last modified August 12, 2026 and Kick&rsquo;s Terms of Service modified March 23, 2026.) If you use the stream bot or CertiFried Studio, you must meet the minimum age of each platform you connect. If we become aware that we have collected data from a child under 13, we will delete it promptly.</p>
             </div>
 
             <div class="legal-section">
@@ -294,6 +326,9 @@
                 <h2 id="changelog">Changelog</h2>
                 <ul>
                     <li><strong>November 19, 2026:</strong> Added the stream bot, viewers in a streamer&rsquo;s channel, song requests and CertiFried Studio (what is collected, sharing, security, retention and your rights); named Cloudflare; added Twitch and Kick minimum ages; linked <a href="/legal/data">Data we collect</a>.</li>
+                    <li><strong>November 19, 2026 (Discord Activities):</strong> Added <a href="#activities">Discord Activities</a>: what Watch Together and Greenhouse Tycoon in Discord collect, that Watch Together sessions are kept 30 days, and that Discord&rsquo;s Activity proxy carries the requests.</li>
+                    <li><strong>November 19, 2026 (later the same day):</strong> Said where your data is kept (servers in the United Kingdom, delivered through Cloudflare) and how UK and EU users use their GDPR rights; added <a href="/privacy/viewer">Your viewer data</a> for stream bot viewers without a CertiFried account; revoked stream bot devices are now deleted after 30 days and can be removed at once; listed the historical Twitch follows data and its retention; re-checked the Twitch and Kick minimum ages.</li>
+                    <li><strong>November 20, 2026 (YouTube Live):</strong> Added <a href="#youtube-api">YouTube</a> to the stream bot: the Google sign-in for a linked YouTube channel, its live state and daily API use (30 days), YouTube viewers&rsquo; Super Chats and memberships, the YouTube sign-in on Your viewer data, and the YouTube Terms of Service, the Google Privacy Policy and how to revoke access.</li>
                 </ul>
             </div>
 

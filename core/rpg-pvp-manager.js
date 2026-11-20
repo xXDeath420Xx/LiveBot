@@ -8,6 +8,7 @@ import logger from '../utils/logger.js';
 import { RPGDiceEngine } from './rpg-dice-engine.js';
 import { resolveDuel as autoResolveDuel, resolveAttack } from './rpg-auto-combat.js';
 import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
+import { awardAchievement } from './achievement-hooks.js';
 
 // ELO constants
 const ELO_K_FACTOR = 32; // Standard K-factor
@@ -228,6 +229,9 @@ class RPGPvPManager {
 
         // PvP-win achievements (wins live in dnd_pvp_stats; fire-and-forget)
         RPGLeaderboardManager.trackAchievements(winnerCharacterId);
+        // The server's Duel Winner achievement (H-817)
+        const winnerUserId = winnerCharacterId === match.challenger_id ? match.challenger_user_id : match.defender_user_id;
+        awardAchievement(null, 'duel_winner', { userId: winnerUserId, guildId: match.guild_id });
 
         return {
             match_id: matchId,

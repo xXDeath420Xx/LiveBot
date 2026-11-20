@@ -1,0 +1,668 @@
+<%#
+  Critters: the /owo hunting, collecting and battling game (page key `owo`). Everything loads from
+  /api/guilds/:id/owo (dashboard/routes/api/features/critters.js); the server only renders the channel and
+  role pickers. Needs `guild`, `channels`, `roles`. Rows a script builds use createElement/textContent.
+%>
+<%- include('_game-kit') %>
+<% const crBotTop = (() => { try { const p = guild.members.me.roles.highest.position; return Number.isFinite(p) ? p : null; } catch (e) { return null; } })(); %>
+<div class="page-section" id="crittersPage" data-guild-id="<%= guild.id %>" data-guild-name="<%= guild.name %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-paw"></i>
+                <span>Critters</span>
+            </div>
+            <div class="page-section-subtitle">Members catch critters with <code>/owo hunt</code> or just <code>owoh</code>, build teams and battle. The game pays in acorns, its own currency kept apart from the server economy, and never gives leveling XP.</div>
+        </div>
+        <div class="cr-head-switch">
+            <label class="cr-muted" for="crHeaderEnabled">Game on</label>
+            <input type="checkbox" class="cf-switch" role="switch" id="crHeaderEnabled" disabled>
+        </div>
+    </div>
+
+    <div id="crError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <dl class="cf-kpis" aria-label="Critters at a glance">
+        <div class="cf-kpi"><dt>Hunters</dt><dd class="cf-kpi-value" id="crKpiHunters">-</dd></div>
+        <div class="cf-kpi"><dt>Kinds caught</dt><dd class="cf-kpi-value" id="crKpiKinds">-</dd></div>
+        <div class="cf-kpi"><dt>Total catches</dt><dd class="cf-kpi-value" id="crKpiCatches">-</dd></div>
+        <div class="cf-kpi"><dt>Catches, last 24 hours</dt><dd class="cf-kpi-value" id="crKpi24h">-</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="cr-game-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-game-title">Game</h2>
+                <p class="cf-section-desc">The game is off until you switch it on. Turning it off keeps everyone's critters and acorns.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crEnabled">Game on</label>
+                    <p class="cf-row-desc" id="crEnabled-desc">Saves as soon as you flip it. Off also silences the <code>owo</code> chat prefix and the owo counter. <span class="cf-status-line" id="crEnabledStatus" role="status" aria-live="polite"></span></p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="crEnabled" aria-describedby="crEnabled-desc" disabled></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crAnnounce">Log rare catches</label>
+                    <p class="cf-row-desc" id="crAnnounce-desc">Epic, mythical, legendary and fabled catches go to your log channel (Logging page, Critters rare catch).</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="crAnnounce" aria-describedby="crAnnounce-desc" disabled></div>
+            </div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="crGameStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="crGameSave">Save</button>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-preview-title">In Discord</h2>
+                <p class="cf-section-desc">What a hunt looks like, without gems and with two gems switched on.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview">
+                <div class="gk-preview-grid">
+                    <div class="cf-dc">
+                        <%- include('_gk-author', { gkUsed: '/owo hunt' }) %>
+                        <div class="cf-dc-text"><strong>Alex</strong> pokes around the undergrowth and spots a rare critter: 🦊 <strong>Ember Fox</strong></div>
+                        <div class="cf-dc-text">+🌰 25 acorns · first Ember Fox you have ever caught</div>
+                        <div class="cf-dc-text">Your team picks up 30 XP each.</div>
+                    </div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author', { gkUsed: 'owoh' }) %>
+                        <div class="cf-dc-text"><strong>Alex</strong> sets out with 🟢 Cut Trail Gem <code>[39/40]</code>, 🟡 Bright Clover Gem <code>[117/120]</code></div>
+                        <div class="cf-dc-text">and comes home with 3 critters: 🐜 🦔 🦉</div>
+                        <div class="cf-dc-text">+🌰 33 acorns</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-rarity-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-rarity-title">Catches by rarity</h2>
+                <p class="cf-section-desc">Every catch on this server so far, per tier.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="crRarity" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-hunt-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-hunt-title">Hunting</h2>
+                <p class="cf-section-desc">How often members can hunt and what a catch is worth.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crCooldownNum">Hunt cooldown</label>
+                    <p class="cf-row-desc" id="crCooldown-desc">Seconds between hunts, 1 to 3600. The slider covers the first five minutes.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range">
+                        <input type="range" id="crCooldown" min="1" max="300" step="1" value="15" aria-label="Hunt cooldown in seconds">
+                        <input type="number" class="form-control" id="crCooldownNum" min="1" max="3600" step="1" value="15" aria-describedby="crCooldown-desc">
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crCurrencyMult">Acorns per catch</label>
+                    <p class="cf-row-desc" id="crCurrencyMult-desc">Multiplies what each critter pays, from 0.1 to 10. Every catch pays at least 1.</p>
+                </div>
+                <div class="cf-row-control"><input type="number" class="form-control" id="crCurrencyMult" min="0.1" max="10" step="0.05" value="1" aria-describedby="crCurrencyMult-desc"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crXpMult">Team XP per catch</label>
+                    <p class="cf-row-desc" id="crXpMult-desc">Multiplies the pet XP the active team earns from a hunt, from 0.1 to 10.</p>
+                </div>
+                <div class="cf-row-control"><input type="number" class="form-control" id="crXpMult" min="0.1" max="10" step="0.05" value="1" aria-describedby="crXpMult-desc"></div>
+            </div>
+            <div class="cf-rows-head">Reward per tier with this multiplier</div>
+            <div class="cf-table-wrap">
+                <table class="cf-table">
+                    <thead><tr><th scope="col">Tier</th><th scope="col">Chance</th><th scope="col" class="cf-cell-end">Acorns per catch</th></tr></thead>
+                    <tbody id="crRewardRows"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="crHuntStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="crHuntSave">Save</button>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-sell-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-sell-title">Selling and sacrificing</h2>
+                <p class="cf-section-desc">Members always keep one of each kind; only spares are sold or sacrificed.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crSellMult">Sell price</label>
+                    <p class="cf-row-desc" id="crSellMult-desc">Multiplies each tier's sell price, from 0.1 to 10 (0.5 is half price).</p>
+                </div>
+                <div class="cf-row-control"><input type="number" class="form-control" id="crSellMult" min="0.1" max="10" step="0.05" value="0.5" aria-describedby="crSellMult-desc"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crSacMult">Essence per sacrifice</label>
+                    <p class="cf-row-desc" id="crSacMult-desc">Multiplies the essence a sacrificed spare gives, from 0.1 to 10. Members feed essence to a critter for pet XP.</p>
+                </div>
+                <div class="cf-row-control"><input type="number" class="form-control" id="crSacMult" min="0.1" max="10" step="0.05" value="1" aria-describedby="crSacMult-desc"></div>
+            </div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="crSellStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="crSellSave">Save</button>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-place-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-place-title">Where and who</h2>
+                <p class="cf-section-desc">These apply to every critters command and to the boss buttons.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crChannels">Game channels</label>
+                    <p class="cf-row-desc" id="crChannels-desc">Leave empty to allow every channel. Elsewhere members are pointed to these.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="crChannels" class="form-select" multiple size="6" aria-describedby="crChannels-desc">
+                        <%- include('../kit/_pick-options', { items: (typeof channels !== 'undefined' && channels) || [], selected: null, kind: 'channel', only: 'text' }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crRoles">Blocked roles</label>
+                    <p class="cf-row-desc" id="crRoles-desc">Members with any of these roles cannot play.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="crRoles" class="form-select" multiple size="6" aria-describedby="crRoles-desc">
+                        <%- include('../kit/_pick-options', { items: (typeof roles !== 'undefined' && roles) || [], selected: null, kind: 'role', botTop: crBotTop }) %>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="crPlaceStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="crPlaceSave">Save</button>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-boards-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-boards-title">Leaderboards</h2>
+                <p class="cf-section-desc">Hunters by catches, teams by battle wins, and the biggest acorn wallets.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-segmented" role="group" aria-label="Leaderboard">
+                <button type="button" class="cf-segment" data-cr-board="hunters" aria-pressed="true">Hunters</button>
+                <button type="button" class="cf-segment" data-cr-board="battle" aria-pressed="false">Battles</button>
+                <button type="button" class="cf-segment" data-cr-board="wealth" aria-pressed="false">Acorns</button>
+            </div>
+            <div id="crBoard" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-engage-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-engage-title">Engagement</h2>
+                <p class="cf-section-desc">How much of the game this server uses.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <dl class="cf-kpis cr-snapshot" id="crSnapshot" aria-label="Engagement"></dl>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-catalog-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-catalog-title">Critter catalog</h2>
+                <p class="cf-section-desc">Every critter members can catch, by tier, with what one is worth.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-segmented" role="group" aria-label="Tier" id="crCatalogTabs"></div>
+            <div id="crCatalogList" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-members-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-members-title">Members</h2>
+                <p class="cf-section-desc">Look a member up by their user ID (right-click them in Discord, Copy User ID). Every change here goes to your log channel.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crLookupId">Look up a member</label>
+                    <p class="cf-row-desc">Shows their zoo, or everything about their game.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <input type="text" class="form-control" id="crLookupId" inputmode="numeric" placeholder="User ID" autocomplete="off">
+                        <button type="button" class="btn btn-secondary" id="crLookupZoo">Zoo</button>
+                        <button type="button" class="btn btn-secondary" id="crLookupFull">Everything</button>
+                    </div>
+                    <span class="cf-status-line" id="crLookupStatus" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+            <div id="crLookupOut" class="cf-list cr-lookup" hidden></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crGrantUser">Give or take critters</label>
+                    <p class="cf-row-desc">A negative count takes critters away (never below zero).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group cr-wrap">
+                        <input type="text" class="form-control" id="crGrantUser" inputmode="numeric" placeholder="User ID" autocomplete="off">
+                        <select class="form-select" id="crGrantSpecies" aria-label="Critter"><option value="">Critter</option></select>
+                        <input type="number" class="form-control cr-narrow" id="crGrantCount" min="-100" max="100" step="1" value="1" aria-label="Count">
+                        <button type="button" class="btn btn-secondary" id="crGrantBtn">Apply</button>
+                    </div>
+                    <span class="cf-status-line" id="crGrantStatus" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crGiveUser">Give or take items</label>
+                    <p class="cf-row-desc">Acorns and shards accept a negative amount to take them away. Crates and lootboxes are gifts only.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group cr-wrap">
+                        <input type="text" class="form-control" id="crGiveUser" inputmode="numeric" placeholder="User ID" autocomplete="off">
+                        <input type="number" class="form-control cr-narrow" id="crGiveAmount" step="1" value="100" aria-label="Amount">
+                        <select class="form-select" id="crGiveKind" aria-label="What to give">
+                            <option value="currency">Acorns</option>
+                            <option value="shards">Weapon shards</option>
+                            <option value="crate">Weapon crates</option>
+                            <option value="lootbox">Lootboxes</option>
+                        </select>
+                        <button type="button" class="btn btn-secondary" id="crGiveBtn">Apply</button>
+                    </div>
+                    <span class="cf-status-line" id="crGiveStatus" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cr-switches-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-switches-title">Command switches</h2>
+                <p class="cf-section-desc">Switch off any part of the game. It stays off on every way in: <code>/owo</code>, <code>!owo</code> and the <code>owo</code> chat prefix.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="crFeatures">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="crFeaturesStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="crFeaturesSave">Save switches</button>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'owo' }, { cmd: 'owo2', as: 'owo' }, { cmd: 'owo-profile', as: 'owo profile' }, { cmd: 'autohunt', as: 'owo autohunt' }, { cmd: 'luck' }, { cmd: 'owoify' }], gkCmdNote: 'What members type in Discord. Each also works with ! or another prefix, and most have a short owo form such as owoh or owo zoo.' }) %>
+
+    <section class="cf-section cr-danger" aria-labelledby="cr-danger-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cr-danger-title">Reset every zoo</h2>
+                <p class="cf-section-desc">Deletes every member's critters, catch counts and timers on this server. Acorns, weapons and team names stay. This cannot be undone.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="crDangerName">Type the server name to confirm</label>
+                    <p class="cf-row-desc"><%= guild.name %></p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <input type="text" class="form-control" id="crDangerName" autocomplete="off">
+                        <button type="button" class="btn btn-danger" id="crResetAll" disabled>Reset every zoo</button>
+                    </div>
+                    <span class="cf-status-line" id="crDangerStatus" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<style>
+  #crittersPage .page-section-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--cf-4); }
+  #crittersPage .cr-head-switch { display: flex; align-items: center; gap: var(--cf-2); }
+  #crittersPage .cr-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #crittersPage .cr-wrap { flex-wrap: wrap; }
+  #crittersPage .cr-wrap > * { flex: 1 1 8rem; }
+  #crittersPage .cr-wrap > .btn { flex: 0 0 auto; }
+  #crittersPage .cr-narrow { max-width: 7rem; }
+  #crittersPage .cr-bar { position: relative; height: 6px; margin-top: 6px; border-radius: 999px; background: var(--cf-surface-3); overflow: hidden; }
+  #crittersPage .cr-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--cf-accent); }
+  #crittersPage .cr-tier-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: middle; }
+  #crittersPage .cr-snapshot { margin: 0; border: 0; border-radius: 0; }
+  #crittersPage .cr-lookup .cf-list-item { display: block; }
+  #crittersPage .cr-lookup dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--cf-4); margin: 0; font-size: var(--cf-text-sm); }
+  #crittersPage .cr-lookup dt { color: var(--cf-text-3); font-weight: 500; }
+  #crittersPage .cr-lookup dd { margin: 0; color: var(--cf-text); overflow-wrap: anywhere; }
+  #crittersPage .cr-feature-group { padding: var(--cf-3) var(--cf-5); }
+  #crittersPage .cr-danger .cf-section-title { color: var(--cf-danger-ink, var(--cf-danger)); }
+  @media (max-width: 640px) {
+    #crittersPage .cr-feature-group { padding: var(--cf-3) var(--cf-4); }
+    #crittersPage .cr-narrow { max-width: none; }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('crittersPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/owo${p}`;
+  const $ = (id) => document.getElementById(id);
+  const SNOWFLAKE = /^\d{15,25}$/;
+  const num = (n) => (Number(n) || 0).toLocaleString();
+  let config = null;
+  let catalog = [];
+  let board = 'hunters';
+
+  function h(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    const p = props || {};
+    if (p.className) n.className = p.className;
+    if (p.text !== undefined) n.textContent = String(p.text);
+    for (const [k, v] of Object.entries(p.attrs || {})) if (v !== false && v != null) n.setAttribute(k, v === true ? '' : v);
+    for (const [k, v] of Object.entries(p.data || {})) n.dataset[k] = v;
+    for (const kid of kids) if (kid != null) n.append(kid);
+    return n;
+  }
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('crError'); el.textContent = m || ''; el.hidden = !m; };
+  const flash = (el, m, ok = true) => { el.textContent = m; el.classList.remove('is-ok', 'is-bad'); el.classList.add(ok ? 'is-ok' : 'is-bad'); clearTimeout(el._t); el._t = setTimeout(() => { el.textContent = ''; el.classList.remove('is-ok', 'is-bad'); }, 4000); };
+  const empty = (text) => h('div', { className: 'cf-state cf-state--compact' }, h('p', { className: 'cf-state-text', text }));
+
+  // Feature keys (core/critters FEATURE_KEYS) with the words admins see, grouped.
+  const FEATURES = [
+    ['Hunting and zoo', { hunt: 'Hunt', zoo: 'Zoo', catalog: 'Catalog', stats: 'Stats', leaderboard: 'Hunt leaderboard', sell: 'Sell spares', sacrifice: 'Sacrifice spares', feed: 'Feed essence', autohunt: 'Autohunt', luck: 'Daily luck roll' }],
+    ['Acorns', { daily: 'Daily acorns', balance: 'Balance', give: 'Give acorns', 'give-limits': 'Transfer limits', transactions: 'Transfer history', drop: 'Drop on the floor', pickup: 'Pick up from the floor', lottery: 'Lottery' }],
+    ['Gear', { weapon: 'Weapons', crate: 'Weapon crates', shards: 'Shards', dismantle: 'Dismantle', forge: 'Forge', favorite: 'Favourite weapons', 'forge-prices': 'Forge prices', lootbox: 'Lootboxes', gems: 'Gems', use: 'Use gems' }],
+    ['Teams and battles', { team: 'View teams', 'team-create': 'Create teams', 'team-add': 'Add to team', 'team-remove': 'Remove from team', 'team-switch': 'Switch team', 'team-rename': 'Rename team', 'team-delete': 'Delete team', equip: 'Equip', unequip: 'Unequip', 'pet-name': 'Nicknames', battle: 'Battles', duel: 'Duels', 'battle-settings': 'Battle settings', quest: 'Quests', boss: 'Guild boss', ranch: 'Ranch', 'ranch-claim': 'Ranch claims' }],
+    ['Friends and profile', { pray: 'Pray', curse: 'Curse', cookie: 'Cookies', top: 'Cookie and luck boards', count: 'owo counter card', marry: 'Marriage', ring: 'Rings', shop: 'Shop', wallpaper: 'Wallpapers', profile: 'Profile' }],
+  ];
+
+  function renderKpis(s) {
+    $('crKpiHunters').textContent = num(s.hunters);
+    $('crKpiKinds').textContent = num(s.uniqueCatches);
+    $('crKpiCatches').textContent = num(s.totalCatches);
+    $('crKpi24h').textContent = num(s.last24hCatches);
+    const total = (s.byRank || []).reduce((a, r) => a + (Number(r.total) || 0), 0);
+    const byKey = new Map(catalog.map((t) => [t.rank, t]));
+    $('crRarity').replaceChildren(...((s.byRank || []).map((r) => {
+      const t = byKey.get(r.rank) || { name: r.rank, color: null };
+      const pct = total ? Math.round((r.total / total) * 1000) / 10 : 0;
+      const bar = h('div', { className: 'cr-bar' }, h('span', { attrs: { style: `width:${pct}%` + (t.color ? `;background:${t.color}` : '') } }));
+      return h('div', { className: 'cf-list-item' }, h('div', { className: 'cf-list-main' },
+        h('strong', { text: t.name }), h('span', { className: 'cr-muted', text: ` ${num(r.total)} catches, ${pct}%, ${num(r.uniqueAnimals)} kinds` }), bar));
+    })));
+  }
+
+  function renderRewards() {
+    const mult = Number($('crCurrencyMult').value) || 1;
+    $('crRewardRows').replaceChildren(...catalog.map((t) => h('tr', null,
+      h('td', null, h('span', { className: 'cr-tier-dot', attrs: { style: `background:${t.color}`, 'aria-hidden': 'true' } }), t.name),
+      h('td', { text: `${t.rarity}%` }),
+      h('td', { className: 'cf-cell-end', text: num(Math.max(1, Math.floor(t.points * mult))) }))));
+  }
+
+  function renderCatalog(tier) {
+    const tabs = $('crCatalogTabs');
+    if (!tabs.children.length) {
+      tabs.replaceChildren(...catalog.map((t, i) => h('button', { className: 'cf-segment', text: t.name, attrs: { type: 'button', 'aria-pressed': String(i === 0) }, data: { crTier: t.rank } })));
+    }
+    const t = catalog.find((x) => x.rank === tier) || catalog[0];
+    if (!t) return $('crCatalogList').replaceChildren(empty('The catalog is empty.'));
+    tabs.querySelectorAll('[data-cr-tier]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.crTier === t.rank)));
+    $('crCatalogList').replaceChildren(
+      h('div', { className: 'cf-list-item' }, h('div', { className: 'cf-list-main' },
+        h('span', { className: 'cr-muted', text: `${t.rarity}% of catches · ${num(t.points)} acorns each · sells for ${num(t.price)} · ${num(t.essence)} essence · ${num(t.ranch)} acorns an hour on the ranch` }))),
+      ...t.animals.map((a) => h('div', { className: 'cf-list-item' }, h('div', { className: 'cf-list-main' },
+        h('strong', { text: `${a.emoji} ${a.name}` }), h('span', { className: 'gk-cmd-desc', text: a.description || '' })))));
+  }
+
+  function renderSpeciesSelect() {
+    const sel = $('crGrantSpecies');
+    sel.replaceChildren(h('option', { text: 'Critter', attrs: { value: '' } }), ...catalog.map((t) => h('optgroup', { attrs: { label: t.name } },
+      ...t.animals.map((a) => h('option', { text: `${a.emoji} ${a.name}`, attrs: { value: a.key } })))));
+  }
+
+  function renderConfig(c) {
+    config = c;
+    for (const id of ['crEnabled', 'crHeaderEnabled']) { $(id).checked = !!c.enabled; $(id).disabled = false; }
+    $('crAnnounce').checked = !!c.announce_rare_catches; $('crAnnounce').disabled = false;
+    $('crCooldownNum').value = c.hunt_cooldown_seconds;
+    $('crCooldown').value = Math.min(300, c.hunt_cooldown_seconds);
+    $('crCurrencyMult').value = c.reward_currency_multiplier;
+    $('crXpMult').value = c.reward_xp_multiplier;
+    $('crSellMult').value = c.sell_multiplier;
+    $('crSacMult').value = c.sacrifice_xp_multiplier;
+    const pick = (sel, ids) => { const set = new Set(ids || []); [...sel.options].forEach((o) => { o.selected = set.has(o.value); }); sel.dispatchEvent(new Event('change', { bubbles: true })); };
+    pick($('crChannels'), c.allowed_channel_ids);
+    pick($('crRoles'), c.blocked_role_ids);
+    renderRewards();
+    renderFeatures();
+  }
+
+  function renderFeatures() {
+    const off = new Set((config && config.disabled_subcommands) || []);
+    $('crFeatures').replaceChildren(...FEATURES.map(([group, map]) => h('div', { className: 'cr-feature-group' },
+      h('div', { className: 'cf-rows-head', text: group }),
+      h('div', { className: 'cf-check-grid' }, ...Object.entries(map).map(([key, label]) => h('label', { className: 'cf-check' },
+        h('input', { attrs: { type: 'checkbox', checked: !off.has(key) }, data: { crFeature: key } }), ' ', label))))));
+  }
+
+  async function save(patch, status) {
+    try {
+      const out = await req(api('/config'), { method: 'PUT', body: JSON.stringify(patch) });
+      renderConfig(out.config);
+      flash(status, 'Saved.');
+      return true;
+    } catch (err) { flash(status, err.message, false); return false; }
+  }
+
+  async function setEnabled(on, source) {
+    for (const id of ['crEnabled', 'crHeaderEnabled']) $(id).checked = on;
+    const ok = await save({ enabled: on }, $('crEnabledStatus'));
+    if (!ok) for (const id of ['crEnabled', 'crHeaderEnabled']) $(id).checked = !on;
+    else flash($('crEnabledStatus'), on ? 'The game is on.' : 'The game is off.');
+  }
+
+  async function loadBoard() {
+    root.querySelectorAll('[data-cr-board]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.crBoard === board)));
+    try {
+      const { leaderboard } = await req(api('/leaderboard/' + board));
+      if (!leaderboard.length) return $('crBoard').replaceChildren(empty('Nobody is on this board yet.'));
+      $('crBoard').replaceChildren(...leaderboard.map((r, i) => {
+        const what = board === 'battle' ? `${r.teamName}: ${num(r.wins)} wins, ${num(r.losses)} losses, best streak ${num(r.highestStreak)}`
+          : board === 'wealth' ? `${num(r.wallet)} acorns` : `${num(r.total)} catches`;
+        const who = h('span', { className: 'cf-chip', text: r.displayName || r.userId, attrs: { title: r.userId }, data: { userId: r.userId } });
+        return h('div', { className: 'cf-list-item' }, h('div', { className: 'cf-list-main' }, h('strong', { text: `${i + 1}. ` }), who, h('span', { className: 'cr-muted', text: ' ' + what })));
+      }));
+    } catch (err) { $('crBoard').replaceChildren(empty(err.message)); }
+  }
+
+  async function loadSnapshot() {
+    try {
+      const { snapshot: s } = await req(api('/module-snapshot'));
+      const tiles = [['Hunters', s.hunters], ['Weapon owners', s.weaponOwners], ['Team owners', s.teamOwners], ['Battles fought', s.battlesFought],
+        ['Autohunting now', s.autohuntActive], ['Members with quests', s.questHolders], ['Ranch claims', s.ranchClaims], ['Luck rolls', s.luckRolls],
+        ['Crates unopened', s.cratesUnopened], ['Shards held', s.totalShards]];
+      $('crSnapshot').replaceChildren(...tiles.map(([l, v]) => h('div', { className: 'cf-kpi' }, h('dt', { text: l }), h('dd', { className: 'cf-kpi-value', text: num(v) }))));
+    } catch (err) { $('crSnapshot').replaceChildren(empty(err.message)); }
+  }
+
+  function lookupView(rows) {
+    return h('div', { className: 'cf-list-item' }, h('dl', null, ...rows.flatMap(([k, v]) => [h('dt', { text: k }), h('dd', { text: v })])));
+  }
+
+  async function lookup(kind) {
+    const id = $('crLookupId').value.trim();
+    const out = $('crLookupOut');
+    if (!SNOWFLAKE.test(id)) return flash($('crLookupStatus'), 'That is not a user ID.', false);
+    try {
+      if (kind === 'zoo') {
+        const { zoo, profile } = await req(api('/user-zoo/' + id));
+        const rows = [['Member', profile ? `${profile.displayName} (${profile.tag})` : id], ['Kinds found', `${zoo.uniqueAnimals} of ${zoo.catalogSize} (${zoo.completionPct}%)`], ['Caught in all', num(zoo.totalCatches)]];
+        zoo.groups.forEach((g) => rows.push([g.tier.name, g.species.map((s) => `${s.species.emoji} ${s.species.name} x${s.count}`).join(', ')]));
+        const reset = h('button', { className: 'btn btn-sm btn-danger', text: 'Reset this zoo', attrs: { type: 'button' }, data: { crReset: id } });
+        out.replaceChildren(lookupView(rows), h('div', { className: 'cf-list-item' }, reset));
+      } else {
+        const f = await req(api('/user-full/' + id));
+        const rows = [
+          ['Member', f.profile ? `${f.profile.displayName} (${f.profile.tag})` : id],
+          ['Acorns', num(f.wallet && f.wallet.balance)], ['Essence', num(f.wallet && f.wallet.essence)], ['Shards', num(f.shards)],
+          ['Critters', `${num(f.zoo && f.zoo.uniqueAnimals)} kinds, ${num(f.zoo && f.zoo.totalCatches)} caught`],
+          ['Weapons', num(f.weapons && f.weapons.total)],
+          ['Teams', (f.teams || []).map((t) => `#${t.teamId} ${t.name} (${t.wins}W ${t.losses}L)`).join(', ') || 'None'],
+          ['Autohunt', f.autohunt && f.autohunt.enabled ? `on, ${f.autohunt.queued}/${f.autohunt.cap} waiting` : 'off'],
+          ['Quests', (f.quests || []).map((q) => `${q.kind} ${q.progress}/${q.target}${q.claimed ? ' (claimed)' : ''}`).join(', ') || 'None'],
+          ['Ranch', f.ranch ? `${num(f.ranch.ratePerHour)} an hour, ${num(f.ranch.pending)} waiting` : 'Not started'],
+          ['Luck', f.luck ? `${num(f.luck.points)} points, ${num(f.luck.rolls)} rolls` : '0'],
+        ];
+        out.replaceChildren(lookupView(rows));
+      }
+      out.hidden = false;
+      flash($('crLookupStatus'), 'Loaded.');
+    } catch (err) { flash($('crLookupStatus'), err.message, false); }
+  }
+
+  async function load() {
+    showError('');
+    try {
+      const cat = await req(api('/catalog'));
+      catalog = cat.catalog || [];
+      renderCatalog();
+      renderSpeciesSelect();
+      const [{ config: c }, { stats }] = await Promise.all([req(api('/config')), req(api('/stats'))]);
+      renderConfig(c);
+      renderKpis(stats);
+    } catch (err) { showError(err.message); }
+    loadBoard();
+    loadSnapshot();
+  }
+
+  $('crEnabled').addEventListener('change', (e) => setEnabled(e.target.checked));
+  $('crHeaderEnabled').addEventListener('change', (e) => setEnabled(e.target.checked));
+  $('crGameSave').addEventListener('click', () => save({ announce_rare_catches: $('crAnnounce').checked }, $('crGameStatus')));
+  $('crCooldown').addEventListener('input', (e) => { $('crCooldownNum').value = e.target.value; });
+  $('crCooldownNum').addEventListener('input', (e) => { $('crCooldown').value = Math.min(300, Math.max(1, Number(e.target.value) || 1)); });
+  $('crCurrencyMult').addEventListener('input', renderRewards);
+  $('crHuntSave').addEventListener('click', () => save({
+    hunt_cooldown_seconds: Number($('crCooldownNum').value), reward_currency_multiplier: Number($('crCurrencyMult').value), reward_xp_multiplier: Number($('crXpMult').value),
+  }, $('crHuntStatus')));
+  $('crSellSave').addEventListener('click', () => save({ sell_multiplier: Number($('crSellMult').value), sacrifice_xp_multiplier: Number($('crSacMult').value) }, $('crSellStatus')));
+  $('crPlaceSave').addEventListener('click', () => save({
+    allowed_channel_ids: [...$('crChannels').selectedOptions].map((o) => o.value),
+    blocked_role_ids: [...$('crRoles').selectedOptions].map((o) => o.value),
+  }, $('crPlaceStatus')));
+  $('crFeaturesSave').addEventListener('click', () => {
+    const off = [...root.querySelectorAll('[data-cr-feature]')].filter((b) => !b.checked).map((b) => b.dataset.crFeature);
+    save({ disabled_subcommands: off }, $('crFeaturesStatus'));
+  });
+  $('crLookupZoo').addEventListener('click', () => lookup('zoo'));
+  $('crLookupFull').addEventListener('click', () => lookup('full'));
+
+  $('crGrantBtn').addEventListener('click', async () => {
+    const userId = $('crGrantUser').value.trim();
+    const animalKey = $('crGrantSpecies').value;
+    const count = Number($('crGrantCount').value);
+    if (!SNOWFLAKE.test(userId)) return flash($('crGrantStatus'), 'That is not a user ID.', false);
+    if (!animalKey) return flash($('crGrantStatus'), 'Choose a critter.', false);
+    if (!Number.isInteger(count) || count === 0 || Math.abs(count) > 100) return flash($('crGrantStatus'), 'Use a whole number from -100 to 100, not 0.', false);
+    try {
+      const out = await req(api('/grant-animal'), { method: 'POST', body: JSON.stringify({ userId, animalKey, count }) });
+      flash($('crGrantStatus'), `Done. They have ${out.newCount} ${out.animalName} now.`);
+    } catch (err) { flash($('crGrantStatus'), err.message, false); }
+  });
+
+  $('crGiveBtn').addEventListener('click', async () => {
+    const userId = $('crGiveUser').value.trim();
+    const amount = Number($('crGiveAmount').value);
+    const kind = $('crGiveKind').value;
+    if (!SNOWFLAKE.test(userId)) return flash($('crGiveStatus'), 'That is not a user ID.', false);
+    if (!Number.isInteger(amount) || amount === 0) return flash($('crGiveStatus'), 'Use a whole number, not 0.', false);
+    const route = { currency: ['/grant-currency', 'amount'], shards: ['/grant-shards', 'amount'], crate: ['/grant-crate', 'count'], lootbox: ['/grant-lootbox', 'count'] }[kind];
+    try {
+      const out = await req(api(route[0]), { method: 'POST', body: JSON.stringify({ userId, [route[1]]: amount }) });
+      flash($('crGiveStatus'), `Done. They have ${num(out.total)} now.`);
+    } catch (err) { flash($('crGiveStatus'), err.message, false); }
+  });
+
+  $('crDangerName').addEventListener('input', (e) => { $('crResetAll').disabled = e.target.value.trim() !== root.dataset.guildName; });
+  $('crResetAll').addEventListener('click', async () => {
+    if (!confirm('Delete every member\'s critters on this server? This cannot be undone.')) return;
+    try {
+      const out = await req(api('/reset-guild'), { method: 'POST', body: JSON.stringify({ confirm: true }) });
+      flash($('crDangerStatus'), `Reset. ${num(out.zooRowsRemoved)} critter rows removed.`);
+      $('crDangerName').value = ''; $('crResetAll').disabled = true;
+      load();
+    } catch (err) { flash($('crDangerStatus'), err.message, false); }
+  });
+
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-cr-board]');
+    if (b) { board = b.dataset.crBoard; return loadBoard(); }
+    const t = e.target.closest('[data-cr-tier]');
+    if (t) return renderCatalog(t.dataset.crTier);
+    const r = e.target.closest('[data-cr-reset]');
+    if (r) {
+      if (!confirm('Delete this member\'s critters, catch counts and timers?')) return;
+      try {
+        await req(api('/reset-user'), { method: 'POST', body: JSON.stringify({ userId: r.dataset.crReset }) });
+        flash($('crLookupStatus'), 'That zoo is empty now.');
+        $('crLookupOut').hidden = true;
+      } catch (err) { flash($('crLookupStatus'), err.message, false); }
+    }
+  });
+
+  load();
+})();
+</script>

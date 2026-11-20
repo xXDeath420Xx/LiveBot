@@ -1,0 +1,160 @@
+<%#
+  GET /stream/bot/viewers/settings (dashboard/routes/stream-bot-viewers.js). Locals: ready, settings, form (settingsView: ranks in hours
+  for watch time, the not-counted list as text), commands [{ name, command, id, enabled }], watch (as on the Viewers page).
+  Save and "Add the chat commands" run in /js/stream-bot-viewers.js (createElement and textContent only).
+%>
+<%- include('_head', { pageTitle: 'Viewer settings', active: 'viewers', sbPage: 'viewer-settings' }) %>
+<%
+  const _on = (v) => v ? ' checked' : '';
+  const _sel = (a, b) => String(a) === String(b) ? ' selected' : '';
+  const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
+  const _made = commands.filter((c) => c.id).length;
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Viewer settings</h1>
+        <p class="cf-page-sub">What you call your points, how viewers earn them, and ranks. Points are a tally for fun: nobody can buy them, and CertiFried never handles money.</p>
+    </div>
+    <div class="cf-page-actions"><a class="btn btn-secondary btn-sm" href="/stream/bot/viewers">All viewers</a></div>
+</div>
+<%- include('_tabs', { active: 'viewers' }) %>
+
+<div class="cf-notice" id="sbv-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbv-msg-text"></div></div>
+<% if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Viewer records start after the next CertiFried update. You can save settings now.</div></div>
+<% } %>
+
+<form id="sbv-settings" novalidate>
+<div class="cf-notice is-bad" id="sbv-errors" role="alert" tabindex="-1" hidden><div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sbv-errors-list"></ul></div></div>
+
+<section class="cf-section" aria-labelledby="sbv-track-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-track-title">Tracking</h2>
+        <p class="cf-section-desc">Watch time is counted every 5 minutes while you are live. On Twitch that is everyone in chat, lurkers too, once the Stream bot grant includes the chatters list<% if (watch.needsReapprove) { %> (<a href="/stream/bot/connections">re-approve on Connections</a>)<% } %>; until then, and on Kick, which has no list of viewers, it is people who chatted in the last 10 minutes.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-tracking">Keep viewer records</label><p class="cf-row-desc" id="sbv-tracking-desc">Off: nothing new is recorded and nobody earns points. What you have is kept.</p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbv-tracking" aria-describedby="sbv-tracking-desc"<%= _on(form.tracking) %>></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-ignore">Not counted</label><p class="cf-row-desc" id="sbv-ignore-desc">Chat bots and other accounts that should not earn watch time or points, one per line. You and the CertiFried bot are never counted.</p></div>
+            <div class="cf-row-control"><textarea id="sbv-ignore" rows="5" maxlength="3000" aria-describedby="sbv-ignore-desc"><%= form.ignore %></textarea></div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-earn-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-earn-title">Points</h2>
+        <p class="cf-section-desc">Bonuses go to the viewer behind the event: the follower, the subscriber, the gifter, the cheerer, the raiding channel. Set a bonus to 0 to turn it off.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-currency">Name</label><p class="cf-row-desc" id="sbv-currency-desc">Such as points, coins or leaves. A one-word name also works as a command: coins gives <code>!coins</code>.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbv-currency" maxlength="20" autocomplete="off" value="<%= form.currency %>" aria-describedby="sbv-currency-desc"></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-earn-points">Earned for watching</label><p class="cf-row-desc">Only while you are live.</p></div>
+            <div class="cf-row-control cf-input-group">
+                <input type="number" id="sbv-earn-points" min="0" max="10000" step="1" inputmode="numeric" value="<%= form.earn.points %>">
+                <label class="sr-only" for="sbv-earn-minutes">Every</label>
+                <select id="sbv-earn-minutes"><% form.periods.forEach((m) => { %><option value="<%= m %>"<%= _sel(m, form.earn.minutes) %>>every <%= m === 60 ? 'hour' : m + ' minutes' %></option><% }) %></select>
+            </div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-earn-mult">Subscribers earn</label><p class="cf-row-desc">Times what others earn for watching. 1 means the same.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbv-earn-mult" min="1" max="10" step="0.1" inputmode="decimal" value="<%= form.earn.subMultiplier %>"></div>
+        </div>
+        <% [['follow', 'Follow'], ['sub', 'Sub or resub'], ['giftPerSub', 'Each gifted sub'], ['bitsPer100', 'Every 100 Bits'], ['raid', 'Raid (to the raiding channel)']].forEach(([k, label]) => { %>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-earn-<%= k %>"><%= label %></label></div>
+            <div class="cf-row-control"><input type="number" id="sbv-earn-<%= k %>" data-earn="<%= k %>" min="0" max="100000" step="1" inputmode="numeric" value="<%= form.earn[k] %>"></div>
+        </div>
+        <% }) %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-ranks-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-ranks-title">Ranks</h2>
+        <p class="cf-section-desc">A viewer has the highest rank they have reached. Reaching a new one starts the <strong>Viewer reached a new rank</strong> trigger, so an automation can congratulate them in chat.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-rank-basis">Ranks follow</label></div>
+            <div class="cf-row-control"><select id="sbv-rank-basis"><option value="watch"<%= _sel('watch', form.ranks.basis) %>>Hours watched</option><option value="points"<%= _sel('points', form.ranks.basis) %>><%= form.currency.charAt(0).toUpperCase() + form.currency.slice(1) %></option></select></div>
+        </div>
+        <div class="cf-row cf-row--stack">
+            <div class="cf-row-text"><p class="cf-row-label" id="sbv-ranks-label">Ranks</p><p class="cf-row-desc">Up to 20. A rank at 0 is where everyone starts.</p></div>
+            <div class="cf-row-control" role="group" aria-labelledby="sbv-ranks-label">
+                <ol class="sbv-ranks" id="sbv-ranks">
+                    <% form.ranks.list.forEach((r, i) => { %>
+                    <li class="sbv-rank" data-rank>
+                        <label class="sr-only" for="sbv-rank-name-<%= i %>">Rank <%= i + 1 %> name</label>
+                        <input type="text" id="sbv-rank-name-<%= i %>" data-rank-name maxlength="40" autocomplete="off" value="<%= r.name %>">
+                        <label class="sr-only" for="sbv-rank-min-<%= i %>">Rank <%= i + 1 %> from</label>
+                        <input type="number" id="sbv-rank-min-<%= i %>" data-rank-min min="0" step="any" inputmode="decimal" value="<%= r.min %>">
+                        <span class="cf-muted" data-rank-unit><%= form.ranks.basis === 'watch' ? 'hours' : form.currency %></span>
+                        <button type="button" class="btn btn-secondary btn-sm" data-rank-remove aria-label="Remove rank <%= i + 1 %>">Remove</button>
+                    </li>
+                    <% }) %>
+                </ol>
+                <% if (!form.ranks.list.length) { %><p class="cf-muted" id="sbv-ranks-empty">No ranks yet.</p><% } %>
+                <button type="button" class="btn btn-secondary btn-sm" id="sbv-rank-add">Add a rank</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbv-games-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-games-title">Giving and gambling</h2></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-give">Viewers can give <%= form.currency %> to each other</label><p class="cf-row-desc"><code>!give @name 100</code></p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbv-give"<%= _on(form.give.enabled) %>></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-give-min">Smallest gift</label></div>
+            <div class="cf-row-control"><input type="number" id="sbv-give-min" min="1" max="1000000" step="1" inputmode="numeric" value="<%= form.give.min %>"></div>
+        </div>
+        <div class="cf-row cf-row--switch">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-gamble">Gambling</label><p class="cf-row-desc" id="sbv-gamble-desc"><code>!gamble 100</code>, <code>!gamble all</code> or <code>!gamble 50%</code>: a win doubles the bet. Off by default. Points only; there is no money involved.</p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbv-gamble" aria-describedby="sbv-gamble-desc"<%= _on(form.gamble.enabled) %>></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-gamble-min">Smallest bet</label></div>
+            <div class="cf-row-control"><input type="number" id="sbv-gamble-min" min="1" max="1000000000" step="1" inputmode="numeric" value="<%= form.gamble.min %>"></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-gamble-max">Largest bet</label></div>
+            <div class="cf-row-control"><input type="number" id="sbv-gamble-max" min="1" max="1000000000" step="1" inputmode="numeric" value="<%= form.gamble.max %>"></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbv-gamble-chance">Chance to win (%)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbv-gamble-chance" min="1" max="90" step="1" inputmode="numeric" value="<%= form.gamble.winChance %>"></div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbv-save-status" role="status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </div>
+    </div>
+</section>
+</form>
+
+<section class="cf-section" aria-labelledby="sbv-cmd-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-cmd-title">Chat commands</h2>
+        <p class="cf-section-desc">Each command is an automation you can switch on, rename or give a different cooldown on <a href="/stream/bot/automations">Automations</a>. They are added switched off.</p></div>
+        <div class="cf-section-actions"><% if (_made < commands.length) { %><button type="button" class="btn btn-primary btn-sm" id="sbv-add-commands"><%= _made ? 'Add the missing commands' : 'Add the chat commands' %></button><% } %></div></header>
+    <div class="cf-rows">
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">Command</th><th scope="col">Automation</th><th scope="col">State</th></tr></thead>
+                <tbody>
+                    <% commands.forEach((c) => { %>
+                    <tr><td><code><%= c.command %></code></td><td><% if (c.id) { %><a href="/stream/bot/automations/<%= c.id %>"><%= c.name %></a><% } else { %><span class="cf-cell-muted">Not added</span><% } %></td><td><%= c.id ? (c.enabled ? 'On' : 'Off') : '' %></td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <p class="cf-muted">In any automation you can also use <code>{user.points}</code>, <code>{user.watchtime}</code>, <code>{user.messages}</code>, <code>{user.rank}</code> and <code>{points.name}</code>, the conditions <strong>Has at least N points</strong>, <strong>Watch time at least</strong> and <strong>Message count at least</strong>, and the actions <strong>Give points to a viewer</strong>, <strong>Take points from a viewer</strong> and <strong>Set a viewer's points</strong>.</p>
+    </div>
+</section>
+
+<script type="application/json" id="sbv-data"><%- _js({ page: 'settings', basis: form.ranks.basis, currency: form.currency }) %></script>
+<script src="/js/stream-bot-viewers.js" defer></script>
+<%- include('_foot') %>

@@ -1,4 +1,4 @@
-<%- include('_head', { pageTitle: channel.channel_name + ' settings', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: channel.channel_name + ' settings', csrfToken, kickUser: user, kickTab: 'channels' }) %>
 <%
   var feats = {};
   try { feats = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {}; } catch (e) { feats = {}; }

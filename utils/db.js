@@ -32,7 +32,10 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
   waitForConnections: true,
   connectionLimit: 30,
-  maxIdle: 10,
+  // mysql2 (3.22) starts a never-ending 1 s idle-sweep timer whenever maxIdle < connectionLimit, so every
+  // process that imports this file stayed alive until pool.end(). Under the test runner (NODE_TEST_CONTEXT)
+  // that timer is not started, and test runs exit by themselves (register H-796).
+  maxIdle: process.env.NODE_TEST_CONTEXT ? 30 : 10,
   idleTimeout: 30000,
   queueLimit: 200,
   connectTimeout: 10000,
@@ -90,12 +93,17 @@ async function testConnection(maxAttempts = MAX_RETRY_ATTEMPTS) {
   return false;
 }
 
-// Initialize connection on startup
-testConnection().then(connected => {
-  if (!connected) {
-    logger.error('[Database] Starting in degraded mode - database unavailable');
-  }
-});
+// Initialize connection on startup. Not under the test runner (node --test sets NODE_TEST_CONTEXT): many tests
+// import a module that imports this one only for its pure functions, and the eager connection stayed open in
+// the pool after the tests passed, so the run never exited without --test-force-exit (register H-796). The
+// pool still connects on the first query; a test that queries ends the pool itself.
+if (!process.env.NODE_TEST_CONTEXT) {
+  testConnection().then(connected => {
+    if (!connected) {
+      logger.error('[Database] Starting in degraded mode - database unavailable');
+    }
+  });
+}
 
 // Health check function for external monitoring
 export function isDatabaseConnected() {

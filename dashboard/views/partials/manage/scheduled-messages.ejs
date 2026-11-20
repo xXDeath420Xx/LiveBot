@@ -428,7 +428,7 @@
             var data = await call(api);
             state = Object.assign(state, data);
             var tzText = 'Times are in the server\u2019s timezone, ' + state.timezone + (state.timezoneLabel && state.timezoneLabel !== state.timezone ? ' (' + state.timezoneLabel + ')' : '') + '. ';
-            var link = el('a', { href: '/manage/' + encodeURIComponent(guildId) + '?page=core', text: 'Change it in Core settings' });
+            var link = el('a', { href: '/manage/' + encodeURIComponent(guildId) + '?page=core', text: 'Change it in General settings' });
             $('sm-tz-desc').replaceChildren(tzText, link, '.');
             $('sm-mode-desc').textContent = 'Times are in the server\u2019s timezone, ' + state.timezone + '.';
             render();

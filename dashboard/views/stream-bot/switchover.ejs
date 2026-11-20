@@ -1,0 +1,66 @@
+<%#
+  GET /stream/bot/import/switchover (dashboard/routes/stream-bot-switchover.js). Locals: studio { connected, version, canClose },
+  history [{ id, status, createdAt, undoneAt, automations, commands, timers, obs, apps }], canUndo. The plan is fetched by
+  /js/stream-bot-switchover.js from /stream/bot/api/switchover/preview (it asks CertiFried Studio about OBS live) and drawn with
+  createElement and textContent only.
+%>
+<%- include('_head', { pageTitle: 'Switch over', active: 'import', sbPage: 'switchover' }) %>
+<link rel="stylesheet" href="/css/stream-bot-switchover.css">
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _status = { applied: 'Switched over', partial: 'Switched over, OBS or Studio did not answer', undone: 'Undone' };
+%>
+<div class="cf-page-head">
+    <div>
+        <p class="sbs-back"><a href="/stream/bot/import">Import</a></p>
+        <h1 class="cf-page-title">Switch over from Firebot or Streamer.bot</h1>
+        <p class="cf-page-sub">One click turns on what you imported, swaps your overlays in OBS for the CertiFried ones, and can close Firebot and Streamer.bot. Undo puts everything back as it was.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'import' }) %>
+
+<div class="cf-notice" id="sbs-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbs-msg-text"></div></div>
+
+<section class="cf-section" aria-labelledby="sbs-plan-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbs-plan-title">What it will do</h2>
+        <p class="cf-section-desc">Read fresh each time: your imported items now, and your OBS scenes as CertiFried Studio sees them. Nothing changes until you press Switch over.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbs-plan-status" role="status" aria-live="polite">Looking at your setup…</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="sbs-refresh">Look again</button></div></header>
+    <div class="cf-rows" id="sbs-plan" aria-busy="true">
+        <p class="cf-list-body sbs-studio"><% if (studio.connected) { %>CertiFried Studio <%= studio.version || '' %> is connected; OBS is read through it.<% } else { %>CertiFried Studio is not connected, so the OBS part cannot be shown. Open Studio with OBS running, then press Look again.<% } %></p>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbs-go-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbs-go-title">Switch over</h2>
+        <p class="cf-section-desc">Best done before you go live. Items that need a look stay off unless you tick them above.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbs-obs">Swap the overlays in OBS</label><p class="cf-row-desc">Shows each CertiFried source where the one it replaces is showing, and hides the old one. Sound Alerts and Blerp are never touched.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbs-obs" checked></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbs-close">Close Firebot and Streamer.bot</label>
+            <p class="cf-row-desc"><% if (studio.canClose) { %>CertiFried Studio asks them to close, like pressing their close button. Nothing else is closed, OBS never. If one stays open in the tray, quit it from there.<% } else { %>Needs CertiFried Studio 0.2.7 or later connected. Otherwise close them yourself: quit Firebot and Streamer.bot from the Windows tray.<% } %></p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbs-close"<%= studio.canClose ? '' : ' disabled' %>></div></div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbs-go-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="sbs-go" disabled>Switch over</button>
+        </div>
+        <p class="cf-list-body">Remember to close Firebot and Streamer.bot if you do not tick the box: while they run, your chat gets two answers.</p>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbs-undo-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbs-undo-title">Undo and past switchovers</h2>
+        <p class="cf-section-desc">Undo turns off exactly what the last switchover turned on and puts every OBS source back as it was. Apps it closed are not reopened.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbs-undo-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="sbs-undo"<%= canUndo ? '' : ' disabled' %>>Undo the last switchover</button></div></header>
+    <div class="cf-rows">
+        <% if (!history.length) { %><p class="cf-list-body">No switchovers yet.</p><% } %>
+        <% history.forEach((h) => { %>
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label"><%= _status[h.status] || h.status %>, <%= _when(h.createdAt) %></p>
+            <p class="cf-row-desc"><%= h.automations %> automations, <%= h.commands %> commands and <%= h.timers %> timers turned on; <%= h.obs %> OBS changes<%= h.apps.length ? '; ' + h.apps.map((a) => (a.app === 'firebot' ? 'Firebot' : 'Streamer.bot') + (a.closed ? ' closed' : a.stillRunning ? ' still open' : ' was not running')).join(', ') : '' %><%= h.undoneAt ? '. Undone ' + _when(h.undoneAt) : '' %>.</p></div></div>
+        <% }) %>
+    </div>
+</section>
+
+<script src="/js/stream-bot-switchover.js" defer></script>
+<%- include('_foot') %>

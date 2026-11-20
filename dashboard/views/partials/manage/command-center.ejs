@@ -85,7 +85,7 @@
                 <div class="cf-row cf-row--switch">
                     <div class="cf-row-text">
                         <label class="cf-row-label" for="ccAllowMention">Respond to @mentions</label>
-                        <p class="cf-row-desc" id="ccAllowMention-desc">Members can type <code>@<%= guild.name %> play &lt;url&gt;</code>.</p>
+                        <p class="cf-row-desc" id="ccAllowMention-desc">Members can type <code>@<%= (guild.members && guild.members.me && guild.members.me.displayName) || 'CertiFried Utility' %> play &lt;url&gt;</code>.</p>
                     </div>
                     <div class="cf-row-control">
                         <input type="checkbox" class="cf-switch" role="switch" id="ccAllowMention" aria-describedby="ccAllowMention-desc">

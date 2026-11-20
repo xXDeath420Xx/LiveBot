@@ -19,7 +19,7 @@
 import express from 'express';
 import logger from '../../../../utils/logger.js';
 import {
-    listAllowlist, listSeen, addAllow, removeAllow, listManagers, addManager, removeManager,
+    listAllowlist, listSeen, addAllow, removeAllow, listManagers, addManager, removeManager, listGlobalBanAllowed,
     pause, resume, getPause, liveConfigAccess, protectionsOverview,
 } from '../../../../core/protection-exempt.js';
 import { parseDuration, canEditManagers, MAX_ALLOWLIST, MAX_MANAGER_ROLES } from '../../../../core/protection-exempt-logic.js';
@@ -76,9 +76,9 @@ async function userRow(guild, id) {
 router.get('/', async (req, res) => {
     const guild = req.guildObject;
     try {
-        const [allow, held, managers, paused, overview, actor] = await Promise.all([
+        const [allow, held, managers, paused, overview, actor, globalBan] = await Promise.all([
             listAllowlist(guild.id), listSeen(guild.id), listManagers(guild.id), getPause(guild.id),
-            protectionsOverview(guild.id), actorFor(req)]);
+            protectionsOverview(guild.id), actorFor(req), listGlobalBanAllowed(guild.id).catch(() => [])]);
         const allowRoleIds = new Set(allow.filter(r => r.kind === 'role').map(r => r.target_id));
         const meta = (r) => ({ addedBy: r.added_by, addedAt: r.added_at, note: r.note ?? null });
         res.json({
@@ -93,6 +93,12 @@ router.get('/', async (req, res) => {
                 return { ...u, ...meta(r), lockedByRole: heldRole ? roleRow(guild, heldRole) : null };
             })),
             roles: allow.filter(r => r.kind === 'role').map(r => ({ ...roleRow(guild, r.target_id), ...meta(r) })),
+            // Global ban appeals this server accepted for itself: past the global ban only (migration 471)
+            globalBan: await Promise.all(globalBan.map(async r => {
+                const u = await userRow(guild, r.target_id);
+                delete u.roleIds;
+                return { ...u, ...meta(r) };
+            })),
             bots: await Promise.all(allow.filter(r => r.kind === 'bot').map(async r => {
                 // Resolve the bot's displayable info best-effort. Many trusted bots won't be
                 // currently in-cache, so we fall back to just the id when fetch fails.
@@ -176,7 +182,7 @@ router.post('/allowlist', async (req, res) => {
 
 router.delete('/allowlist/:kind/:id', async (req, res) => {
     const { kind, id } = req.params;
-    if (!['user', 'role', 'bot'].includes(kind) || !SNOWFLAKE.test(id)) return res.status(400).json({ error: 'Bad request.' });
+    if (!['user', 'role', 'bot', 'globalban'].includes(kind) || !SNOWFLAKE.test(id)) return res.status(400).json({ error: 'Bad request.' });
     if (!(await writer(req, res))) return;
     try {
         const out = await removeAllow(req.guildObject, kind, id, req.user.id);

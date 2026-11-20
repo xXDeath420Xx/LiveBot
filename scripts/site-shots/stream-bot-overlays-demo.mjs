@@ -14,12 +14,14 @@ import { pathToFileURL } from 'node:url';
 
 export const OVERLAY_SHOT_IDS = Object.freeze(['stream-bot-overlays', 'stream-bot-overlay-alerts', 'stream-bot-overlay-live']);
 
-export async function overlayDemo({ root }) {
+/** youtube: draw the pages as they look once YouTube is set up on the server (its alerts and chat choice; design §13.10). */
+export async function overlayDemo({ root, youtube = false }) {
     const imp = (rel) => import(pathToFileURL(path.join(root, rel)).href);
     const [route, cfg, svcMod] = await Promise.all([
         imp('dashboard/routes/stream-bot-overlays.js'), imp('core/stream-bot/overlays/config.js'), imp('core/stream-bot/overlays/service.js'),
     ]);
-    const { overlayView, mediaView, FORM } = route;
+    const { overlayView, mediaView, formFor } = route;
+    const form = formFor(youtube ? { GOOGLE_OAUTH_CLIENT_ID: 'demo', GOOGLE_OAUTH_CLIENT_SECRET: 'demo' } : {});
     const at = (h, m) => new Date(Date.UTC(2026, 10, 18, h, m)).toISOString();
     const alertsCfg = cfg.withDefaults('alerts', {
         general: { fontSize: 46, plate: 'soft', position: 'center' },
@@ -49,19 +51,28 @@ export async function overlayDemo({ root }) {
 
     const list = {
         template: 'stream-bot/overlays',
-        locals: { user, ready: true, profile: { id: 7, displayName: 'Juniper' }, overlays: rows.map((o) => overlayView(o, status)), media: media.map(mediaView), form: FORM,
+        locals: { user, ready: true, profile: { id: 7, displayName: 'Juniper' }, overlays: rows.map((o) => overlayView(o, status)), media: media.map(mediaView), form,
             mediaLimits: (await imp('core/stream-bot/overlays/media.js')).MEDIA_LIMITS, usedBytes: media.reduce((n, m) => n + m.size, 0), studioOnline: true },
+    };
+    // A scene screen and a styled now-playing card, so their settings pages and OBS pages show real choices.
+    const shaped = {
+        scene: cfg.withDefaults('scene', {
+            title: 'Starting soon', subtitle: 'Grab a drink, the stream starts shortly', titleStyle: 'shimmer', titleColor: '#e8a33d', glowColor: '#ff7a1a', font: 'georgia',
+            background: '0f1e2d3c4b5a6978', glows: [{ x: 30, y: 60, size: 5, color: '#ffb256', style: 'lantern' }], embers: 30, rain: 40, lightning: true, fog: 60, vignette: 70, grain: 5,
+            countdown: { enabled: true, minutes: 5, label: 'Starting in', endText: 'Starting now' }, socials: 'twitch.tv/maplehollow · kick.com/maplehollow',
+        }),
+        nowplaying: cfg.withDefaults('nowplaying', { position: 'center', width: 450, titleSize: 19, background: 'cover', barColor: '#ffffff', showTimes: true, showArt: false }),
     };
     const extra = (type) => {
         if (rows.some((r) => r.type === type)) return rows.find((r) => r.type === type);
-        return { id: 20 + cfg.OVERLAY_TYPES.findIndex((t) => t.type === type), type, name: cfg.overlayType(type).label, keyHint: 'zZ00', config: cfg.defaultConfig(type), state: {}, lastSeenAt: null };
+        return { id: 20 + cfg.OVERLAY_TYPES.findIndex((t) => t.type === type), type, name: cfg.overlayType(type).label, keyHint: 'zZ00', config: shaped[type] || cfg.defaultConfig(type), state: {}, lastSeenAt: null };
     };
     const edit = (type, { previewSrc = '' } = {}) => {
         const o = extra(type);
         return {
             template: 'stream-bot/overlay-edit',
             locals: {
-                user, profile: { id: 7 }, overlay: overlayView(o, status), config: o.config, state: o.state, url: urlFor(o), form: FORM, media: media.map(mediaView), sounds,
+                user, profile: { id: 7 }, overlay: overlayView(o, status), config: o.config, state: o.state, url: urlFor(o), form, media: media.map(mediaView), sounds,
                 voices: [{ value: 'ryan', label: 'Ryan (medium, male) · US English' }, { value: 'amy', label: 'Amy (medium, female) · US English' }],
                 editData: JSON.stringify({ id: o.id, type: o.type, config: o.config }).replace(/</g, '\\u003c'), previewSrc,
             },
@@ -91,6 +102,7 @@ export async function overlayDemo({ root }) {
             case 'nowplaying': return [hello(o, { now: { title: 'Golden Hour', artist: 'Maple Hollow Band', thumbnail: null, requester: 'Juniper', durationMs: 200000, positionMs: 62000, paused: false } })];
             case 'canvas': return [hello(o), ['action', { id: 'd_000000000000000000000000', action: 'overlay.text', params: { text: 'Deaths: 13', position: 'top-right', size: 'large', durationMs: 60000, animation: 'pop' } }],
                 ['action', { id: 'd_111111111111111111111111', action: 'overlay.media', params: { media: { kind: 'image', src: 'media/0f1e2d3c4b5a6978' }, position: 'bottom-right', size: 'small', durationMs: 60000, volume: 0, animation: 'fade' } }]];
+            case 'scene': return [hello(o, { media: { '0f1e2d3c4b5a6978': 'image' } })];
             default: return [hello(o)];
         }
     };

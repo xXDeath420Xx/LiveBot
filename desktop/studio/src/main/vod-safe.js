@@ -6,7 +6,14 @@
  * (AdvOut VodTrackEnabled / VodTrackIndex) that becomes the VOD's audio. A source left off the VOD track is heard live
  * but is missing from the VOD.
  *
- * What Studio enforces (always on; the owner asked for it to be forced):
+ * Only for streamers who use song requests (0.2.6, owner decision): the server says so in automations.list
+ * (`songRequests`: an enabled automation runs a song request command) and Studio passes it in with setEnforced(). While it
+ * is off Studio creates no music source, changes no VOD track, profile setting or source track, and the minute timer does
+ * not run; status() still lists the sources on the VOD track that sound like music and the Desktop Audio warning, as
+ * information. A music source made earlier is left in place (removeSource() takes it out on the person's click; never on
+ * its own). Turned on: enforcement starts at once and the fail-closed rule below applies.
+ *
+ * What Studio enforces while song requests are on:
  *   - Music plays only through one OBS browser source, "CertiFried Music" (found again by its input UUID, so renaming
  *     it is fine), with "Control audio via OBS" (reroute_audio) so it never touches Windows desktop audio, monitored
  *     ("Monitor and Output") so the streamer hears it, and referenced in every scene so it plays whatever scene is live.
@@ -22,10 +29,14 @@
  *     silently change the stream's bitrate. Studio explains the steps and keeps music paused.
  * The person's other sources are reported, never changed, except by their own click on "Keep out of VOD".
  *
- *   createVodSafe({ obs, logger, getSettings, saveSettings, backupProfile, getMusicUrl, now })
- *     ensure(why)              run the checks and fixes; resolves to status()
- *     prepare()                ensure('song'); throws code vod_unsafe when music must not play
- *     status()                 { vodSafe, reason, mode, vodTrack, liveTrack, live, sourceReady, sourceName, warnings[], desktopWarning, recordWithoutMusic, checkedAt }
+ *   createVodSafe({ obs, logger, getSettings, saveSettings, backupProfile, getMusicUrl, now, enforced })
+ *     ensure(why)              run the checks and fixes (only checks while not enforced); resolves to status()
+ *     prepare()                ensure('song'); throws code vod_unsafe when music must not play (always while not enforced)
+ *     setEnforced(on)          song requests on or off (from the server); a change runs ensure() at once
+ *     enforced()               the current setting
+ *     removeSource()           remove the CertiFried Music source Studio made, on the person's click, while not enforced
+ *     status()                 { vodSafe, enforced, reason, mode, vodTrack, liveTrack, live, sourceReady, sourceExists, sourceName, warnings[],
+ *                                desktopWarning, recordWithoutMusic, checkedAt }
  *     keepOutOfVod(inputName)  one source, on the person's click
  *     setRecordWithoutMusic(on) recording tracks = the VOD track only (on), or back to what they were (off); idle only
  *     onObsEvent(type, data)   feed OBS events in
@@ -37,6 +48,7 @@ const MUSICY = /\b(bgm|music|song|songs|spotify|soundcloud|sound ?alerts?|blerp|
 const AUDIO_KINDS = /^(wasapi_|ffmpeg_source|vlc_source|browser_source|coreaudio|pulse_|alsa_|jack_|dshow_input|app_audio_capture|wasapi_process_output_capture)/;
 const REASONS = {
     obs_off: 'Music is paused: Studio is not connected to OBS.',
+    not_used: 'Song requests are off, so Studio leaves your OBS audio tracks alone. Music protection turns on when a song request command is switched on.',
     simple_mode: 'Music is paused: OBS uses Simple output, which has no VOD track. In OBS open Settings, Output, set Output Mode to Advanced, then on the Streaming tab tick Twitch VOD Track and pick a track other than the streaming track.',
     live_unprotected: 'Music is paused: VOD protection is not active in OBS. It turns on at the next stream start.',
     no_backup: 'Music is paused: Studio could not back up the OBS profile, so it did not change it.',
@@ -46,8 +58,9 @@ const REASONS = {
 
 function fail(code, message) { const e = new Error(message); e.code = code; return e; }
 
-function createVodSafe({ obs, logger = null, getSettings = () => ({}), saveSettings = () => {}, backupProfile = async () => null, getMusicUrl = async () => null, now = () => Date.now() }) {
-    let st = { vodSafe: false, reason: REASONS.obs_off, mode: null, vodTrack: null, liveTrack: null, live: false, sourceReady: false, sourceName: MUSIC_NAME, warnings: [], desktopWarning: false, recordWithoutMusic: false, checkedAt: null, changes: [] };
+function createVodSafe({ obs, logger = null, getSettings = () => ({}), saveSettings = () => {}, backupProfile = async () => null, getMusicUrl = async () => null, now = () => Date.now(), enforced: startEnforced = true }) {
+    let enforcing = startEnforced !== false;
+    let st = { vodSafe: false, enforced: enforcing, reason: REASONS.obs_off, mode: null, vodTrack: null, liveTrack: null, live: false, sourceReady: false, sourceExists: false, sourceName: MUSIC_NAME, warnings: [], desktopWarning: false, recordWithoutMusic: false, checkedAt: null, changes: [] };
     let running = null;
     let again = false;
     const listeners = new Set();
@@ -58,7 +71,7 @@ function createVodSafe({ obs, logger = null, getSettings = () => ({}), saveSetti
     };
 
     function set(next) {
-        st = { ...st, ...next, checkedAt: now() };
+        st = { ...st, ...next, enforced: enforcing, checkedAt: now() };
         for (const fn of listeners) { try { fn(st); } catch { /* ignore */ } }
     }
 
@@ -130,9 +143,33 @@ function createVodSafe({ obs, logger = null, getSettings = () => ({}), saveSetti
         return { warnings, desktopWarning };
     }
 
+    /** The music source Studio made earlier (by its UUID, else by name), without creating anything. */
+    async function findSource() {
+        const settings = getSettings();
+        const inputs = (await call('GetInputList')).inputs || [];
+        return (settings.sourceUuid ? inputs.find((i) => i.inputUuid === settings.sourceUuid) : null)
+            || inputs.find((i) => i.inputName === MUSIC_NAME && /browser_source/.test(i.inputKind || '')) || null;
+    }
+
+    /** Song requests off: read only. Nothing in OBS is created or changed. */
+    async function inform() {
+        const { live } = await isLive();
+        const mode = await param('Output', 'Mode');
+        const vodOn = (await param('AdvOut', 'VodTrackEnabled')).toLowerCase() === 'true';
+        const liveTrack = Number(await param('AdvOut', 'TrackIndex')) || 1;
+        const vodTrack = mode === 'Advanced' && vodOn ? (Number(await param('AdvOut', 'VodTrackIndex')) || null) : null;
+        const source = await findSource().catch(() => null);
+        const others = vodTrack ? await scanOthers(source?.inputName || MUSIC_NAME, vodTrack).catch(() => ({ warnings: [], desktopWarning: false })) : { warnings: [], desktopWarning: false };
+        set({ vodSafe: false, reason: REASONS.not_used, mode, vodTrack, liveTrack: mode === 'Advanced' ? liveTrack : null, live, sourceReady: false,
+            sourceExists: !!source, sourceName: source?.inputName || MUSIC_NAME, warnings: others.warnings, desktopWarning: others.desktopWarning,
+            recordWithoutMusic: !!getSettings().recordWithoutMusic });
+        return st;
+    }
+
     async function run(why) {
-        if (!obs.connected) { set({ vodSafe: false, reason: REASONS.obs_off, sourceReady: false }); return st; }
+        if (!obs.connected) { set({ vodSafe: false, reason: enforcing ? REASONS.obs_off : REASONS.not_used, sourceReady: false }); return st; }
         st.changes = [];
+        if (!enforcing) return inform();
         const { live } = await isLive();
         let mode = await param('Output', 'Mode');
         let vodOn = (await param('AdvOut', 'VodTrackEnabled')).toLowerCase() === 'true';
@@ -171,7 +208,7 @@ function createVodSafe({ obs, logger = null, getSettings = () => ({}), saveSetti
         const others = await scanOthers(source.name, vodTrack).catch(() => ({ warnings: [], desktopWarning: false }));
         set({
             vodSafe: tracksOk, reason: tracksOk ? null : REASONS.tracks_failed, mode, vodTrack, liveTrack, live,
-            sourceReady: true, sourceName: source.name, warnings: others.warnings, desktopWarning: others.desktopWarning,
+            sourceReady: true, sourceExists: true, sourceName: source.name, warnings: others.warnings, desktopWarning: others.desktopWarning,
             recordWithoutMusic: !!getSettings().recordWithoutMusic,
         });
         if (st.changes.length) log('info', 'VOD-safe changes', { changes: st.changes, why });
@@ -204,7 +241,26 @@ function createVodSafe({ obs, logger = null, getSettings = () => ({}), saveSetti
 
     return {
         ensure,
+        enforced: () => enforcing,
+        setEnforced(on) {
+            const next = on !== false;
+            if (next === enforcing) return false;
+            enforcing = next;
+            log('info', next ? 'song requests on: VOD protection enforced' : 'song requests off: OBS left alone', {});
+            ensure(next ? 'song requests on' : 'song requests off').catch(() => {});
+            return true;
+        },
+        async removeSource() {
+            if (enforcing) throw fail('in_use', 'Song requests are on, so the music source is needed.');
+            const input = await findSource();
+            if (!input) { saveSettings({ sourceUuid: null }); return ensure('source gone'); }
+            await call('RemoveInput', input.inputUuid ? { inputUuid: input.inputUuid } : { inputName: input.inputName });
+            saveSettings({ sourceUuid: null });
+            log('info', 'music source removed at the person' + "'" + 's request', {});
+            return ensure('source removed');
+        },
         async prepare() {
+            if (!enforcing) throw fail('vod_unsafe', REASONS.not_used);
             const s = await ensure('song');
             if (!s.vodSafe) throw fail('vod_unsafe', s.reason || REASONS.live_unprotected);
             return { vodSafe: true, vodTrack: s.vodTrack, source: s.sourceName };

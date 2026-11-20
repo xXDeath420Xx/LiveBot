@@ -9,7 +9,8 @@ import {
     THEMES, AUTO_THEME_SCRIPT, themeMode, parseUiOptions, nextHiddenChecklists, setPreferences, DEFAULTS,
 } from '../core/user-preferences.js';
 import { parseHex, contrast, accentTokens, serverAccentCss, MODE_SURFACES } from '../core/accent-tint.js';
-import { BASICS, PROTECTIONS, buildChecklist } from '../core/setup-checklist.js';
+import { RECOMMENDED, BASICS, PROTECTIONS, buildChecklist } from '../core/setup-checklist.js';
+import { getGuide } from '../dashboard/content/guides/index.js';
 import { PROTECTION_GRID } from '../core/security-overview-logic.js';
 import { RELATED, relatedPages, buildManageNav } from '../core/manage-nav.js';
 import { extractFields, parsePageMap, buildIndex, cleanText, includesIn, getSettingsIndex } from '../core/settings-index.js';
@@ -177,8 +178,12 @@ test('setup checklist: counts what is known, links each missing step', () => {
         grid: grid({ raid: true, antiNuke: false, spammer: true, phishing: false, globalBan: null, verification: true }),
         basics: { modLog: true, serverLog: false, welcome: null, automod: false },
     });
-    // globalBan and welcome are unknown: left out, not counted as missing.
-    assert.deepEqual(out.items.map((i) => i.key), ['modLog', 'serverLog', 'automod', 'verification', 'raid', 'antiNuke', 'spammer', 'phishing']);
+    // globalBan, selfbot, welcome and tickets are unknown: left out, not counted as missing. The recommended
+    // steps come first, in their own order, then the other basics, then the other protections.
+    assert.deepEqual(out.items.map((i) => i.key), ['serverLog', 'raid', 'phishing', 'modLog', 'automod', 'verification', 'antiNuke', 'spammer']);
+    assert.deepEqual(out.items.map((i) => i.kind), ['recommended', 'recommended', 'recommended', 'setup', 'setup', 'protection', 'protection', 'protection']);
+    assert.equal(out.items.find((i) => i.key === 'raid').guide, 'raid-protection');
+    assert.equal(out.items.find((i) => i.key === 'modLog').guide, null);
     assert.equal(out.total, 8);
     assert.equal(out.done, 4);
     assert.equal(out.percent, 50);
@@ -187,14 +192,27 @@ test('setup checklist: counts what is known, links each missing step', () => {
     assert.deepEqual([anti.page, anti.field, anti.kind], ['security', 'antiNukeEnabled', 'protection']);
     assert.equal(buildChecklist({}).total, 0);
     assert.equal(buildChecklist({}).complete, false, 'nothing known is not "complete"');
-    const all = buildChecklist({ grid: grid(Object.fromEntries(PROTECTIONS.map((p) => [p.key, true]))), basics: { modLog: true, serverLog: true, welcome: true, automod: true } });
+    const all = buildChecklist({ grid: grid(Object.fromEntries([...PROTECTIONS, ...RECOMMENDED].map((p) => [p.key, true]))), basics: { modLog: true, serverLog: true, welcome: true, automod: true, tickets: true } });
     assert.equal(all.complete, true);
-    assert.equal(all.total, BASICS.length + PROTECTIONS.length);
+    assert.equal(all.total, RECOMMENDED.length + BASICS.length + PROTECTIONS.length);
+});
+
+test('setup checklist: the recommended steps keep the order from the onboarding data, each with a guide', () => {
+    // docs/onboarding-checklist-2026-11-20.md: most often set up in the first week, among the features whose
+    // first-week servers were more often still active after 30 days.
+    assert.deepEqual(RECOMMENDED.map((r) => r.key), ['welcome', 'serverLog', 'raid', 'phishing', 'selfbot', 'globalBan', 'tickets']);
+    for (const r of RECOMMENDED) {
+        assert.ok(getGuide(r.guide), `${r.key}: guide ${r.guide} exists`);
+        if (r.from === 'grid') assert.ok(PROTECTION_GRID.some((g) => g.key === r.key), `${r.key}: is a security grid row`);
+    }
+    const keys = [...RECOMMENDED, ...BASICS, ...PROTECTIONS].map((r) => r.key);
+    assert.equal(new Set(keys).size, keys.length, 'no step twice');
 });
 
 test('setup checklist: every step points at a real page and a field that exists on it', () => {
     const pageMap = new Map(parsePageMap(read('dashboard/views/manage-tailwind.ejs')).map((e) => [e.page, e.partial]));
-    const steps = [...BASICS, ...PROTECTIONS.map((p) => ({ ...p, page: PROTECTION_GRID.find((g) => g.key === p.key).page }))];
+    const gridPage = (p) => ({ ...p, page: PROTECTION_GRID.find((g) => g.key === p.key).page });
+    const steps = [...RECOMMENDED.map((r) => (r.from === 'grid' ? gridPage(r) : r)), ...BASICS, ...PROTECTIONS.map(gridPage)];
     for (const s of steps) {
         assert.ok(navPages.has(s.page), `${s.key}: page ${s.page} exists`);
         assert.ok(s.label.length <= 60 && s.why.length <= 90 && !/!/.test(s.label + s.why), `${s.key}: plain, short copy`);

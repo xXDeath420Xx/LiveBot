@@ -55,7 +55,8 @@ const VAR_PROVIDERS = [];
 const EXTRA = Object.freeze({ has: (n) => BASE_EXTRA.has(n) || REGISTERED_VARS.has(n) || /^args\.[a-z0-9_]{1,32}$/.test(n) });
 /**
  * Registration hook for feature modules (core/stream-bot/music/register.js): plain variable names (lower case), their
- * descriptions for the editor, and values({ ev, profileId }) → { name: value } read synchronously at render time.
+ * descriptions for the editor, and values({ ev, profileId, template }) → { name: value } (or a promise of it) at render time.
+ * A provider that reads the database looks at `template` and returns {} unless the text uses one of its names.
  */
 export function registerTemplateVars({ names = [], vars = [], values } = {}) {
     if (typeof values !== 'function') return false;
@@ -106,7 +107,7 @@ export function createRenderer({ variableStore, fetcher = null, onError = () => 
     return async function render(template, { ev, profileId, automationId = 0, channelName = '', vars = null, stream = null } = {}) {
         if (!template) return '';
         const values = templateValues(ev, { channelName });
-        for (const p of VAR_PROVIDERS) { try { Object.assign(values, p({ ev, profileId }) || {}); } catch { /* a feature's values never break a run */ } }
+        for (const p of VAR_PROVIDERS) { try { Object.assign(values, (await p({ ev, profileId, template: String(template) })) || {}); } catch { /* a feature's values never break a run */ } }
         // Unset outputs and arguments render empty rather than as the literal token.
         for (const k of ['clip.url', 'clip.id', 'poll.id', 'prediction.id']) values[k] = '';
         for (const [k, v] of Object.entries(vars || {})) values[String(k).toLowerCase()] = String(v ?? '');

@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import RAWGAPIService from '../../../utils/services/rawg-api.js';
+import { withAchievement } from '../../../core/achievement-hooks.js';
 
 const rawgAPI = new RAWGAPIService();
 
@@ -38,7 +39,7 @@ export async function execute(interaction) {
                     });
                 });
 
-                return interaction.editReply({ embeds: [embed] });
+                return withAchievement(interaction, 'game_info', await interaction.editReply({ embeds: [embed] }));
 
             } catch (error) {
                 console.error('[Game Command - Search Error]', error);
@@ -78,7 +79,7 @@ export async function execute(interaction) {
                     embed.setImage(formatted.image);
                 }
 
-                return interaction.editReply({ embeds: [embed] });
+                return withAchievement(interaction, 'game_info', await interaction.editReply({ embeds: [embed] }));
 
             } catch (error) {
                 console.error('[Game Command - Info Error]', error);

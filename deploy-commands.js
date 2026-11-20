@@ -10,6 +10,7 @@ import { localizeCommands } from './utils/command-localization.js';
 // (core/command-registration.js). Pushing raw module JSON skipped both and went over Discord's 100 cap.
 import { buildDeployJson } from './core/command-mounts.js';
 import { fitSlashLimit } from './core/custom-bot-commands.js';
+import { withEntryPoint } from './utils/entry-point-command.js';
 
 dotenv.config();
 
@@ -80,7 +81,8 @@ async function deployCommands() {
       // Native Discord localization: names/descriptions render in each user's
       // own client language at no runtime cost. Applied at the payload level so
       // no command file has to know it exists.
-      { body: localizeCommands(commands) }   // already mounted and filtered above
+      // already mounted and filtered above; keeps the Discord Activity's Entry Point command (utils/entry-point-command.js)
+      { body: await withEntryPoint(rest, process.env.DISCORD_CLIENT_ID, localizeCommands(commands)) }
     );
 
     logger.info(`[Deploy] Successfully reloaded ${data.length} application (/) commands.`);

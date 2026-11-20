@@ -15,7 +15,7 @@ import { handleTimeMessage } from '../core/timezone-manager.js';
 import { handleCatMessage } from '../core/catbot/spawn-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import { handlePrefixCommand } from '../core/prefix-command-manager.js';
-import { handleOwoNaturalPrefix } from '../core/owo-natural-prefix.js';
+import { handleOwoNaturalPrefix } from '../core/critters-natural-prefix.js';
 import { handleSelfPromoMessage, checkAnnounceChannelGate } from '../core/self-promo-handler.js';
 import { enforceChannelPostRules } from '../core/channel-post-rules.js';
 import { handleStaffLiveForward } from '../core/staff-live-forward.js';
@@ -222,7 +222,7 @@ export default {
       // After the bot / custom-bot-guild checks above, so exactly one client relays each message.
       if (await handleModmailStaffMessage(message)) return;
 
-      // OwO's own `owo` prefix (`owoh`, `owo hunt`, `owolb all`) + the silent
+      // The critters game's natural `owo` prefix (`owoh`, `owo hunt`, `owo zoo`) + the silent
       // owo/uwu point counter. Only consumes the message if a command actually ran.
       if (await handleOwoNaturalPrefix(message)) return;
 
@@ -302,6 +302,11 @@ export default {
       }
       if (!autoResponseManager && message.client) {
         autoResponseManager = new AutoResponseManager(message.client);
+      }
+      // dashboard/routes/api/features/autoresponders.js clears the cache through client.autoResponseManager,
+      // so a saved auto-response answers at once instead of after the 60 s cache (H-805).
+      if (autoResponseManager && message.client && !message.client.autoResponseManager) {
+        message.client.autoResponseManager = autoResponseManager;
       }
 
       // Log message activity for stats tracking
@@ -572,7 +577,15 @@ export default {
           const isLivePromotion = LIVE_PROMOTION_PATTERNS.some(pattern => pattern.test(message.content))
             && STREAM_PROMO_CONTEXT.test(message.content);
 
-          if (isLivePromotion) {
+          // The Self-promo page's switch (H-811, migration 469): a missing row or column means on.
+          const livePromoFilterOn = !isLivePromotion ? false : await configCache.get('live_promo_filter', message.guild.id, async () => {
+            try {
+              const [[row]] = await pool.execute('SELECT * FROM self_promo_config WHERE guild_id = ?', [message.guild.id]);
+              return !(row && (row.live_promo_filter === 0 || row.live_promo_filter === false));
+            } catch { return true; }
+          });
+
+          if (isLivePromotion && livePromoFilterOn) {
             // Check if this is a designated self-promo channel (by name)
             // Normalize Unicode (small caps, bold math, etc.) so fancy channel names still match
             const channelName = normalizeUnicode(message.channel.name || '');
@@ -639,7 +652,8 @@ export default {
                 guildId: message.guild.id,
                 userId: message.author.id
               });
-              return; // Message was handled by self-bot detection
+              // Keep going: in Alert only mode the message is still up, and the scam-image, phishing and link
+              // checks below must still see it (returning here let a self-bot's phishing link stay posted).
             }
           } catch (error) {
             logger.error('[MessageCreate] Error in self-bot detection', {
@@ -822,7 +836,7 @@ export default {
             message.guild.id,
             'night_owl',
             1,
-            { completed: true }
+            { value: 1, completed: true }
           );
         }
       }

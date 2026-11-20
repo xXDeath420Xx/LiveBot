@@ -48,6 +48,7 @@
  * Grep the WHOLE dashboard/ tree, not just partials — server.js does most config queries.
  */
 import { LANGUAGES as EVIL_INSULT_LANGUAGES } from './evil-insults.js';
+import { jellyfinLibraryOptions } from './activities/watch/library-options.js';
 
 /**
  * @typedef {Object} Field
@@ -564,11 +565,18 @@ export const FEATURE_SPECS = {
         colour: 'blue',
         blurb: 'Shared movie playback in a voice channel',
         commands: ['/watch'],
+        note: 'What a server plays is that server\'s responsibility: show only films and shows you have the right to show to the people in your server. Watch Together streams from the CertiFried film library through certifriedmultitool.com, a few films at a time across all servers. See the Watch Together guide in the docs.',
         storage: { kind: 'table', table: 'cinema_config', key: 'guild_id' },
         fields: [
             { key: 'enabled', label: 'Cinema', type: 'toggle', default: 0, hint: 'Needed for /watch (also typed as /movie): while it is off nothing can be played. The Watch party page has a second switch for the same command.' },
             { key: 'control_role_id', label: 'Playback control role', type: 'role', hint: 'Can control any film playing, not only one they started.' },
             { key: 'default_vc_id', label: 'Default voice channel', type: 'channel', channelKind: 'voice', hint: 'Used when the person starting a film is not in a voice channel.' },
+            // Discord Activities (docs/activities.md, migration 467)
+            { key: 'watch_mode', label: 'How films play', type: 'select', default: 'stream',
+              options: [{ value: 'stream', label: 'Go Live stream in the voice channel' }, { value: 'activity', label: 'Watch Together (Discord Activity)' }],
+              hint: 'Watch Together opens in the voice channel as a Discord Activity: everyone watches in sync, joins part-way at the right moment, picks their own subtitles, and the host controls playback. /movie play then opens it.' },
+            { key: 'jellyfin_library_id', label: 'Library', type: 'select', get options() { return jellyfinLibraryOptions(); },
+              hint: 'Which library this server watches from. Every video library is the whole collection.' },
         ],
     },
 

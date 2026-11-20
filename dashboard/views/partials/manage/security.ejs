@@ -125,7 +125,7 @@
                 </div>
                 <div class="cf-row-control">
                     <select id="f-security-alert_channel_id-2" class="form-select" name="alert_channel_id" aria-describedby="f-security-alert_channel_id-2-desc">
-                        <option value="">No alerts (use logging settings)</option>
+                        <option value="">No alert channel (anti-nuke posts no alerts)</option>
                         <% secText.forEach(ch => { %>
                         <option value="<%= ch.id %>" data-kind="text" <%= antiNukeConfig && antiNukeConfig.alert_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
                         <% }); %>

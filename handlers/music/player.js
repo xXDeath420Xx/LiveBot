@@ -80,6 +80,22 @@ async function noticeSpotifyBusy(queue, userId) {
   }
 }
 
+/**
+ * The stopHolder this queue hands to acquire(): it runs when the owner takes the shared account for another server.
+ * It tells THIS queue's channel and ends THIS queue (core/spotify-connect-manager.js calls the bumped holder's own
+ * stop, H-760). The session already belongs to the owner, so nothing here touches it: the queueDelete tidy-up's
+ * releaseGuild() only frees a session this guild still holds.
+ */
+export function spotifyBumpedStop(queue) {
+  return async () => {
+    try {
+      const ch = queue.metadata?.channelId && await queue.guild.client.channels.fetch(queue.metadata.channelId).catch(() => null);
+      ch?.send?.('⏸️ The owner started Spotify on the shared account — **`/spotify link`** your own to keep playing here.').catch(() => {});
+    } catch {}
+    try { queue.delete(); } catch {}
+  };
+}
+
 async function spotifyConnectStreamInner(track, _queryType, queue) {
   try {
     const uri = track.metadata?.spotifyUri || uriFromUrl(track.url);
@@ -88,13 +104,7 @@ async function spotifyConnectStreamInner(track, _queryType, queue) {
     if (!session) return null;
     const owner = isOwnerUser(track.requestedBy?.id);
     // owner preempts a non-owner on the shared account; non-owner yields → YouTube fallback
-    const stopHolder = async () => {
-      try {
-        const ch = queue.metadata?.channelId && await queue.guild.client.channels.fetch(queue.metadata.channelId).catch(() => null);
-        ch?.send?.('⏸️ The owner started Spotify on the shared account — **`/spotify link`** your own to keep playing here.').catch(() => {});
-      } catch {}
-      try { queue.delete(); } catch {}
-    };
+    const stopHolder = spotifyBumpedStop(queue);
     if (!acquire(session, queue.guild.id, { owner, stopHolder })) {
       logger.info(`[SpotifyConnect] account busy in guild ${session.busyGuildId} — "${track.title}" bridges to YouTube in ${queue.guild.id}`);
       noticeSpotifyBusy(queue, track.requestedBy?.id).catch(() => {});

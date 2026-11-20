@@ -66,9 +66,16 @@ test('every guide image is in the manifest and on disk, with alt text and a size
 });
 
 test('screenshots stay under the size budget', () => {
+    // A page loads only its own guide's pictures (and card thumbnails), so the limit that matters is per picture;
+    // the folder total grows with the guides (52 on 2026-11-20, about 6.4 MB) and is capped at 180 KB a guide.
     const dir = path.join(pub, 'img/guides');
     const total = fs.readdirSync(dir).reduce((n, f) => n + fs.statSync(path.join(dir, f)).size, 0);
-    assert.ok(total < 6.5 * 1024 * 1024, `img/guides is ${(total / 1048576).toFixed(2)} MB`);
+    assert.ok(total < GUIDES.length * 180 * 1024, `img/guides is ${(total / 1048576).toFixed(2)} MB for ${GUIDES.length} guides`);
+    for (const im of manifest.images) {
+        const bytes = fs.statSync(path.join(dir, im.file)).size;
+        assert.ok(bytes < 260 * 1024, `${im.file} is ${(bytes / 1024).toFixed(0)} KB`);
+        if (im.thumb) assert.ok(fs.statSync(path.join(dir, im.thumb.file)).size < 90 * 1024, `${im.thumb.file} is under 90 KB`);
+    }
 });
 
 test('guides do not offer retired or unsupported platforms', () => {

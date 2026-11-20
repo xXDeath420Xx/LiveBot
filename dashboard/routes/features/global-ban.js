@@ -123,6 +123,10 @@ router.get('/:guildId/global-ban/entries', ensureAuth, ensureGuildPerms, async (
         const { page = 1, limit = 25, severity, category, search } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
+        // Never the reporter's id or name, or the server that reported: the page promises other servers never
+        // see who reported someone (the reporting moderator and server stay private).
+        const COLUMNS = 'id, user_id, username, severity, category, reason, evidence, source, ban_count, verified, active, '
+            + 'appealed, appeal_approved, created_at, updated_at, expires_at, confidence, signal_guilds';
         let query = 'SELECT * FROM global_ban_entries WHERE active = 1';
         const params = [];
 
@@ -143,7 +147,7 @@ router.get('/:guildId/global-ban/entries', ensureAuth, ensureGuildPerms, async (
         const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total');
         const [countResult] = await pool.execute(countQuery, params);
 
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        query = query.replace('SELECT *', `SELECT ${COLUMNS}`) + ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
         params.push(parseInt(limit), offset);
 
         const [entries] = await pool.execute(query, params);

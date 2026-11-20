@@ -9,6 +9,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { PermissionFlagsBits } from 'discord.js';
 
+// Fix wave 7: the commands imported below open the real DB pool; close it so the file exits on its own.
+test.after(async () => { const { default: pool } = await import('../utils/db.js'); await pool.end().catch(() => {}); });
+
 const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 const exists = (f) => fs.existsSync(new URL(`../${f}`, import.meta.url));
 

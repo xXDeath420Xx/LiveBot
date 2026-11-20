@@ -5,10 +5,12 @@
  *
  *   createIo({ store, hub, ingest, logger })        → { sendChat, postDiscord, postWebhook, dispatch, channelsFor }
  *   linkableChannels(db, ownerId, profileId, store) → channels the user proved they own through OAuth
- *   connectionHealth(db, store, profile)            → per channel: grants, EventSub / Kick webhook state, coverage
+ *   connectionHealth(db, store, profile)            → per channel: grants, EventSub / Kick webhook state, coverage, and
+ *                                                     for Kick the channel bot sign-in (kickBot: kick-scopes.js kickBotStatus)
  */
 import { postWebhook } from './webhook-out.js';
 import { coverage } from './scopes.js';
+import { kickBotStatus, kickBotProblem, kickBotSignInUrl } from './kick-scopes.js';
 
 const CHANNEL_CACHE_MS = 30_000;
 const ACCESS_CACHE_MS = 5 * 60_000;
@@ -39,9 +41,14 @@ export function createIo({ store, hub, ingest = null, logger = null }) {
         }
         if (platform === 'kick') {
             const { sendChannelMessage } = await import('../../jobs/kick-timer-scheduler.js');
+            const { resolveChannel } = await import('../../services/certifried-bot/defender/channel-tokens.js');
+            // The Kick channel bot sign-in (not the identity-only "Sign in with Kick" that linked the channel).
+            const ch = await resolveChannel(String(channelId)).catch(() => null);
+            const problem = kickBotProblem(ch, 'chat:write');
+            if (problem) return { ok: false, error: problem.message };
             ingest?.noteSent('kick', channelId, msg);
-            const ok = await sendChannelMessage(String(channelId), msg).catch(() => false);
-            return ok ? { ok: true } : { ok: false, error: 'Kick chat needs Kick Defender turned on for this channel' };
+            const ok = await sendChannelMessage(String(channelId), msg, { resolveChannel: async () => ch }).catch(() => false);
+            return ok ? { ok: true } : { ok: false, error: `Kick did not accept the chat message. If this keeps happening, sign in to Kick again: ${kickBotSignInUrl()}` };
         }
         return { ok: false, error: `no chat on ${platform}` };
     }
@@ -95,8 +102,8 @@ export async function linkableChannels(db, ownerId, profileId, store) {
         for (const r of rows) add('twitch', r.twitch_user_id, r.twitch_username, 'twitch_oauth_accounts', 'Linked Twitch account');
     } catch { /* table missing */ }
     try {
-        const [rows] = await db.query("SELECT platform, platform_user_id, platform_username FROM stream_platform_accounts WHERE owner_discord_id = ? AND platform IN ('twitch', 'kick') AND status = 'active'", [String(ownerId)]);
-        for (const r of rows) add(r.platform, r.platform_user_id, r.platform_username, 'stream_platform_accounts', r.platform === 'kick' ? 'Kick sign-in' : 'Multicast Twitch connection');
+        const [rows] = await db.query("SELECT platform, platform_user_id, platform_username FROM stream_platform_accounts WHERE owner_discord_id = ? AND platform IN ('twitch', 'kick', 'youtube') AND status = 'active'", [String(ownerId)]);
+        for (const r of rows) add(r.platform, r.platform_user_id, r.platform_username, 'stream_platform_accounts', ({ kick: 'Kick sign-in', youtube: 'YouTube sign-in' })[r.platform] || 'Multicast Twitch connection');
     } catch { /* table missing */ }
     return out;
 }
@@ -147,7 +154,29 @@ export async function connectionHealth(db, store, profile) {
                 const [rows] = await db.query("SELECT defender_enabled FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? AND is_enabled = 1", [String(c.platform_user_id)]);
                 chatSend = !!rows[0]?.defender_enabled;
             } catch { /* table missing */ }
-            out.push({ channel: c, platform: 'kick', webhook, lastChatAt: lastChat ? new Date(lastChat) : null, chatSend, ok: webhook.known ? webhook.missing?.length === 0 : false });
+            // The Kick channel bot sign-in the stream bot's Kick actions use: the same join as defender/channel-tokens.js
+            // resolveChannel, without its defender_enabled filter so the page can say when Kick Defender is off.
+            let kickBot = null;
+            try {
+                const [rows] = await db.query(`SELECT c.defender_enabled, pc.scopes, pc.needs_relink, (pc.access_token IS NOT NULL AND pc.access_token <> '') AS has_token
+                    FROM tokes_channels c JOIN tokes_platform_connections pc ON pc.id = c.connection_id
+                    WHERE c.platform = 'kick' AND c.channel_id = ? ORDER BY c.defender_enabled DESC, pc.id DESC LIMIT 1`, [String(c.platform_user_id)]);
+                const r = rows[0];
+                kickBot = kickBotStatus(r ? { hasToken: !!Number(r.has_token), needsRelink: !!Number(r.needs_relink), defenderEnabled: !!Number(r.defender_enabled), scopes: r.scopes } : null);
+            } catch { /* tables missing: the page says it could not check */ }
+            out.push({ channel: c, platform: 'kick', webhook, lastChatAt: lastChat ? new Date(lastChat) : null, chatSend, kickBot, ok: webhook.known ? webhook.missing?.length === 0 : false });
+        } else if (c.platform === 'youtube') {
+            // YouTube Live (H-741): the sign-in on file for this channel (stream_platform_accounts). Live and chat state come from
+            // the YouTube service (core/stream-bot/youtube), which the Connections route adds.
+            let signIn = 'unknown';
+            let scopes = [];
+            try {
+                const [rows] = await db.query("SELECT platform_user_id, status, scopes FROM stream_platform_accounts WHERE owner_discord_id = ? AND platform = 'youtube' LIMIT 1", [String(profile.ownerDiscordId)]);
+                const a = rows[0];
+                scopes = String(a?.scopes || '').split(/[\s,]+/).filter(Boolean);
+                signIn = !a ? 'missing' : String(a.platform_user_id) !== String(c.platform_user_id) ? 'other_channel' : a.status !== 'active' ? 'needs_reconnect' : 'ok';
+            } catch { /* table missing */ }
+            out.push({ channel: c, platform: 'youtube', youtube: { signIn, scopes }, ok: signIn === 'ok' });
         }
     }
     return out;

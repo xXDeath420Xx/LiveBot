@@ -23,7 +23,7 @@ export const GAPS = Object.freeze({
     'chat.slash': g('Chat moderation command typed as a message (/clear, /ban, /timeout …)', '4', 'Twitch no longer runs slash commands sent by bots; they need the moderation API.'),
     'chat.clear': g('Clear chat', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
     'chat.delete': g('Delete a chat message', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
-    'mod.timeout': g('Time out or ban a viewer', '4', 'Needs the moderation API.'),
+    'mod.timeout': g('Time out or ban a viewer', '4', 'On YouTube: Time out or Ban the viewer who triggered this (design doc section 13). On Twitch it needs the moderation API scope, which the Stream bot grant does not ask for.'),
     'stream.clip': g('Create a clip', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
     'stream.title': g('Change the stream title', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
     'stream.category': g('Change the stream category', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
@@ -37,7 +37,7 @@ export const GAPS = Object.freeze({
     'web.request': g('HTTP request other than an HTTPS POST', '4', 'The webhook action only sends an HTTPS POST to an allow-listed host.'),
     'discord.webhook': g('Post through a Discord webhook URL', '4', 'Use the Post in Discord action instead; webhook URLs are credentials and are never imported.'),
     'tts.speak': g('Text to speech', '2b', 'CertiFried Studio does not speak text yet.'),
-    'currency.change': g('Viewer currency / loyalty points', '6', 'Stream loyalty points are not built.'),
+    'currency.change': g('Viewer currency / loyalty points', 'done', 'Viewers and points (design doc section 11): a change for one viewer becomes Give, Take or Set points.'),
     'quotes': g('Stream quotes (!quote)', '4', 'Quotes on Twitch and Kick are not built; Discord quotes are a separate feature.'),
     'variable.argument': g('Temporary arguments inside an action', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
     'obs.transform': g('Move, resize or rotate an OBS source', '2b', 'Studio has no transform action yet.'),
@@ -45,6 +45,10 @@ export const GAPS = Object.freeze({
     'code': g('Run custom code (C#, JavaScript)', 'never', 'CertiFried never runs code from an import.'),
     'spotify': g('Spotify song requests and playback', 'done', 'Imported as song requests: Streamer.bot Spotify extension commands become the song request commands of the Music page (design doc §8).'),
     'sound.folder': g('Play a random sound from a folder', '2b', 'Studio plays one named sound.'),
+    'light.effect': g('Light effect animations (Hue colour loop)', '-', 'CertiFried has light scenes and effects that the light itself offers (Start a light scene or effect), flash and pulse; a colour loop of its own is not built.'),
+    'light.hue_scene': g('Philips Hue scene chosen by Hue\'s internal id', 'importer', 'Firebot keeps the scene\'s id, not its name; add a "Start a light scene or effect" step and pick the bridge and scene.'),
+    'lumia.command': g('Lumia Stream command', '-', 'Lumia commands run Lumia\'s own setups; rebuild them with the Lights actions or a light preset.'),
+    'lumia.default': g('Lumia Stream "set to default"', 'importer', 'Make a light preset with your normal lighting and add "Apply a light preset".'),
     'unknown.effect': g('Effect or sub-action of a type the importer does not know', '-', 'Listed with its type so it can be added.'),
     // ── triggers ──
     'trigger.speech': g('Speech-to-text voice commands', 'done', 'Available: CertiFried Studio voice commands (trigger voice.phrase, Studio 0.2.4); imported as those.'),
@@ -54,7 +58,8 @@ export const GAPS = Object.freeze({
     'trigger.viewer_arrived': g('Viewer arrived / present viewers', '4', 'The engine does not track who is watching.'),
     'trigger.timed': g('Timed actions (run an action list on a timer)', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
     'trigger.hotkey': g('Hotkey that runs an action list', '2b', 'Studio runs an automation from a hotkey you set in Studio; imported hotkeys are listed, not bound.'),
-    'trigger.youtube': g('YouTube events', '6', 'YouTube Live is Phase 6.'),
+    'trigger.youtube': g('YouTube events', 'done', 'YouTube Live is built (design doc section 13): chat, first words, Super Chats, Super Stickers, Jewels, memberships, milestones, gifted memberships, going live and ending are imported as stream bot triggers.'),
+    'trigger.youtube_other': g('YouTube trigger with no CertiFried equivalent', '-', 'Deleted messages, bans and time-outs by others, members-only mode, statistics, broadcast changes, polls, present viewers, new channel subscribers and 7TV / BetterTTV emote changes have no YouTube trigger in CertiFried.'),
     'trigger.other': g('Trigger with no CertiFried equivalent', '-', 'Listed with its name so it can be added.'),
     'trigger.test': g('Manual "test" trigger', '-', 'Use the automation\'s Test button instead.'),
     // ── commands and timers ──
@@ -73,7 +78,9 @@ export const GAPS = Object.freeze({
     'moderation.urls': g('Link moderation with an allow-list', '4', 'Kick automod blocks all links; there is no per-domain allow-list.'),
     'moderation.emotes': g('Emote limit', '4', 'Not built.'),
     'rewards.manage': g('Create and edit channel point rewards from CertiFried', '4', 'Rewards made by Firebot or Streamer.bot can only be edited by them (Twitch rule); CertiFried can recreate them.'),
-    'viewer.watchtime': g('Watch time and viewer stats', '4', 'No watch-time tracking for stream viewers.'),
+    'viewer.watchtime': g('Watch time and viewer stats', 'done', 'Viewers (design doc section 11): tick Viewer stats to bring watch time, messages and points over.'),
+    'currency.bulk': g('Points for everyone online or a whole role at once', '4', 'Points steps change one viewer: the one behind the event or one named.'),
+    'currency.cost': g('Commands that cost points', '4', 'Add a "Has at least N points" condition and a "Take points from a viewer" step to the automation by hand.'),
 });
 
 export const gapInfo = (key) => GAPS[key] || GAPS['unknown.effect'];
@@ -82,7 +89,7 @@ export const gapInfo = (key) => GAPS[key] || GAPS['unknown.effect'];
 export const INTEGRATIONS = Object.freeze({
     twitch: { label: 'Twitch', todo: 'Connect Twitch on Stream bot → Connections (Stream bot grant).', have: true },
     kick: { label: 'Kick', todo: 'Link your Kick channel on Stream bot → Connections.', have: true },
-    youtube: { label: 'YouTube', todo: 'Not available yet (Phase 6).', have: false },
+    youtube: { label: 'YouTube', todo: 'Link YouTube on Stream bot → Connections (once YouTube is set up on this server): chat, Super Chats and memberships then reach your automations.', have: true },
     obs: { label: 'OBS', todo: 'Install CertiFried Studio and enter the OBS websocket host and port below; type the password into Studio yourself.', have: true },
     streamelements: { label: 'StreamElements', todo: 'Add StreamElements as a tip source on Stream bot → Connections.', have: true },
     streamlabs: { label: 'Streamlabs', todo: 'Add Streamlabs as a tip source on Stream bot → Connections.', have: true },
@@ -95,9 +102,9 @@ export const INTEGRATIONS = Object.freeze({
     hyperate: { label: 'HypeRate', todo: 'Not available yet (heart-rate overlay, Phase 3).', have: false },
     voicemod: { label: 'Voicemod', todo: 'Not available yet.', have: false },
     vtubestudio: { label: 'VTube Studio', todo: 'Not available yet.', have: false },
-    streamdeck: { label: 'Stream Deck', todo: 'Planned for CertiFried Studio (Phase 2b).', have: false },
+    streamdeck: { label: 'Stream Deck', todo: 'Install the CertiFried Stream Deck plugin from CertiFried Studio (Settings, Stream Deck).', have: true },
     websocket: { label: 'Local websocket / HTTP server', todo: 'Not needed: CertiFried Studio connects to CertiFried.', have: true },
-    lumia: { label: 'Lumia Stream', todo: 'Lights arrive in Phase 5.', have: false },
+    lumia: { label: 'Lumia Stream', todo: 'Lights are built in: CertiFried Studio finds Govee, Hue, LIFX, Nanoleaf, Elgato and Litra lights, and Govee and LIFX also work through their cloud (Devices, Lights). Lumia colour and brightness steps were imported as light steps.', have: true },
     crowdcontrol: { label: 'Crowd Control', todo: 'Not available.', have: false },
     tts: { label: 'Text to speech', todo: 'Not available yet (Phase 2b).', have: false },
 });

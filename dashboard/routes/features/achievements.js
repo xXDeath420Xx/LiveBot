@@ -78,11 +78,12 @@ router.get('/manage/:guildId/achievements', async (req, res) => {
     const [topUsers] = await pool.execute(
       `SELECT
          user_id,
-         COUNT(DISTINCT achievement_id) as total_achievements,
+         COUNT(DISTINCT CASE WHEN completed = 1 THEN achievement_id END) as total_achievements,
          SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_achievements
        FROM user_achievements
        WHERE guild_id = ?
        GROUP BY user_id
+       HAVING completed_achievements > 0
        ORDER BY completed_achievements DESC
        LIMIT 50`,
       [guildId]

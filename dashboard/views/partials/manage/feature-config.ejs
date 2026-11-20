@@ -766,6 +766,15 @@ const fcSample = JSON.stringify({
                     ', so these settings are saved but have no effect until the feature is wired up.')));
         }
         if (spec.note) notices.push(el('div', { className: 'fc-notice cf-notice is-info', text: spec.note }));
+        // Notes about this server only (the API adds them; Cinema in a server run by its own bot).
+        (Array.isArray(spec.notices) ? spec.notices : []).forEach(function(n) {
+            var safeHref = n.link && /^https:\/\/discord\.com\//.test(String(n.link.href || '')) ? String(n.link.href) : null;
+            notices.push(el('div', { className: 'fc-notice cf-notice ' + (n.kind === 'warn' ? 'is-warn' : 'is-info'), role: 'note' },
+                el('div', { className: 'cf-notice-body' },
+                    n.title ? el('strong', { text: String(n.title) + ' ' }) : null,
+                    String(n.text || ''),
+                    safeHref ? el('p', { className: 'fc-notice-link' }, el('a', { href: safeHref, target: '_blank', rel: 'noopener noreferrer', text: String(n.link.text || safeHref) })) : null)));
+        });
 
         var placed = [];   // { f, node, ctl } for showIf / hideIf
         var sections = groupFields(spec).map(function(g, gi) {

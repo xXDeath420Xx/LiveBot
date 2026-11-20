@@ -6,7 +6,7 @@
  *   store.js     stream_bot_overlays and stream_bot_overlay_media
  *   media.js     the image and video library (files outside git)
  *   service.js   the live side: SSE pages, alerts, chat, event list, goals, counters, now playing, overlay actions
- *   chat.js      Twitch / Kick chat notifications → chat lines and removals (pure)
+ *   chat.js      Twitch / Kick / YouTube chat notifications → chat lines and removals (pure)
  *   images.js    chat emotes and badges served from this server
  *   actions.js   Show text on stream, Show an image or video on stream, Change a goal
  *   http.js      the overlay key and the SSE helper
@@ -19,6 +19,8 @@
  *                                      templates rendered, dry run, "Needs an overlay", queueing, the dispatch row)
  *       feed.publish                   every published event also reaches the overlays (alerts, lists, goals, counters)
  *       ingest.twitch / ingest.kick    chat with badges and emotes, and deletions and bans, before normalisation
+ *       ingest.youtubeRaw              YouTube chat lines, Super Chats, deletions and bans (youtube/service.js hands every
+ *                                      liveChatMessage over before normalising it; nothing arrives until YouTube is set up)
  *       hub.use({ onRequest })         CertiFried Studio's 'overlays.list'; every other method goes where it went before
  *     and registers the overlay actions with actions.js registerActionType().
  */
@@ -28,7 +30,7 @@ import { createOverlayService } from './service.js';
 import { createMediaLibrary } from './media.js';
 import { createImageProxy } from './images.js';
 import { registerOverlayActions } from './actions.js';
-import { twitchChat, kickChat } from './chat.js';
+import { twitchChat, kickChat, youtubeChat } from './chat.js';
 
 /** Read a sentence aloud with CertiFried's Piper voices (utils/piper-tts.js) → WAV bytes. */
 export function piperSynthesizer(logger = null) {
@@ -77,6 +79,11 @@ export async function attachOverlays(box, { onRequest = null } = {}) {
     ingest.kick = (eventType, event) => {
         try { const r = kickChat(eventType, event); if (r) service.onChat('kick', r).catch(() => {}); } catch { /* chat overlay is best effort */ }
         return kk(eventType, event);
+    };
+    const yt = ingest.youtubeRaw;
+    ingest.youtubeRaw = (item, channelId) => {
+        try { const r = youtubeChat(item, channelId); if (r) service.onChat('youtube', r).catch(() => {}); } catch { /* chat overlay is best effort */ }
+        return typeof yt === 'function' ? yt(item, channelId) : undefined;
     };
 
     if (onRequest) {

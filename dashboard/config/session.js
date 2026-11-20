@@ -19,11 +19,14 @@ class MySQLSessionStore extends session.Store {
      * Start periodic cleanup of expired sessions
      */
     startCleanup() {
-        setInterval(() => {
+        // unref (H-821): the sweep must not keep a process alive on its own. The store is built when this module is
+        // imported, so a test or script that imports a route using it never exited; the dashboard server keeps running.
+        this.cleanupTimer = setInterval(() => {
             this.cleanup().catch(err => {
                 logger.error('[SessionStore] Cleanup error', { error: err.message });
             });
         }, this.cleanupInterval);
+        this.cleanupTimer.unref?.();
     }
 
     /**

@@ -7,7 +7,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-async function captureAll(win, dir, { themes = ['dark', 'light', 'sand'], tabs = ['status', 'activity', 'sounds', 'hotkeys', 'settings'], wait = 700 } = {}) {
+async function captureAll(win, dir, { themes = ['dark', 'light', 'sand'], tabs = ['status', 'activity', 'sounds', 'hotkeys', 'lights', 'audio', 'settings'], wait = 700 } = {}) {
     fs.mkdirSync(dir, { recursive: true });
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const files = [];

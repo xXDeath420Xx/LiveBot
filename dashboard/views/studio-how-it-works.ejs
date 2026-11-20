@@ -40,6 +40,9 @@
                     <li><a href="#voice-commands">Voice commands</a></li>
                     <li><a href="#docks-and-theme">Docks, theme and setup</a></li>
                     <li><a href="#overlays">Overlays</a></li>
+                    <li><a href="#lights">Lights</a></li>
+                    <li><a href="#voicemeeter">Voicemeeter</a></li>
+                    <li><a href="#stream-deck">Stream Deck</a></li>
                     <li><a href="#changes-to-obs">What Studio changes in OBS</a></li>
                     <li><a href="#offline">When something is offline</a></li>
                     <li><a href="#updates">Updates and checksums</a></li>
@@ -59,6 +62,10 @@
                         <tr><td>Voice command recognition</td><td data-label="Where">Studio, with the speech recognition built into Windows</td></tr>
                         <tr><td>Song request audio</td><td data-label="Where">Found by CertiFried's music service and streamed to the CertiFried Music browser source in OBS</td></tr>
                         <tr><td>Docks in OBS</td><td data-label="Where">Pages on certifriedmultitool.com, opened by OBS with a dock key</td></tr>
+                        <tr><td>Lights on your network (Govee LAN, Philips Hue, LIFX, Nanoleaf, Elgato) and Logitech Litra on USB</td><td data-label="Where">Studio, on your network and USB</td></tr>
+                        <tr><td>Govee and LIFX through their cloud, with your own key</td><td data-label="Where">CertiFried server (no Studio needed)</td></tr>
+                        <tr><td>Voicemeeter strips, buses, settings files and Macro Buttons</td><td data-label="Where">Studio, through Voicemeeter's Remote API on your PC</td></tr>
+                        <tr><td>Stream Deck keys</td><td data-label="Where">The CertiFried plugin in the Stream Deck app, talking to Studio on 127.0.0.1</td></tr>
                     </tbody>
                 </table></div>
                 <p>Studio holds no automations of its own. It asks the server for your automation list (for hotkeys and buttons) and your voice phrases, and it tells the server what your OBS looks like so the editor can suggest scene and source names.</p>
@@ -72,13 +79,14 @@
                 <p>Either way Studio receives a device token. Studio keeps it encrypted on your PC; the server keeps only a hash of it, so the token cannot be read back from our database. The device shows on the Devices page under the name Studio gives it (<code><%= _f.deviceName %></code> unless you choose another). <strong>Revoke</strong> there stops it at once. <strong>Unpair this PC</strong> in Studio deletes the token from your PC; revoke it on the dashboard as well.</p>
 
                 <h2 id="vod-safe-music">VOD-safe music</h2>
-                <p>Song requests must not end up in your saved Twitch VODs. With OBS's Advanced output, Twitch receives the live mix plus a separate VOD track that becomes the VOD's audio. Studio keeps the music off that track:</p>
+                <p>Song requests must not end up in your saved Twitch VODs. With OBS's Advanced output, Twitch receives the live mix plus a separate VOD track that becomes the VOD's audio. While a song request command is switched on in your automations, Studio keeps the music off that track:</p>
                 <ul>
                     <li>Music plays only through one OBS browser source, <strong>CertiFried Music</strong>, set to be controlled by OBS (so it never goes through Windows desktop audio) and monitored so you hear it.</li>
                     <li>Its audio goes on every track except the VOD track. Studio checks this when OBS connects, when scenes or profiles change, every minute, and right before every song.</li>
                     <li>If the VOD track is off, Studio turns it on while you are neither streaming nor recording, after copying your OBS profile file.</li>
                     <li>If you are live and protection is not active, music stays paused. Chat is told requests are paused.</li>
                 </ul>
+                <p>When no song request command is on, Studio changes nothing in OBS for music: no source, no VOD track, no tracks. It still lists audio sources on your VOD track that look like music, and warns about Desktop Audio, for your information. If you switch song requests off after the CertiFried Music source was made, the source stays where it is (Studio stops looking after it) and Studio offers a Remove the CertiFried Music source button; it never removes it by itself. Switch song requests on and protection starts at once.</p>
                 <p>This is best effort, and some things it cannot cover. <strong>Twitch clips</strong> are cut from the live stream, so they contain the music. <strong>Kick</strong> has no VOD track, so music Kick receives live is in Kick's VODs (with the obs-multi-rtmp plugin you can give the Kick output its own audio track without music). <strong>Local recordings</strong> include the music unless you turn on Record without music in Studio. Other audio on the VOD track, such as Desktop Audio or another sound alert tool, is reported in Studio but never changed unless you click <strong>Keep out of VOD</strong>.</p>
 
                 <h2 id="voice-commands">Voice commands</h2>
@@ -93,10 +101,20 @@
                 </ul>
 
                 <h2 id="overlays">Overlays</h2>
-                <p>Alerts, goals, event lists and chat overlays are being built as OBS browser sources. They will connect to the same engine as Studio, each with its own key, and nothing about viewers is stored by them: alerts and chat are sent live.</p>
+                <p>Alerts, goals, event lists, counters, now playing and chat overlays are OBS browser sources on certifriedmultitool.com, each with its own key. Studio can add them to the scene on air for you (Set up OBS). Nothing about viewers is stored by them: alerts and chat are sent live.</p>
+
+                <h2 id="lights">Lights</h2>
+                <p>In Studio, open Lights and choose Find lights. Only then does Studio search your network: Govee's LAN discovery (switch on LAN control for each light in the Govee Home app), mDNS for Philips Hue bridges, Nanoleaf panels and Elgato Key Lights and Light Strips, and LIFX's LAN broadcast; Logitech Litra Glow, Beam and Beam LX are found over USB. After that it looks again each time it starts. A Hue bridge is paired by pressing its button, a Nanoleaf by holding its power button; the token stays on your PC. Studio talks to a Hue bridge over HTTPS and remembers the bridge's certificate the first time, refusing a bridge that later shows a different one. It uses the bridge's normal API, not the Entertainment streaming mode.</p>
+                <p>Automations can set a colour or white, change brightness, turn lights on or off, start a scene or effect the light offers, flash or pulse and then put the light back as it was, take a colour from a variable (such as a viewer's <code>!color red</code>), and apply a light preset you made on the Devices page. Govee and LIFX lights can also work through their makers' cloud with your own key, added on the Devices page; the CertiFried server uses it within the makers' rate limits, without Studio.</p>
+
+                <h2 id="voicemeeter">Voicemeeter</h2>
+                <p>Off until you turn it on under Audio. Studio then uses Voicemeeter's own Remote API (VoicemeeterRemote64.dll from your Voicemeeter install) to mute and unmute strips and buses, set or change their gain with an optional fade, load a settings file you saved in Documents\Voicemeeter, and press Macro Buttons. It never starts Voicemeeter and loads only files from that folder.</p>
+
+                <h2 id="stream-deck">Stream Deck</h2>
+                <p>Turn on Stream Deck in Studio's Settings, then install the CertiFried plugin from there (or from the download page). Its keys run an automation, switch scene, show or hide a source, mute an input, change a counter, play a sound or apply a light preset, and show the scene on air, mute state, source state and counter value. The plugin talks only to Studio on the same PC (127.0.0.1), with a token Studio shows you; Studio refuses connections from web pages.</p>
 
                 <h2 id="changes-to-obs">What Studio changes in OBS</h2>
-                <p>Without asking, only what VOD-safe music needs: Studio adds the CertiFried Music browser source to your scenes, sets its audio tracks, and turns on the Twitch VOD track in your OBS profile while you are offline (after copying the profile file to <code>basic.ini.certifried-backup-&lt;time&gt;</code>). Everything else, docks, the theme, starter scenes, the WebSocket settings, recording tracks and your other sources, changes only when you click.</p>
+                <p>Without asking, only what VOD-safe music needs, and only while a song request command is switched on: Studio adds the CertiFried Music browser source to your scenes, sets its audio tracks, and turns on the Twitch VOD track in your OBS profile while you are offline (after copying the profile file to <code>basic.ini.certifried-backup-&lt;time&gt;</code>). Streamers who do not use song requests get no change at all. Everything else, docks, the theme, starter scenes, overlays, the WebSocket settings, recording tracks, removing the music source and your other sources, changes only when you click.</p>
 
                 <h2 id="offline">When something is offline</h2>
                 <ul>

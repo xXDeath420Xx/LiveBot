@@ -354,10 +354,15 @@ export async function handleMessage(message) {
             const [[economyConfig]] = await pool.execute(
                 'SELECT enabled FROM economy_config WHERE guild_id = ?', [message.guild.id]);
             if (economyConfig && economyConfig.enabled) {
-                await pool.execute(
+                // A member who never used the economy has no row: make it, so they are paid like everyone (H-807).
+                await pool.execute('INSERT IGNORE INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)',
+                    [message.guild.id, message.author.id]);
+                const [paid] = await pool.execute(
                     'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
                     [number, number, message.guild.id, message.author.id]);
-                await message.channel.send(`💰 ${message.author} earned **${number} coins** for reaching the milestone!`).catch(() => {});
+                if (paid?.affectedRows > 0) {
+                    await message.channel.send(`💰 ${message.author} earned **${number} coins** for reaching the milestone!`).catch(() => {});
+                }
             }
         } catch { /* economy not set up */ }
 

@@ -58,11 +58,31 @@
         o.textContent = a.name + (a.enabled ? '' : ' (off)');
         fields.automation.appendChild(o);
     });
-    // Only offer the platforms that are linked.
+    // Only offer the platforms that are linked ('everywhere' needs YouTube linked; 'all' is Twitch and Kick).
     var linked = D.linkedPlatforms || [];
     Array.prototype.forEach.call(fields.where.options, function (o) {
-        if (o.value !== 'all' && linked.indexOf(o.value) < 0) o.disabled = true;
+        var need = o.value === 'everywhere' ? 'youtube' : o.value;
+        if (o.value !== 'all' && linked.indexOf(need) < 0) o.disabled = true;
     });
+
+    // YouTube quota note (only on the page once YouTube is set up): what this timer would spend an hour.
+    var ytNote = $('sb-t-yt-quota');
+    var ytRate = $('sb-t-yt-rate');
+    function syncQuota() {
+        if (!ytNote || !D.youtube) return;
+        var onYouTube = fields.where.value === 'youtube' || fields.where.value === 'everywhere';
+        ytNote.hidden = !onYouTube || whereRow.hidden;
+        var every = Number(fields.interval.value);
+        if (!ytRate) return;
+        if (onYouTube && every >= 1 && every <= 1440 && Math.floor(every) === every) {
+            var perHour = Math.round(D.youtube.sendUnits * 60 / every);
+            ytRate.textContent = 'Every ' + (every === 1 ? 'minute' : every + ' minutes') + ', this timer uses about ' + perHour + ' units an hour while you are live.';
+        } else {
+            ytRate.textContent = '';
+        }
+    }
+    fields.where.addEventListener('change', syncQuota);
+    fields.interval.addEventListener('input', syncQuota);
 
     function syncAutomation() {
         var on = !!fields.automation.value;
@@ -93,6 +113,7 @@
         whereRow.hidden = kickPage;
         autoRow.hidden = kickPage;
         syncAutomation();
+        syncQuota();
         showErrors([]);
         setStatus($('sb-t-status'), '');
         editor.hidden = false;

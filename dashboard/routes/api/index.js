@@ -47,7 +47,7 @@ import serverTransferRoutes from './features/server-transfer.js';
 import twitchSchedulesRoutes from './features/twitch-schedules.js';
 import inviteFilterRoutes from './features/invite-filter.js';
 import feedsRoutes from './features/feeds.js';
-import owoRoutes from './features/owo.js';
+import owoRoutes from './features/critters.js';
 import fourthwallRoutes from './features/fourthwall.js';
 import channelAccessRoutes from './features/channel-access.js';
 import liveStyleRoutes from './features/live-style.js';

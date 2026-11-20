@@ -731,6 +731,10 @@ const stCanGive = Object.fromEntries(stRoles.map(r => [r.id, r.assignable]));
                                     <option value="keep" <%= streamEndVal === 'keep' ? 'selected' : '' %>>Keep it as it is</option>
                                 </select>
                             </div>
+                            <div class="cf-field">
+                                <label for="at-minlevel-<%= config.auto_id %>">Minimum level</label>
+                                <input type="number" id="at-minlevel-<%= config.auto_id %>" class="form-control" min="0" max="500" value="<%= Number(config.min_level) || 0 %>">
+                            </div>
                         </div>
                     </div>
                     <% }); %>
@@ -775,6 +779,11 @@ const stCanGive = Object.fromEntries(stRoles.map(r => [r.id, r.assignable]));
                                     <option value="edit">Edit it to "stream ended"</option>
                                     <option value="keep">Keep it as it is</option>
                                 </select>
+                            </div>
+                            <div class="cf-field">
+                                <label for="f-streaming-min_level">Minimum level</label>
+                                <input type="number" id="f-streaming-min_level" name="min_level" class="form-control" min="0" max="500" value="0">
+                                <span class="cf-field-hint">Members are only tracked once they reach this level. 0 tracks everyone.</span>
                             </div>
                         </div>
                     </div>
@@ -2815,7 +2824,8 @@ document.getElementById('at-add-form')?.addEventListener('submit', async (e) => 
         announcement_channel_id: e.target.announcement_channel_id.value,
         live_role_id: e.target.live_role_id.value || null,
         delete_on_end: streamEnd.delete_on_end,
-        edit_on_end: streamEnd.edit_on_end
+        edit_on_end: streamEnd.edit_on_end,
+        min_level: Number(e.target.min_level.value) || 0
     };
     if (!body.announcement_channel_id) {
         atShowStatus('Please select a channel.', 'error');
@@ -2852,7 +2862,8 @@ async function atEdit(autoId) {
             announcement_channel_id: document.getElementById(`at-channel-${autoId}`).value,
             live_role_id: document.getElementById(`at-liverole-${autoId}`).value || null,
             delete_on_end: streamEnd.delete_on_end,
-            edit_on_end: streamEnd.edit_on_end
+            edit_on_end: streamEnd.edit_on_end,
+            min_level: Number(document.getElementById(`at-minlevel-${autoId}`)?.value) || 0
         };
         const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}`, {
             method: 'PATCH',

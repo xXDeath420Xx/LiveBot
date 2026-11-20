@@ -15,6 +15,7 @@ const PAGES = Object.freeze({
     download: `${SITE}/downloads/studio`,
     guide: `${SITE}/docs/guides/stream-bot`,
     devices: `${SITE}/stream/bot/devices`,
+    devicesLights: `${SITE}/stream/bot/devices#lights`,
     overlays: `${SITE}/stream/bot/overlays`,
     studio: `${SITE}/studio`,
     howItWorks: `${SITE}/studio/how-it-works`,
@@ -38,4 +39,7 @@ const PATHS = Object.freeze({
     deviceSound: '/stream/bot/api/device/sounds/:id',
 });
 
-module.exports = { SITE, PAGES, SOURCE, FEED, PATHS };
+// The Stream Deck plugin file bundled with Studio (resources\streamdeck; desktop/streamdeck-plugin builds it).
+const SD_PLUGIN_FILE = 'com.certifried.studio.streamDeckPlugin';
+
+module.exports = { SITE, PAGES, SOURCE, FEED, PATHS, SD_PLUGIN_FILE };

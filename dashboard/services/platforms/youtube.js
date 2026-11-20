@@ -7,11 +7,14 @@ const REDIRECT_URI = `${BASE_URL}/stream/connect/youtube/callback`;
 const SCOPE = 'https://www.googleapis.com/auth/youtube';
 const API = 'https://www.googleapis.com/youtube/v3';
 
-export function getAuthUrl(state) {
+// opts.scope: the stream bot's "Link YouTube" asks for youtube.force-ssl only (core/stream-bot/youtube/config.js BOT_SCOPES, H-741).
+// opts.codeChallenge: PKCE (S256), which stream-connect.js sends for every platform; handleCallback sends the verifier.
+export function getAuthUrl(state, opts = {}) {
   const params = new URLSearchParams({
-    client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: SCOPE,
+    client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: opts.scope || SCOPE,
     access_type: 'offline', prompt: 'consent', state,
   });
+  if (opts.codeChallenge) { params.set('code_challenge', opts.codeChallenge); params.set('code_challenge_method', 'S256'); }
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
@@ -19,18 +22,19 @@ export async function handleCallback(code, opts = {}) {
   const fetchFn = opts.fetchFn || fetch;
   const res = await fetchFn('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI }),
+    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI,
+      ...(opts.codeVerifier ? { code_verifier: opts.codeVerifier } : {}) }),
   });
   const tokens = await res.json();
   if (!tokens.access_token) throw new Error('youtube token exchange failed');
-  let username = 'youtube', platformUserId = null;
+  let username = 'youtube', platformUserId = null, handle = null;
   try {
     const ch = await fetchFn(`${API}/channels?part=snippet&mine=true`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
     const c = (await ch.json()).items?.[0];
-    if (c) { username = c.snippet?.title || 'youtube'; platformUserId = c.id; }
+    if (c) { username = c.snippet?.title || 'youtube'; platformUserId = c.id; handle = String(c.snippet?.customUrl || '').replace(/^@/, '').toLowerCase() || null; }
   } catch { /* best effort */ }
   tokens.expires_at = tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null;
-  return { platformUserId, username, tokens };
+  return { platformUserId, username, tokens, handle };
 }
 
 async function refreshAccessToken(account, fetchFn) {

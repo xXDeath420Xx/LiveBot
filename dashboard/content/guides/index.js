@@ -32,8 +32,43 @@ import schedules from './schedules.js';
 import community from './community.js';
 import kickDefender from './kick-defender.js';
 import greenhouse from './greenhouse.js';
+import watchTogether from './watch-together.js';
 import privacy from './privacy.js';
 import streamBot from './stream-bot.js';
+import commands from './commands.js';
+import antiNukeJoinGate from './anti-nuke-join-gate.js';
+import scamLinks from './scam-links.js';
+import spamFilters from './spam-filters.js';
+import globalBan from './global-ban.js';
+import verification from './verification.js';
+import quarantineNameAvatar from './quarantine-name-avatar.js';
+import nsfwProtection from './nsfw-protection.js';
+import streamAlertOptions from './stream-alert-options.js';
+import twitchTools from './twitch-tools.js';
+import selfPromo from './self-promo.js';
+import supporterAlerts from './supporter-alerts.js';
+import studio from './studio.js';
+import orientation from './orientation.js';
+import rolesTools from './roles-tools.js';
+import achievements from './achievements.js';
+import giveawaysPolls from './giveaways-polls.js';
+import confessionsQotd from './confessions-qotd.js';
+import voiceChannels from './voice-channels.js';
+import aiAssistant from './ai-assistant.js';
+import chatGames from './chat-games.js';
+import collectingGames from './collecting-games.js';
+import critters from './critters.js';
+import customBot from './custom-bot.js';
+import announcements from './announcements.js';
+import gameNews from './game-news.js';
+import serverStats from './server-stats.js';
+import customCommands from './custom-commands.js';
+import discordEvents from './discord-events.js';
+import backups from './backups.js';
+import replaceBots from './replace-bots.js';
+import taskLists from './task-lists.js';
+import remindersUtilities from './reminders-utilities.js';
+import weatherTimezones from './weather-timezones.js';
 
 /** Docs hub sections (the feature areas on /docs), in page order. */
 export const AREAS = Object.freeze([
@@ -43,13 +78,30 @@ export const AREAS = Object.freeze([
     { id: 'community', title: 'Levels, roles and community' },
     { id: 'music', title: 'Music and voice' },
     { id: 'games', title: 'Games and economy' },
+    { id: 'tools', title: 'Server tools and automation' },
     { id: 'kick', title: 'Kick Defender' },
     { id: 'privacy', title: 'Your data' },
 ]);
 
 const ORDER = [
-    gettingStarted, moderation, raidProtection, supportTickets, goLiveAlerts, socialFeeds, schedules, streamBot,
-    levels, welcome, reactionRoles, community, music, economy, greenhouse, kickDefender, privacy,
+    // start
+    gettingStarted, commands,
+    // moderation
+    moderation, raidProtection, antiNukeJoinGate, scamLinks, spamFilters, globalBan, verification, quarantineNameAvatar, nsfwProtection, supportTickets,
+    // streams
+    goLiveAlerts, streamAlertOptions, twitchTools, socialFeeds, schedules, selfPromo, supporterAlerts, streamBot, studio,
+    // community
+    welcome, orientation, reactionRoles, levels, rolesTools, community, achievements, giveawaysPolls, confessionsQotd,
+    // music
+    music, watchTogether, voiceChannels, aiAssistant,
+    // games
+    economy, chatGames, collectingGames, critters, greenhouse,
+    // tools
+    customBot, announcements, gameNews, serverStats, customCommands, discordEvents, backups, replaceBots, taskLists, remindersUtilities, weatherTimezones,
+    // kick
+    kickDefender,
+    // privacy
+    privacy,
 ];
 
 export const GUIDES = Object.freeze(ORDER.map((g) => Object.freeze(g)));

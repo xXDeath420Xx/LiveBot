@@ -53,7 +53,7 @@ export default {
                     .addChoices(...SLUG_CHOICES)))
         .addSubcommand(sub =>
             sub.setName('pin')
-                .setDescription('Pin a live countdown message in a channel (edits daily, no re-post spam)')
+                .setDescription('Pin a live countdown message in a channel (edited about every 6 hours, never re-posted)')
                 .addStringOption(o => o.setName('holiday')
                     .setDescription('Which holiday')
                     .setRequired(true)

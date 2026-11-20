@@ -16,12 +16,14 @@ export async function handleDaily(interaction) {
     }
 
     if (interaction.client.achievementManager) {
-        if (result.streak >= 7) {
+        // Completes on a 30-day streak (H-808): progress is cumulative, so it is only added once the streak
+        // itself reaches 30 (adding the streak from day 7 on completed it at about 10 days).
+        if (result.streak >= 30) {
             await interaction.client.achievementManager.trackAchievement(
                 interaction.user.id,
                 interaction.guild.id,
                 'daily_dedication',
-                result.streak
+                30
             );
         }
     }

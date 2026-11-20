@@ -217,7 +217,13 @@ test('the router acks every obs action; OBS gone → obs_not_connected; unknown 
     const bad = await router.run('obs.scene', { scene: 'Nope' });
     assert.equal(bad.ok, false);
     assert.match(bad.error, /^scene_not_found/);
-    assert.deepEqual(await router.run('light.set', {}), { ok: false, error: 'not_supported_yet' });
+    // 0.2.6: light actions come through `extra` (main.js); a router without them answers unsupported_action and does not
+    // announce the light capability.
+    assert.deepEqual(await router.run('light.set', {}), { ok: false, error: 'unsupported_action' });
+    assert.deepEqual(router.capabilities(), ['obs', 'sound', 'hotkey']);
+    const withLights = createRouter({ obs, screenshotDir: shots, extra: { 'light.set': async () => ({ applied: 1 }), 'voicemeeter.mute': async () => ({ muted: true }) } });
+    assert.deepEqual(withLights.capabilities(), ['obs', 'sound', 'hotkey', 'light', 'voicemeeter']);
+    assert.deepEqual(await withLights.run('light.set', { device: '' }), { ok: true, result: { applied: 1 } });
     assert.deepEqual(await router.run('obs.teleport', {}), { ok: false, error: 'unsupported_action' });
     await router.run('obs.scene', { scene: 'Main' });
     const offline = createObs({});

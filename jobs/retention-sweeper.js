@@ -63,7 +63,19 @@ const SAFE_IDENTIFIER = /^[A-Za-z0-9_]+$/;
  */
 const SWEEP_GUARDS = Object.freeze({
     modmail_threads: "`status` = 'closed'",
+    // H-762 (migration 462): historical follows (2026-10-28, no longer collected) are kept while their broadcaster still
+    // has a CertiFried Twitch connection, and swept once none is left.
+    twitch_user_follows: followsGuard('twitch_user_follows'),
 });
+
+/** The twitch_user_follows guard for a table name (tests sweep a throwaway copy with it). */
+export function followsGuard(table) {
+    if (!SAFE_IDENTIFIER.test(table)) throw new Error('bad table name');
+    const f = `\`${table}\`.\`follower_id\``;
+    return `NOT EXISTS (SELECT 1 FROM twitch_role_sync_config c WHERE c.broadcaster_twitch_id = ${f})`
+        + ` AND NOT EXISTS (SELECT 1 FROM twitch_oauth_accounts o WHERE o.twitch_user_id = ${f})`
+        + ` AND NOT EXISTS (SELECT 1 FROM stream_platform_accounts a WHERE a.platform = 'twitch' AND a.platform_user_id = ${f})`;
+}
 
 /** The extra WHERE condition for a table's sweep, or null. */
 export function sweepGuard(tableName) {

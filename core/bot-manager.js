@@ -7,6 +7,7 @@ import { localizeCommands } from '../utils/command-localization.js';
 import { fitCustomBotCommands, fitSlashLimit, MAX_SLASH_COMMANDS } from './custom-bot-commands.js';
 import { buildShortcutJson, shortcutNamesByGuild, forgetMainBotGuilds } from './guild-shortcuts.js';
 import { buildDeployJson } from './command-mounts.js';
+import { withEntryPoint } from '../utils/entry-point-command.js';
 import { jellyfinGuildCommandData } from '../cf-jellyfin/cf-jellyfin-commands.js';
 import { logFeatureEvent } from './feature-log.js';
 import { parseUnexpected429 } from '../utils/announcement-edit-governor.js';
@@ -600,7 +601,8 @@ class BotManager {
                 } else {
                     const deployed = await rest.put(
                         Routes.applicationCommands(botId),
-                        { body: commandData }
+                        // Keeps the Discord Activity's Entry Point command, which Discord will not let a bulk update drop.
+                        { body: await withEntryPoint(rest, botId, commandData) }
                     );
                     await pool.execute(
                         `INSERT INTO command_deploy_hashes (bot_id, guild_id, hash) VALUES (?, '', ?)

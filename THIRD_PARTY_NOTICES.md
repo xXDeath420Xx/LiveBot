@@ -8,10 +8,14 @@ listed here. If you redistribute CertiFried, or run a modified copy as a service
 
 | Path | Origin | Licence | Notes |
 |---|---|---|---|
-| `core/owo/**`, `commands/fun/owo*.js`, `commands/fun/autohunt.js`, `commands/fun/luck.js`, `handlers/owo-prefix.js`, `migrations/087`–`092_owo_*`, `utils/mysql.js`, `utils/global.js`, `botHandlers/mysqlHandler.js` | Derived from [OwO Bot](https://github.com/ChristopherBThai/Discord-OwO-Bot) by Christopher Thai | CC BY-NC-SA 4.0 | See [LICENSE-OWO-NOTICE.md](LICENSE-OWO-NOTICE.md). These files are **not** covered by the AGPL and may not be used commercially. |
+| `core/critters/**`, `commands/fun/critters*.js`, `handlers/critters-*.js`, `core/critters-*.js`, `dashboard/routes/api/features/critters.js`, `dashboard/views/partials/manage/critters.ejs`, `migrations/463_critters_schema.js` | Written clean-room on 2026-11-19 to replace a module derived from [OwO Bot](https://github.com/ChristopherBThai/Discord-OwO-Bot) (CC BY-NC-SA 4.0); only command names and game ideas are shared | AGPL-3.0-or-later (CertiFried) | See [LICENSE-OWO-NOTICE.md](LICENSE-OWO-NOTICE.md). No OwO Bot code, text or data is published. |
 | `core/catbot/**`, `commands/games/cat.js` | Written independently; game rules inspired by [Cat Bot](https://github.com/milenakos/cat-bot) (AGPL-3.0) | AGPL-3.0-or-later (CertiFried) | See [LICENSE-CATBOT-NOTICE.md](LICENSE-CATBOT-NOTICE.md). |
-| `services/certifried-bot/defender/data/*.json` | Spam and bot-name patterns copied from KumaBot Defender v4.17.0 (BearOrso / orsokuma) | Not stated by the upstream project | See `services/certifried-bot/defender/data/SOURCE.txt`. |
+| `services/certifried-bot/defender/data/*.json` | KumaBot Defender data by Orsokuma (KumaBot Defender v4.17.0) | Used and redistributed with the developer's permission | See [KumaBot Defender data](#kumabot-defender-data) below. |
 | `data/evil-insults.json` | [Evil Insult Generator](https://github.com/EvilInsultGenerator/media) database | The Unlicense | See `data/evil-insults.SOURCE.md`. |
+| `data/words/english.txt` | Built by `scripts/build-word-data.mjs` from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (derived from the Letterpress word list) | MIT | Word games (validation and random words). |
+| `data/words/english-large.txt` | Union of Webster's 2nd International (public domain), GNU aspell word lists and [dwyl/english-words](https://github.com/dwyl/english-words) `words_alpha.txt` | Public domain / aspell (SCOWL) terms / The Unlicense | Validation only. dwyl notes the upstream infochimps list keeps its own copyright. |
+| `data/words/wordseek-words.txt` | Filtered from [first20hours/google-10000-english](https://github.com/first20hours/google-10000-english) | No standard licence; its notice allows educational, personal and research use (LDC terms) and advises against commercial use without an LDC licence | Kept by owner decision (2026-11-20): CertiFried is non-commercial (no sales or profit; donations only). This data file stays under its source's own terms and is not covered by CertiFried's AGPL grant; anyone reusing CertiFried commercially should replace it. |
+| `data/words/coordle-answers.txt` | Wordle answer list from a [public gist](https://gist.github.com/cfreshman/a03ef2cba789d8cf00c08f767e0fad7b) | None stated | Kept by owner decision (2026-11-20): CertiFried is non-commercial (no sales or profit; donations only). This data file stays under its source's own terms and is not covered by CertiFried's AGPL grant; anyone reusing CertiFried commercially should replace it. |
 | `scripts/theme-audit/vendor/axe.min.js` | [axe-core](https://github.com/dequelabs/axe-core) by Deque Systems | MPL-2.0 | Licence text in `scripts/theme-audit/vendor/axe-LICENSE.txt`. Development tool only. |
 | `dashboard/public/sprites/html2canvas.min.js` | [html2canvas](https://github.com/niklasvh/html2canvas) by Niklas von Hertzen | MIT | Licence header kept in the file. |
 | `models/nsfw/marqo-nsfw-384.onnx` | Marqo `nsfw-image-detection-384` | Apache-2.0 | See `models/nsfw/NOTICE-marqo-nsfw-384.md` and `LICENSE-marqo-nsfw-384.txt`. Not in git: installed on the server. |
@@ -19,6 +23,20 @@ listed here. If you redistribute CertiFried, or run a modified copy as a service
 | `eng.traineddata` | [tesseract-ocr/tessdata](https://github.com/tesseract-ocr/tessdata) | Apache-2.0 | English OCR model. |
 | `assets/fonts/NotoEmoji-Regular.ttf` | [Noto Emoji](https://github.com/googlefonts/noto-emoji) by Google | SIL Open Font License 1.1 | Licence text in `assets/fonts/OFL-NotoEmoji.txt`. |
 | `desktop/studio/assets/fonts/Geist*.woff2`, `frontend/greenhouse/src/fonts/Geist*.woff2` | [Geist](https://github.com/vercel/geist-font) by Vercel | SIL Open Font License 1.1 | Licence text next to the fonts (`OFL-Geist.txt`, `Geist-OFL.txt`). |
+
+## KumaBot Defender data
+
+Origin: **KumaBot Defender** by **Orsokuma** (v4.17.0, files from its `src/utils/`).
+
+These files are used and redistributed with permission granted by the developer to the CertiFried
+project, as provided. They are not covered by the AGPL; the permission is the developer's, so ask
+them before reusing the files outside CertiFried.
+
+- `services/certifried-bot/defender/data/bot-name-patterns.json` (upstream `botNamePatterns.json`)
+- `services/certifried-bot/defender/data/spam-patterns.json` (upstream `spam.json`)
+- `services/certifried-bot/defender/data/strip-emotes.json` (upstream `emotes.json`)
+
+See also `services/certifried-bot/defender/data/NOTICE.md` and `SOURCE.txt` in the same folder.
 
 ## Not published in this repository
 
@@ -49,7 +67,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 
 ### CertiFried (bot and dashboard)
 
-774 packages (29 development-only). By licence: MIT 603, Apache-2.0 61, ISC 38, BSD-3-Clause 22, BSD-2-Clause 15, LGPL-3.0-or-later 10, Apache-2.0 AND LGPL-3.0-or-later 3, not stated in package metadata 3, Unlicense 2, GPL-3.0 2, AGPL-3.0-only 2, 0BSD 2, (MIT OR CC0-1.0) 2, (Apache-2.0 AND BSD-3-Clause) 1, Apache-2.0 AND LGPL-3.0-or-later AND MIT 1, Python-2.0 1, GPL3 1, GNU General Public License v3.0 1, (MIT OR WTFPL) 1, BlueOak-1.0.0 1, (MIT AND Zlib) 1, (BSD-2-Clause OR MIT OR Apache-2.0) 1.
+726 packages (29 development-only). By licence: MIT 569, Apache-2.0 60, ISC 32, BSD-3-Clause 19, BSD-2-Clause 15, LGPL-3.0-or-later 10, Apache-2.0 AND LGPL-3.0-or-later 3, GPL-3.0 2, AGPL-3.0-only 2, 0BSD 2, (MIT OR CC0-1.0) 2, (Apache-2.0 AND BSD-3-Clause) 1, Apache-2.0 AND LGPL-3.0-or-later AND MIT 1, Python-2.0 1, GPL3 1, (MIT OR WTFPL) 1, Unlicense 1, BlueOak-1.0.0 1, (MIT AND Zlib) 1, not stated in package metadata 1, (BSD-2-Clause OR MIT OR Apache-2.0) 1.
 
 <details><summary>Package list</summary>
 
@@ -139,7 +157,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | @jridgewell/sourcemap-codec | 1.5.5 | MIT | runtime |
 | @jridgewell/trace-mapping | 0.3.31 | MIT | runtime |
 | @keyv/serialize | 1.1.1 | MIT | runtime |
-| @minhducsun2002/leb128 | 1.0.0 | MIT | runtime |
 | @napi-rs/canvas | 0.1.83 | MIT | optional |
 | @napi-rs/canvas-android-arm64 | 0.1.83 | MIT | optional |
 | @napi-rs/canvas-darwin-arm64 | 0.1.83 | MIT | optional |
@@ -153,11 +170,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | @napi-rs/canvas-win32-x64-msvc | 0.1.83 | MIT | optional |
 | @napi-rs/wasm-runtime | 1.1.1 | MIT | optional |
 | @nodable/entities | 3.1.0 | MIT | runtime |
-| @otplib/core | 12.0.1 | MIT | runtime |
-| @otplib/plugin-crypto | 12.0.1 | MIT | runtime |
-| @otplib/plugin-thirty-two | 12.0.1 | MIT | runtime |
-| @otplib/preset-default | 12.0.1 | MIT | runtime |
-| @otplib/preset-v11 | 12.0.1 | MIT | runtime |
 | @pdf-lib/standard-fonts | 1.0.0 | MIT | runtime |
 | @pdf-lib/upng | 1.0.1 | MIT | runtime |
 | @playwright/test | 1.58.1 | Apache-2.0 | dev |
@@ -200,7 +212,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | @sapphire/shapeshift | 4.0.0 | MIT | runtime |
 | @sapphire/snowflake | 3.5.5 | MIT | runtime |
 | @sec-ant/readable-stream | 0.4.1 | MIT | runtime |
-| @shinyoshiaki/jspack | 0.0.6 | not stated in package metadata | runtime |
 | @sindresorhus/is | 8.1.0 | MIT | runtime |
 | @snazzah/davey | 0.1.10 | MIT | runtime |
 | @snazzah/davey-android-arm-eabi | 0.1.10 | MIT | optional |
@@ -240,7 +251,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | accepts | 1.3.8 | MIT | runtime |
 | acorn | 8.16.0 | MIT | runtime |
 | adm-zip | 0.5.18 | MIT | runtime |
-| aes-js | 3.1.2 | MIT | runtime |
 | agent-base | 6.0.2 | MIT | runtime |
 | agent-base | 7.1.4 | MIT | runtime |
 | an-array-of-english-words | 2.0.0 | MIT | dev |
@@ -296,9 +306,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | call-bind-apply-helpers | 1.0.2 | MIT | runtime |
 | call-bound | 1.0.4 | MIT | runtime |
 | callsites | 3.1.0 | MIT | runtime |
-| camelcase | 5.3.1 | MIT | runtime |
 | canvas | 3.2.0 | MIT | runtime |
-| chalk | 4.1.2 | MIT | runtime |
 | chalk | 5.6.2 | MIT | runtime |
 | chokidar | 3.6.0 | MIT | dev |
 | chokidar | 4.0.3 | MIT | runtime |
@@ -306,7 +314,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | chromium-bidi | 14.0.0 | Apache-2.0 | runtime |
 | chrono-node | 2.9.1 | MIT | runtime |
 | chunk-data | 0.1.0 | MIT | runtime |
-| cliui | 6.0.0 | ISC | runtime |
 | cliui | 8.0.1 | ISC | runtime |
 | clone-deep | 0.2.4 | MIT | runtime |
 | cluster-key-slot | 1.1.2 | Apache-2.0 | runtime |
@@ -317,7 +324,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | color-name | 2.0.2 | MIT | runtime |
 | color-string | 2.1.2 | MIT | runtime |
 | combined-stream | 1.0.8 | MIT | runtime |
-| commander | 14.0.3 | MIT | runtime |
 | commander | 4.1.1 | MIT | runtime |
 | concat-map | 0.0.1 | MIT | runtime |
 | confbox | 0.1.8 | MIT | runtime |
@@ -339,7 +345,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | debug | 2.6.9 | MIT | runtime |
 | debug | 3.2.7 | MIT | runtime |
 | debug | 4.4.3 | MIT | runtime |
-| decamelize | 1.2.0 | MIT | runtime |
 | decompress-response | 10.0.0 | MIT | runtime |
 | decompress-response | 6.0.0 | MIT | runtime |
 | deep-extend | 0.6.0 | MIT | runtime |
@@ -354,12 +359,10 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | detect-libc | 2.1.2 | Apache-2.0 | runtime |
 | detect-node | 2.1.0 | MIT | runtime |
 | devtools-protocol | 0.0.1608973 | BSD-3-Clause | runtime |
-| dijkstrajs | 1.0.3 | MIT | runtime |
 | discord-api-types | 0.38.52 | MIT | runtime |
 | discord-player | 7.2.0 | MIT | runtime |
 | discord-voip | 7.2.0 | MIT | runtime |
 | discord.js | 14.27.0 | Apache-2.0 | runtime |
-| discord.js-selfbot-v13 | 3.7.1 | GNU General Public License v3.0 | runtime |
 | dom-serializer | 2.0.0 | MIT | runtime |
 | domelementtype | 2.3.0 | BSD-2-Clause | runtime |
 | domhandler | 5.0.3 | BSD-2-Clause | runtime |
@@ -406,15 +409,12 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | fdir | 6.5.0 | MIT | runtime |
 | fecha | 4.2.3 | MIT | runtime |
 | fetch-blob | 3.2.0 | MIT | runtime |
-| fetch-cookie | 3.2.0 | Unlicense | runtime |
 | file-stream-rotator | 0.6.1 | MIT | runtime |
 | file-type | 16.5.4 | MIT | runtime |
 | file-uri-to-path | 1.0.0 | MIT | runtime |
 | filelist | 1.0.4 | Apache-2.0 | runtime |
 | fill-range | 7.1.1 | MIT | dev |
 | finalhandler | 1.3.1 | MIT | runtime |
-| find-process | 2.1.1 | MIT | runtime |
-| find-up | 4.1.0 | MIT | runtime |
 | fix-dts-default-cjs-exports | 1.0.1 | MIT | runtime |
 | flatbuffers | 25.9.23 | Apache-2.0 | runtime |
 | fn.name | 1.1.0 | MIT | runtime |
@@ -449,7 +449,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | graceful-fs | 4.2.11 | ISC | runtime |
 | guid-typescript | 1.0.9 | ISC | runtime |
 | has-flag | 3.0.0 | MIT | dev |
-| has-flag | 4.0.0 | MIT | runtime |
 | has-property-descriptors | 1.0.2 | MIT | runtime |
 | has-symbols | 1.1.0 | MIT | runtime |
 | has-tostringtag | 1.0.2 | MIT | runtime |
@@ -518,7 +517,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | lilconfig | 3.1.3 | MIT | runtime |
 | lines-and-columns | 1.2.4 | MIT | runtime |
 | load-tsconfig | 0.2.5 | MIT | runtime |
-| locate-path | 5.0.0 | MIT | runtime |
 | lodash | 4.18.1 | MIT | runtime |
 | lodash.defaults | 4.2.0 | MIT | runtime |
 | lodash.includes | 4.3.0 | MIT | runtime |
@@ -531,7 +529,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | lodash.once | 4.1.1 | MIT | runtime |
 | lodash.snakecase | 4.1.1 | MIT | runtime |
 | logform | 2.7.0 | MIT | runtime |
-| loglevel | 1.9.2 | MIT | runtime |
 | long | 5.3.2 | Apache-2.0 | runtime |
 | lowercase-keys | 3.0.0 | MIT | runtime |
 | lowercase-keys | 4.0.1 | MIT | runtime |
@@ -578,7 +575,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | mlly | 1.8.1 | MIT | runtime |
 | moment | 2.31.0 | MIT | runtime |
 | moment-timezone | 0.5.48 | MIT | runtime |
-| mp4box | 0.5.4 | BSD-3-Clause | runtime |
 | ms | 2.0.0 | MIT | runtime |
 | ms | 2.1.3 | MIT | runtime |
 | multer | 2.4.0 | MIT | runtime |
@@ -614,10 +610,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | onnxruntime-node | 1.24.3 | MIT | runtime |
 | onnxruntime-web | 1.22.0-dev.20250409-89f8206ba4 | MIT | runtime |
 | opencollective-postinstall | 2.0.3 | MIT | runtime |
-| otplib | 12.0.1 | MIT | runtime |
-| p-limit | 2.3.0 | MIT | runtime |
-| p-locate | 4.1.0 | MIT | runtime |
-| p-try | 2.2.0 | MIT | runtime |
 | pac-proxy-agent | 7.2.0 | MIT | runtime |
 | pac-resolver | 7.0.1 | MIT | runtime |
 | pako | 1.0.11 | (MIT AND Zlib) | runtime |
@@ -628,7 +620,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | passport-discord | 0.1.4 | ISC | runtime |
 | passport-oauth2 | 1.8.0 | MIT | runtime |
 | passport-strategy | 1.0.0 | MIT | runtime |
-| path-exists | 4.0.0 | MIT | runtime |
 | path-expression-matcher | 1.6.2 | MIT | runtime |
 | path-is-absolute | 1.0.1 | MIT | runtime |
 | path-to-regexp | 0.1.13 | MIT | runtime |
@@ -650,10 +641,8 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | play-dl | 1.9.7 | GPL-3.0 | runtime |
 | playwright | 1.58.1 | Apache-2.0 | dev |
 | playwright-core | 1.58.1 | Apache-2.0 | runtime |
-| pngjs | 5.0.0 | MIT | runtime |
 | postcss-load-config | 6.0.1 | MIT | runtime |
 | prebuild-install | 7.1.3 | MIT | runtime |
-| prism-media | 1.3.5 | Apache-2.0 | runtime |
 | process | 0.11.10 | MIT | runtime |
 | progress | 2.0.3 | MIT | runtime |
 | protobufjs | 7.6.6 | BSD-3-Clause | runtime |
@@ -670,7 +659,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | puppeteer-extra-plugin-stealth | 2.11.2 | MIT | runtime |
 | puppeteer-extra-plugin-user-data-dir | 2.4.1 | MIT | runtime |
 | puppeteer-extra-plugin-user-preferences | 2.4.1 | MIT | runtime |
-| qrcode | 1.5.4 | MIT | runtime |
 | qs | 6.16.0 | BSD-3-Clause | runtime |
 | quick-lru | 5.1.1 | MIT | runtime |
 | random-bytes | 1.0.0 | MIT | runtime |
@@ -688,7 +676,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | regenerator-runtime | 0.13.11 | MIT | runtime |
 | replace-string | 2.0.0 | MIT | runtime |
 | require-directory | 2.1.1 | MIT | runtime |
-| require-main-filename | 2.0.0 | ISC | runtime |
 | resolve-alpn | 1.2.1 | MIT | runtime |
 | resolve-from | 4.0.0 | MIT | runtime |
 | resolve-from | 5.0.0 | MIT | runtime |
@@ -706,8 +693,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | send | 0.19.0 | MIT | runtime |
 | serialize-error | 7.0.1 | MIT | runtime |
 | serve-static | 1.16.2 | MIT | runtime |
-| set-blocking | 2.0.0 | ISC | runtime |
-| set-cookie-parser | 2.7.2 | MIT | runtime |
 | setprototypeof | 1.2.0 | ISC | runtime |
 | shallow-clone | 0.1.2 | MIT | runtime |
 | sharp | 0.35.5 | Apache-2.0 | runtime |
@@ -742,7 +727,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | strtok3 | 6.3.0 | MIT | runtime |
 | sucrase | 3.35.1 | MIT | runtime |
 | supports-color | 5.5.0 | MIT | dev |
-| supports-color | 7.2.0 | MIT | runtime |
 | tagged-tag | 1.0.0 | MIT | runtime |
 | tar-fs | 2.1.4 | MIT | runtime |
 | tar-fs | 3.1.3 | MIT | runtime |
@@ -755,23 +739,16 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | text-hex | 1.0.0 | MIT | runtime |
 | thenify | 3.3.1 | MIT | runtime |
 | thenify-all | 1.6.0 | MIT | runtime |
-| thirty-two | 1.0.2 | not stated in package metadata | runtime |
 | tiktok-live-api-sdk | 0.4.0-beta1 | MIT | runtime |
 | tiktok-live-connector | 2.5.0 | AGPL-3.0-only | runtime |
 | tiktok-live-proto | 0.2.4 | AGPL-3.0-only | runtime |
 | tinyexec | 0.3.2 | MIT | runtime |
 | tinyglobby | 0.2.15 | MIT | runtime |
-| tldts | 6.1.86 | MIT | runtime |
-| tldts | 7.4.2 | MIT | runtime |
-| tldts-core | 6.1.86 | MIT | runtime |
-| tldts-core | 7.4.2 | MIT | runtime |
 | tmi.js | 1.8.5 | MIT | runtime |
 | to-regex-range | 5.0.1 | MIT | dev |
 | toidentifier | 1.0.1 | MIT | runtime |
 | token-types | 4.2.1 | MIT | runtime |
 | touch | 3.1.1 | ISC | dev |
-| tough-cookie | 5.1.2 | BSD-3-Clause | runtime |
-| tough-cookie | 6.0.1 | BSD-3-Clause | runtime |
 | tr46 | 0.0.3 | MIT | runtime |
 | tree-kill | 1.2.2 | MIT | runtime |
 | triple-beam | 1.4.1 | MIT | runtime |
@@ -794,7 +771,6 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | uint8array-extras | 1.6.0 | MIT | runtime |
 | undefsafe | 2.0.5 | MIT | dev |
 | undici | 6.29.0 | MIT | runtime |
-| undici | 7.30.0 | MIT | runtime |
 | undici-types | 6.21.0 | MIT | runtime |
 | undici-types | 7.16.0 | MIT | runtime |
 | unfetch | 5.0.0 | MIT | runtime |
@@ -809,22 +785,16 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | web-streams-polyfill | 3.3.3 | MIT | runtime |
 | webdriver-bidi-protocol | 0.4.1 | Apache-2.0 | runtime |
 | webidl-conversions | 3.0.1 | BSD-2-Clause | runtime |
-| werift-rtp | 0.8.8 | MIT | runtime |
 | whatwg-url | 5.0.0 | MIT | runtime |
-| which-module | 2.0.1 | ISC | runtime |
 | winston | 3.18.3 | MIT | runtime |
 | winston-daily-rotate-file | 5.0.0 | MIT | runtime |
 | winston-transport | 4.9.0 | MIT | runtime |
-| wrap-ansi | 6.2.0 | MIT | runtime |
 | wrap-ansi | 7.0.0 | MIT | runtime |
 | wrappy | 1.0.2 | ISC | runtime |
 | ws | 8.22.0 | MIT | runtime |
 | xml-naming | 0.3.0 | MIT | runtime |
-| y18n | 4.0.3 | ISC | runtime |
 | y18n | 5.0.8 | ISC | runtime |
-| yargs | 15.4.1 | MIT | runtime |
 | yargs | 17.7.2 | MIT | runtime |
-| yargs-parser | 18.1.3 | ISC | runtime |
 | yargs-parser | 21.1.1 | ISC | runtime |
 | yauzl | 2.10.0 | MIT | runtime |
 | zlibjs | 0.3.1 | MIT | runtime |
@@ -834,7 +804,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 
 ### CertiFried Studio (desktop/studio)
 
-281 packages (257 development-only). By licence: MIT 211, ISC 34, BSD-3-Clause 9, BlueOak-1.0.0 9, Apache-2.0 6, BSD-2-Clause 5, (MIT OR CC0-1.0) 2, Python-2.0 1, WTFPL OR ISC 1, WTFPL 1, 0BSD 1, (WTFPL OR MIT) 1.
+323 packages (271 development-only). By licence: MIT 250, ISC 34, BSD-3-Clause 9, BlueOak-1.0.0 9, Apache-2.0 7, BSD-2-Clause 5, 0BSD 2, (MIT OR CC0-1.0) 2, Python-2.0 1, (MIT OR X11) 1, WTFPL OR ISC 1, WTFPL 1, (WTFPL OR MIT) 1.
 
 <details><summary>Package list</summary>
 
@@ -851,14 +821,45 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | @electron/universal | 2.0.3 | MIT | dev |
 | @electron/windows-sign | 1.2.2 | BSD-2-Clause | dev |
 | @isaacs/fs-minipass | 4.0.1 | ISC | dev |
+| @koromix/koffi-android-arm64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-android-x64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-darwin-arm64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-darwin-x64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-freebsd-arm64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-freebsd-ia32 | 3.3.6 | MIT | optional |
+| @koromix/koffi-freebsd-x64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-arm | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-arm64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-ia32 | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-loong64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-ppc64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-riscv64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-linux-x64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-openbsd-arm64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-openbsd-ia32 | 3.3.6 | MIT | optional |
+| @koromix/koffi-openbsd-x64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-win32-arm64 | 3.3.6 | MIT | optional |
+| @koromix/koffi-win32-ia32 | 3.3.6 | MIT | optional |
+| @koromix/koffi-win32-x64 | 3.3.6 | MIT | optional |
+| @leichtgewicht/ip-codec | 2.0.5 | MIT | runtime |
 | @malept/cross-spawn-promise | 2.0.0 | Apache-2.0 | dev |
 | @malept/flatpak-bundler | 0.4.0 | MIT | dev |
 | @msgpack/msgpack | 2.8.0 | ISC | runtime |
 | @noble/hashes | 1.8.0 | MIT | dev |
+| @peculiar/asn1-cms | 2.11.1 | MIT | dev |
+| @peculiar/asn1-csr | 2.11.1 | MIT | dev |
+| @peculiar/asn1-ecc | 2.11.1 | MIT | dev |
+| @peculiar/asn1-pfx | 2.11.1 | MIT | dev |
+| @peculiar/asn1-pkcs8 | 2.11.1 | MIT | dev |
+| @peculiar/asn1-pkcs9 | 2.11.1 | MIT | dev |
+| @peculiar/asn1-rsa | 2.11.1 | MIT | dev |
 | @peculiar/asn1-schema | 2.11.1 | MIT | dev |
+| @peculiar/asn1-x509 | 2.11.1 | MIT | dev |
+| @peculiar/asn1-x509-attr | 2.11.1 | MIT | dev |
 | @peculiar/json-schema | 1.1.12 | MIT | dev |
 | @peculiar/utils | 2.0.3 | MIT | dev |
 | @peculiar/webcrypto | 1.7.2 | MIT | dev |
+| @peculiar/x509 | 1.14.3 | MIT | dev |
 | @sindresorhus/is | 4.6.0 | MIT | dev |
 | @szmarczak/http-timer | 4.0.6 | MIT | dev |
 | @types/cacheable-request | 6.0.3 | MIT | dev |
@@ -925,6 +926,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | detect-node | 2.1.0 | MIT | dev |
 | dir-compare | 4.2.0 | MIT | dev |
 | dmg-builder | 26.18.0 | MIT | dev |
+| dns-packet | 5.6.1 | MIT | runtime |
 | dotenv | 16.6.1 | BSD-2-Clause | dev |
 | dotenv-expand | 11.0.7 | BSD-2-Clause | dev |
 | dunder-proto | 1.0.1 | MIT | dev |
@@ -1003,6 +1005,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | jsonfile | 4.0.0 | MIT | dev |
 | jsonfile | 6.2.1 | MIT | runtime |
 | keyv | 4.5.4 | MIT | dev |
+| koffi | 3.3.6 | MIT | runtime |
 | lazy-val | 1.0.5 | MIT | runtime |
 | lodash | 4.18.1 | MIT | dev |
 | lodash.escaperegexp | 4.1.2 | MIT | runtime |
@@ -1025,10 +1028,13 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | minizlib | 3.1.0 | MIT | dev |
 | mkdirp | 0.5.6 | MIT | dev |
 | ms | 2.1.3 | MIT | runtime |
+| multicast-dns | 7.2.5 | MIT | runtime |
 | node-abi | 4.40.0 | MIT | dev |
+| node-addon-api | 8.9.2 | MIT | runtime |
 | node-api-version | 0.2.1 | MIT | dev |
 | node-gyp | 12.4.0 | MIT | dev |
 | node-gyp-build | 4.8.4 | MIT | runtime |
+| node-hid | 3.4.0 | (MIT OR X11) | runtime |
 | node-int64 | 0.4.0 | MIT | dev |
 | nopt | 9.0.0 | ISC | dev |
 | normalize-url | 6.1.0 | MIT | dev |
@@ -1042,6 +1048,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | pe-library | 0.4.1 | MIT | dev |
 | picocolors | 1.1.1 | ISC | dev |
 | picomatch | 4.0.7 | MIT | dev |
+| pkg-prebuilds | 1.1.0 | MIT | runtime |
 | pkijs | 3.4.3 | BSD-3-Clause | dev |
 | plist | 3.1.0 | MIT | dev |
 | postject | 1.0.0-alpha.6 | MIT | dev |
@@ -1056,6 +1063,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | quick-lru | 5.1.1 | MIT | dev |
 | read-binary-file-arch | 1.0.6 | MIT | dev |
 | readable-stream | 2.3.8 | MIT | dev |
+| reflect-metadata | 0.2.2 | Apache-2.0 | dev |
 | require-directory | 2.1.1 | MIT | dev |
 | require-from-string | 2.0.2 | MIT | dev |
 | resedit | 1.7.2 | MIT | dev |
@@ -1067,6 +1075,7 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | safe-buffer | 5.1.2 | MIT | dev |
 | sanitize-filename | 1.6.5 | WTFPL OR ISC | dev |
 | sax | 1.6.1 | BlueOak-1.0.0 | runtime |
+| selfsigned | 5.5.0 | MIT | dev |
 | semver | 5.7.3 | ISC | dev |
 | semver | 6.3.2 | ISC | dev |
 | semver | 7.7.4 | ISC | dev |
@@ -1089,13 +1098,16 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | tar | 7.5.23 | BlueOak-1.0.0 | dev |
 | temp | 0.9.4 | MIT | dev |
 | temp-file | 3.4.0 | MIT | dev |
+| thunky | 1.1.0 | MIT | runtime |
 | tiny-async-pool | 1.3.0 | MIT | dev |
 | tiny-typed-emitter | 2.1.0 | MIT | runtime |
 | tinyglobby | 0.2.17 | MIT | dev |
 | tmp | 0.2.7 | MIT | dev |
 | tmp-promise | 3.0.3 | MIT | dev |
 | truncate-utf8-bytes | 1.0.2 | WTFPL | dev |
+| tslib | 1.14.1 | 0BSD | dev |
 | tslib | 2.9.1 | 0BSD | dev |
+| tsyringe | 4.10.0 | MIT | dev |
 | type-fest | 0.13.1 | (MIT OR CC0-1.0) | dev |
 | type-fest | 3.13.1 | (MIT OR CC0-1.0) | runtime |
 | uiohook-napi | 1.5.5 | MIT | runtime |
@@ -1121,6 +1133,139 @@ The LGPL-3.0 `libvips` binaries come with `sharp` as separate, dynamically loade
 | yargs | 17.7.3 | MIT | dev |
 | yargs-parser | 21.1.1 | ISC | dev |
 | yocto-queue | 0.1.0 | MIT | dev |
+
+</details>
+
+### CertiFried Stream Deck plugin (desktop/streamdeck-plugin)
+
+122 packages (117 development-only). By licence: MIT 108, ISC 6, Apache-2.0 5, BSD-3-Clause 2, 0BSD 1.
+
+<details><summary>Package list</summary>
+
+| Package | Version | Licence | Use |
+|---|---|---|---|
+| @elgato/cli | 1.10.4 | MIT | dev |
+| @elgato/schemas | 0.6.0 | MIT | runtime |
+| @elgato/streamdeck | 3.0.4 | MIT | runtime |
+| @elgato/utils | 0.6.2 | MIT | runtime |
+| @humanwhocodes/momoa | 3.3.13 | Apache-2.0 | dev |
+| @inquirer/ansi | 1.0.2 | MIT | dev |
+| @inquirer/checkbox | 4.3.2 | MIT | dev |
+| @inquirer/confirm | 5.1.21 | MIT | dev |
+| @inquirer/core | 10.3.2 | MIT | dev |
+| @inquirer/editor | 4.2.23 | MIT | dev |
+| @inquirer/expand | 4.0.23 | MIT | dev |
+| @inquirer/external-editor | 1.0.3 | MIT | dev |
+| @inquirer/figures | 1.0.15 | MIT | dev |
+| @inquirer/input | 4.3.1 | MIT | dev |
+| @inquirer/number | 3.0.23 | MIT | dev |
+| @inquirer/password | 4.0.23 | MIT | dev |
+| @inquirer/prompts | 7.10.1 | MIT | dev |
+| @inquirer/rawlist | 4.1.11 | MIT | dev |
+| @inquirer/search | 3.2.2 | MIT | dev |
+| @inquirer/select | 4.4.2 | MIT | dev |
+| @inquirer/type | 3.0.10 | MIT | dev |
+| @jridgewell/sourcemap-codec | 1.6.0 | MIT | dev |
+| @rollup/plugin-commonjs | 29.0.3 | MIT | dev |
+| @rollup/plugin-node-resolve | 16.0.3 | MIT | dev |
+| @rollup/pluginutils | 5.5.1 | MIT | dev |
+| @rollup/rollup-android-arm-eabi | 4.67.5 | MIT | dev |
+| @rollup/rollup-android-arm64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-android-x64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-darwin-arm64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-darwin-x64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-freebsd-arm64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-freebsd-x64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-arm-gnueabihf | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-arm-musleabihf | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-arm64-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-arm64-musl | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-loong64-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-loong64-musl | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-ppc64-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-ppc64-musl | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-riscv64-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-riscv64-musl | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-s390x-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-x64-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-linux-x64-musl | 4.67.5 | MIT | dev |
+| @rollup/rollup-openbsd-x64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-openharmony-arm64 | 4.67.5 | MIT | dev |
+| @rollup/rollup-win32-arm64-msvc | 4.67.5 | MIT | dev |
+| @rollup/rollup-win32-ia32-msvc | 4.67.5 | MIT | dev |
+| @rollup/rollup-win32-x64-gnu | 4.67.5 | MIT | dev |
+| @rollup/rollup-win32-x64-msvc | 4.67.5 | MIT | dev |
+| @types/estree | 1.0.10 | MIT | dev |
+| @types/resolve | 1.20.2 | MIT | dev |
+| @zip.js/zip.js | 2.24.0 | BSD-3-Clause | dev |
+| ajv | 8.20.0 | MIT | dev |
+| ansi-regex | 5.0.1 | MIT | dev |
+| ansi-styles | 4.3.0 | MIT | dev |
+| async | 3.2.6 | MIT | dev |
+| balanced-match | 1.0.2 | MIT | dev |
+| brace-expansion | 2.1.7 | MIT | dev |
+| chalk | 4.1.2 | MIT | dev |
+| chalk | 5.6.2 | MIT | dev |
+| chardet | 2.2.0 | MIT | dev |
+| cli-width | 4.1.0 | ISC | dev |
+| color-convert | 2.0.1 | MIT | dev |
+| color-name | 1.1.4 | MIT | dev |
+| commander | 12.1.0 | MIT | dev |
+| commander | 13.1.0 | MIT | dev |
+| commondir | 1.0.1 | MIT | dev |
+| deepmerge | 4.3.1 | MIT | dev |
+| ejs | 3.1.10 | Apache-2.0 | dev |
+| emoji-regex | 8.0.0 | MIT | dev |
+| es-errors | 1.3.0 | MIT | dev |
+| estree-walker | 2.0.2 | MIT | dev |
+| fast-deep-equal | 3.1.3 | MIT | dev |
+| fast-uri | 3.1.9 | BSD-3-Clause | dev |
+| fdir | 6.5.0 | MIT | dev |
+| filelist | 1.0.6 | Apache-2.0 | dev |
+| find-process | 1.4.11 | MIT | dev |
+| fsevents | 2.3.3 | MIT | dev |
+| function-bind | 1.1.2 | MIT | dev |
+| has-flag | 4.0.0 | MIT | dev |
+| hasown | 2.0.4 | MIT | dev |
+| iconv-lite | 0.7.3 | MIT | dev |
+| ignore | 7.0.14 | MIT | dev |
+| inquirer | 12.11.1 | MIT | dev |
+| is-core-module | 2.18.0 | MIT | dev |
+| is-fullwidth-code-point | 3.0.0 | MIT | dev |
+| is-interactive | 2.0.0 | MIT | dev |
+| is-module | 1.0.0 | MIT | dev |
+| is-reference | 1.2.1 | MIT | dev |
+| is-unicode-supported | 2.1.0 | MIT | dev |
+| jake | 10.9.4 | Apache-2.0 | dev |
+| json-schema-traverse | 1.0.0 | MIT | dev |
+| lodash | 4.18.1 | MIT | dev |
+| log-symbols | 7.0.1 | MIT | dev |
+| loglevel | 1.9.2 | MIT | dev |
+| magic-string | 0.30.21 | MIT | dev |
+| minimatch | 5.1.9 | ISC | dev |
+| mute-stream | 2.0.0 | ISC | dev |
+| path-parse | 1.0.7 | MIT | dev |
+| picocolors | 1.1.1 | ISC | dev |
+| picomatch | 4.0.7 | MIT | dev |
+| rage-edit | 1.2.0 | MIT | dev |
+| require-from-string | 2.0.2 | MIT | dev |
+| resolve | 1.22.14 | MIT | dev |
+| rollup | 4.67.5 | MIT | dev |
+| run-async | 4.0.6 | MIT | dev |
+| rxjs | 7.8.2 | Apache-2.0 | dev |
+| safer-buffer | 2.1.2 | MIT | dev |
+| semver | 7.8.6 | ISC | dev |
+| signal-exit | 4.1.0 | ISC | dev |
+| string-width | 4.2.3 | MIT | dev |
+| strip-ansi | 6.0.1 | MIT | dev |
+| supports-color | 7.2.0 | MIT | dev |
+| supports-preserve-symlinks-flag | 1.0.0 | MIT | dev |
+| tslib | 2.9.1 | 0BSD | dev |
+| wrap-ansi | 6.2.0 | MIT | dev |
+| ws | 8.22.1 | MIT | runtime |
+| yoctocolors | 2.2.0 | MIT | dev |
+| yoctocolors-cjs | 2.1.3 | MIT | dev |
+| zod | 3.25.76 | MIT | runtime |
 
 </details>
 

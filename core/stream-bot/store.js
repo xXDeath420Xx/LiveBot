@@ -13,6 +13,7 @@
  * {sdb:} or '<platform>:<viewer id>' for {db:}.
  */
 import { publicEvent } from './events.js';
+import { createNamedIndex } from './named.js';
 
 const NUMBER_MAX = 999_999_999_999_999;
 const NUMERIC = /^[+-]?\d{1,15}$/;
@@ -37,6 +38,8 @@ function rawText(raw) {
 export function createStore({ db, prefix = 'stream_bot_', encryption = null } = {}) {
     if (!db) throw new Error('createStore needs a db pool');
     if (!/^[a-z0-9_]{1,30}$/.test(prefix)) throw new Error('bad table prefix');
+    // H-783: other viewers named in an event (reply parent, mention, giftee, raid target), indexed for /privacy.
+    const named = createNamedIndex({ db, prefix });
     const T = (n) => `\`${prefix}${n}\``;
     const q = async (sql, params = []) => (await db.query(sql, params))[0];
     const enc = (s) => (s == null || !encryption ? null : JSON.stringify(encryption.encrypt(String(s))));
@@ -249,6 +252,7 @@ export function createStore({ db, prefix = 'stream_bot_', encryption = null } = 
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [profileId, ev.platform, ev.type, ev.channelId ?? null, ev.dedupeKey ?? null, ev.user?.id ?? null, ev.user?.login ?? null, ev.user?.name ?? null,
                         ev.amount ?? null, ev.currency ?? null, ev.message ?? null, json(meta), rawText(ev.raw), ev.test ? 1 : 0, ev.occurredAt instanceof Date ? ev.occurredAt : new Date(ev.occurredAt || Date.now())]);
+                await named.record(Number(r.insertId), profileId, ev);   // never throws
                 return Number(r.insertId);
             } catch (err) {
                 if (err && (err.code === 'ER_DUP_ENTRY' || err.errno === 1062)) return null;
@@ -515,6 +519,7 @@ export function createStore({ db, prefix = 'stream_bot_', encryption = null } = 
             return out;
         },
     };
+    store.named = named;
     return store;
 }
 

@@ -1,0 +1,113 @@
+/*
+ * cf-public-pages.css — small public pages built as strings and rendered in the shared site frame
+ * (views/site-frame.ejs via dashboard/services/site-frame.js): the scam domain lookup, the status
+ * overview page, holiday countdowns, the Linked Roles confirmation, the Creator Showcase player and
+ * upload form, ticket/modmail transcripts and the Twitch schedule share page.
+ *
+ * Loaded after cf-ui.css and cf-site.css (partials/site-head.ejs), so it only adds page parts.
+ * Colours come from the --cf-* tokens only, so Dark, Light, Sand and the named themes all work.
+ */
+
+/* ---------- shared bits ---------- */
+.pp-form { display: flex; gap: var(--cf-2); }
+.pp-form .form-control { flex: 1 1 auto; min-width: 0; }
+.pp-help { margin: var(--cf-3) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.pp-help a, .pp-meta a { color: var(--cf-text-2); text-decoration: underline; text-underline-offset: 2px; }
+.pp-help a:hover, .pp-meta a:hover { color: var(--cf-text); }
+.pp-meta { margin: var(--cf-4) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.pp-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); margin-top: var(--cf-5); }
+.pp-stats-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pp-stats-2 .cfs-stat:nth-child(n+3) { border-top: 1px solid var(--cf-border); }
+.pp-stats-2 .cfs-stat:nth-child(3) { border-left: 0; }
+.pp-panel-gap { margin-top: var(--cf-4); }
+code.pp-code { font-family: var(--cf-mono); font-size: 0.88em; padding: 1px 6px; border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text); overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+    .pp-form { flex-direction: column; }
+    .pp-stats-2 { grid-template-columns: 1fr; }
+    .pp-stats-2 .cfs-stat { border-left: 0; }
+    .pp-stats-2 .cfs-stat + .cfs-stat { border-top: 1px solid var(--cf-border); }
+}
+
+/* ---------- scam domain lookup ---------- */
+.pp-verdict {
+    --pp-tone: var(--cf-text-3);
+    display: none; margin-top: var(--cf-4); padding: var(--cf-3) var(--cf-4);
+    border: 1px solid var(--cf-border); border-left: 3px solid var(--pp-tone); border-radius: var(--cf-radius);
+    background: color-mix(in srgb, var(--pp-tone) 7%, var(--cf-surface)); font-size: var(--cf-text-sm); line-height: 1.5;
+}
+.pp-verdict.flagged { --pp-tone: var(--cf-danger); }
+.pp-verdict.safe { --pp-tone: var(--cf-success); }
+.pp-verdict.unknown { --pp-tone: var(--cf-warning); }
+.pp-verdict strong { display: block; margin-bottom: 2px; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+.pp-verdict .meta { color: var(--cf-text-2); overflow-wrap: anywhere; }
+
+/* ---------- status overview ---------- */
+.pp-status .cfs-row-end { overflow-wrap: anywhere; white-space: normal; }
+.pp-status .cfs-dot.is-pending { animation: pp-pulse 1.6s ease-in-out infinite; }
+@keyframes pp-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pp-status .cfs-dot.is-pending { animation: none; } }
+
+/* ---------- holiday countdown ----------
+   --hc is the holiday's own colour (paletteFor() in routes/public/countdown.js, set on the page).
+   It is only an accent, mixed toward the theme's text colour so it reads on every background. */
+.cd-page { --hc-ink: color-mix(in oklab, var(--hc, var(--cf-accent-fg)) 62%, var(--cf-text)); }
+:root[data-theme="light"] .cd-page, :root[data-theme="sand"] .cd-page { --hc-ink: color-mix(in oklab, var(--hc, var(--cf-accent-fg)) 45%, var(--cf-text)); }
+.cd-hero { padding: var(--cf-6) 0 var(--cf-2); border-top: 3px solid var(--hc-ink); }
+.cd-kicker { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); font-weight: 600; color: var(--hc-ink); }
+.cd-number { margin: 0; font-size: clamp(4.5rem, 16vw, 8.5rem); font-weight: 600; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; color: var(--cf-text); }
+.cd-label { margin: var(--cf-6) 0 var(--cf-1); font-size: clamp(1.5rem, 4vw, 2.125rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--cf-text); overflow-wrap: anywhere; }
+.cd-date { margin: 0; font-size: var(--cf-text-lg); color: var(--cf-text-2); }
+.cd-links { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-5); margin: var(--cf-5) 0 0; font-size: var(--cf-text-sm); }
+.cd-links a { color: var(--cf-text-2); text-decoration: underline; text-underline-offset: 2px; }
+.cd-links a:hover { color: var(--cf-text); }
+.cd-others ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--cf-2); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.cd-others a {
+    display: flex; align-items: baseline; gap: var(--cf-2); min-height: 40px; padding: var(--cf-2) var(--cf-3);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius);
+    color: var(--cf-text); text-decoration: none; font-size: var(--cf-text-sm);
+}
+.cd-others a:hover { border-color: var(--cf-border-strong); }
+.cd-others a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+.cd-others .d { flex: none; min-width: 3.5em; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--hc-ink); }
+
+/* ---------- Creator Showcase ---------- */
+.sc-narrow { max-width: 30rem; }
+.sc-eyebrow {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px;
+    font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-accent-fg); background: var(--cf-accent-soft); border: 1px solid var(--cf-accent-line);
+}
+.sc-title { margin: 10px 0 4px; font-size: var(--cf-text-2xl); font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; overflow-wrap: anywhere; color: var(--cf-text); }
+.sc-sub { margin: 0 0 var(--cf-5); color: var(--cf-text-2); font-size: var(--cf-text-md); }
+.sc-field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 var(--cf-4); }
+.sc-field label { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+.sc-field input[type="file"] { padding: 8px; border-style: dashed; color: var(--cf-text-2); }
+.sc-panel .btn { width: 100%; min-height: 40px; }
+.sc-msg { margin: var(--cf-3) 0 0; min-height: 1.3em; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.sc-msg.is-ok { color: var(--cf-success); }
+.sc-msg.is-bad { color: var(--cf-danger); }
+.sc-player video { display: block; width: 100%; border-radius: var(--cf-radius-lg); background: var(--cf-inset); border: 1px solid var(--cf-border); outline: none; }
+.sc-note { margin: var(--cf-3) 0 0; text-align: center; color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+
+/* ---------- ticket / modmail transcript ---------- */
+.tr-head-meta { display: flex; flex-wrap: wrap; gap: var(--cf-1) var(--cf-5); margin: var(--cf-3) 0 0; padding: 0; list-style: none; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.tr-head-meta strong { color: var(--cf-text-2); font-weight: 500; }
+.tr-legend { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-4); margin: 0 0 var(--cf-4); font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.tr-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tr-legend i { display: inline-block; width: 3px; height: 14px; border-radius: 2px; background: var(--tr-tone); }
+.tr-list { display: flex; flex-direction: column; gap: var(--cf-2); }
+.tr-msg, .tr-legend .staff, .tr-legend .user, .tr-legend .system { --tr-tone: var(--cf-border-strong); }
+.tr-msg { padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-left: 3px solid var(--tr-tone); border-radius: var(--cf-radius); min-width: 0; }
+.tr-msg.staff, .tr-legend .staff { --tr-tone: var(--cf-success); }
+.tr-msg.user, .tr-legend .user { --tr-tone: var(--cf-info); }
+.tr-msg.system, .tr-legend .system { --tr-tone: var(--cf-warning); }
+.tr-msg.system .tr-body { color: var(--cf-text-2); font-style: italic; }
+.tr-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--cf-3); margin-bottom: 4px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.tr-meta strong { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+.tr-meta time { font-variant-numeric: tabular-nums; }
+.tr-body { color: var(--cf-text); font-size: var(--cf-text-md); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tr-att { margin-top: 4px; font-size: var(--cf-text-xs); color: var(--cf-text-2); overflow-wrap: anywhere; }
+.tr-att::before { content: "Attachment: "; color: var(--cf-text-3); }
+
+/* ---------- Twitch schedule share page ---------- */
+.ss-figure { margin: 0; }
+.ss-figure img { display: block; width: 100%; height: auto; border-radius: var(--cf-radius-lg); border: 1px solid var(--cf-border); background: var(--cf-surface); }

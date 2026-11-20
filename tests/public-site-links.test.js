@@ -1,3 +1,4 @@
+import './fixtures/test-log-dir.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -5,6 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
 import { CATEGORIES, LEGAL_DOCS, STUDIO_FACTS, retentionText } from '../dashboard/content/legal/data-inventory.js';
+import * as spritePages from '../dashboard/services/sprites-pages.js';
+import { scheduleSharePage } from '../dashboard/services/schedule-share-page.js';
 
 /*
  * Public site pass (2026-11-19): every logged-out page outside the home page and the docs.
@@ -156,7 +159,20 @@ const PAGES = [
     ['/studio/faq', 'studio-faq', { user: null, facts: STUDIO_FACTS }],
     ['/legal', 'legal-hub', { user: null, docs: LEGAL_DOCS }],
     ['/legal/data', 'legal-data', { user: null, categories: CATEGORIES, retention: (r) => retentionText(r, null), liveRetention: false }],
+    // Viewer data page (dashboard/routes/privacy-viewer.js, H-772): signed out, and signed in with counts and a result.
+    ['/privacy/viewer', 'privacy-viewer', { user: null, accounts: [], providers: { twitch: true, kick: true }, counts: null, message: null, error: null, deleted: null }],
+    ['/privacy/viewer?signed-in', 'privacy-viewer', { user: null, accounts: [{ platform: 'twitch', login: 'maplefan_88', name: 'MapleFan_88' }], providers: { twitch: true, kick: true },
+        counts: [{ table: 'stream_bot_events_about_you', total: 3 }], message: 'Done. Your data is deleted.', error: null, deleted: [{ table: 'stream_bot_events', n: 3 }] }],
 ];
+
+// Pages built as strings and rendered through the shared frame (views/site-frame.ejs).
+const framed = (page, p) => spritePages.framedOptions({ baseUrl: '/sprites', path: p }, page[spritePages.FRAMED_PAGE]);
+PAGES.push(
+    ['/sprites', 'site-frame', { user: null, ...framed(spritePages.renderLogin(), '/') }],
+    ['/sprites/account', 'site-frame', { user: null, ...framed(spritePages.renderAccount({ displayName: 'JuniperVale', currentUsername: 'juniper', hasPassword: true }), '/account') }],
+    ['/schedule/rowanpike_plays', 'site-frame', { user: null, ...scheduleSharePage('rowanpike_plays') }],
+    ['/420/obs', 'fourtwenty-obs-builder', { user: null }],
+);
 
 const rendered = new Map();
 for (const [url, view, locals] of PAGES) {

@@ -4,7 +4,7 @@
  *
  *   createRouter({ obs, sound, library, keys, screenshotDir, logger })
  *   router.run(action, params) → { ok: true, result } | { ok: false, error }
- *   router.capabilities()      what this app announces in hello: obs, sound, hotkey
+ *   router.capabilities()      what this app announces in hello: obs, sound, hotkey (+ light, voicemeeter when given)
  *   router.handles(action)
  *
  * Errors are short reason codes (shown on the dashboard's run page), never stack traces.
@@ -12,7 +12,7 @@
 const fs = require('node:fs');
 const { OBS_ACTIONS, runObsAction } = require('./obs-actions');
 
-const LATER = new Set(['light.set']);
+const LATER = new Set();
 
 function createRouter({ obs, sound, library, keys, screenshotDir, logger = null, defaultSoundMode = () => 'overlap', extra = {} }) {
     const handlers = new Map();
@@ -36,7 +36,9 @@ function createRouter({ obs, sound, library, keys, screenshotDir, logger = null,
 
     return {
         handles: (t) => handlers.has(t),
-        capabilities: () => ['obs', 'sound', 'hotkey'],
+        // Phase 5: light and voicemeeter once those handlers are given (main.js passes them through `extra`).
+        // 0.2.7: 'apps' once studio.close_apps is given (closing Firebot / Streamer.bot for the switchover).
+        capabilities: () => ['obs', 'sound', 'hotkey', ...(handlers.has('light.set') ? ['light'] : []), ...(handlers.has('voicemeeter.mute') ? ['voicemeeter'] : []), ...(handlers.has('studio.close_apps') ? ['apps'] : [])],
         async run(action, params = {}) {
             const fn = handlers.get(action);
             if (!fn) return { ok: false, error: LATER.has(action) ? 'not_supported_yet' : 'unsupported_action' };

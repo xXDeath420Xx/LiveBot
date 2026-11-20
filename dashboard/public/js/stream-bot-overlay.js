@@ -1,7 +1,9 @@
 /*
  * A CertiFried overlay inside OBS (views/stream-bot/overlay.ejs). It shows only what the server sends over
  * <base>/events (SSE) and acknowledges overlay actions to <base>/report. Types: alerts, chat, events, goal, counter,
- * nowplaying, canvas; every type also shows the "Show text" and "Show an image or video" actions.
+ * nowplaying, canvas, scene; every type also shows the "Show text" and "Show an image or video" actions. A scene screen
+ * draws the streamer's artwork (cover fit) with its title, scrolling line, countdown, glows and weather effects; it stops
+ * its animation loops before it is drawn again (a settings save).
  *
  * Reconnect-safe: the browser's EventSource retries a dropped stream; when the server answered with an error (a restart
  * behind LiteSpeed), the page opens a new one itself with a growing pause (3 s to 30 s). The server sends the current
@@ -153,12 +155,29 @@
         slot.className = 'sbo-alert-slot sbo-alert-slot--' + (cfg.position || 'center');
         var box = el('div', 'sbo-alert sbo-alert--' + (a.layout || 'stacked') + ' sbo-in--' + (a.animation || 'rise'));
         var m = a.layout === 'text' ? null : mediaNode(a.media, a.sound ? 0 : 80, '');
-        if (m) { var mw = el('div', 'sbo-alert-media'); mw.appendChild(m); box.appendChild(mw); if (m.tagName === 'VIDEO' && a.sound) m.muted = true; }
+        if (m) {
+            var mw = el('div', 'sbo-alert-media'); mw.appendChild(m); box.appendChild(mw);
+            if (m.tagName === 'VIDEO' && a.sound) m.muted = true;
+            // "Image size": a share of the file's own size (100 keeps the layout's usual limits).
+            var scale = Number(a.mediaScale) || 100;
+            if (scale !== 100) {
+                var sized = function () {
+                    var w = m.tagName === 'VIDEO' ? m.videoWidth : m.naturalWidth;
+                    if (w) { m.style.maxWidth = 'none'; m.style.maxHeight = 'none'; m.style.width = Math.round(w * scale / 100) + 'px'; }
+                };
+                m.addEventListener(m.tagName === 'VIDEO' ? 'loadedmetadata' : 'load', sized);
+            }
+        }
         var txt = el('div', 'sbo-alert-text sbo-panel');
         txt.appendChild(titleNode(a));
         if (a.detail) txt.appendChild(el('p', 'sbo-alert-detail', a.detail));
-        if (a.message) txt.appendChild(el('p', 'sbo-alert-message', a.message));
-        box.appendChild(txt);
+        var over = m && a.layout === 'over';
+        // Over the picture only the title and second line sit on it; the viewer's message goes underneath.
+        if (a.message && !over) txt.appendChild(el('p', 'sbo-alert-message', a.message));
+        if (over) m.parentNode.appendChild(txt); else box.appendChild(txt);
+        if (a.message && over) { var under = el('div', 'sbo-alert-under sbo-panel'); under.appendChild(el('p', 'sbo-alert-message', a.message)); box.appendChild(under); }
+        var delay = Math.max(0, Math.min(5000, Number(a.textDelayMs) || 0));
+        if (delay) { txt.classList.add('sbo-text-wait'); setTimeout(function () { txt.classList.remove('sbo-text-wait'); txt.classList.add('sbo-in--fade'); }, delay); }
         clear(slot);
         slot.appendChild(box);
         var minMs = Math.max(2000, Math.min(30000, Number(a.durationMs) || 6000));
@@ -211,7 +230,8 @@
         return s;
     }
     function platformMark(p) {
-        // Twitch: speech-bubble glyph on purple; Kick: a dark K on green.
+        // Twitch: speech-bubble glyph on purple; Kick: a dark K on green; YouTube: a white play triangle on red.
+        if (p === 'youtube') return glyph('M6 4.5v7l6-3.5z', '#ff0000', 'YouTube');
         return p === 'kick'
             ? glyph('M4 3h2.6v3.6L9.3 3H12L8.6 7.6 12 13H9.2L6.6 8.8V13H4z', '#53fc18', 'Kick', '#0b0e0f')
             : glyph('M4 3h9v6l-3 3H8l-2 2v-2H4zm4 2v3h1.2V5zm2.6 0v3h1.2V5z', '#9146ff', 'Twitch');
@@ -329,6 +349,11 @@
     // ── now playing (the music player's card) ──
     var np = null;
     var npTimer = null;
+    function clock(ms) {
+        var s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+        var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+        return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (x < 10 ? '0' : '') + x;
+    }
     function drawNow(c) {
         if (!np) return;
         if (npTimer) { clearInterval(npTimer); npTimer = null; }
@@ -336,7 +361,9 @@
         np.title.textContent = c.title || '';
         np.artist.textContent = c.artist || '';
         np.by.textContent = c.requester ? 'Requested by ' + c.requester : '';
-        if (c.thumbnail && /^https:\/\//.test(c.thumbnail)) { np.art.src = c.thumbnail; np.art.hidden = false; } else { np.art.removeAttribute('src'); np.art.hidden = true; }
+        var thumb = c.thumbnail && /^https:\/\//.test(c.thumbnail) ? c.thumbnail : null;
+        if (thumb && cfg.showArt !== false) { np.art.src = thumb; np.art.hidden = false; } else { np.art.removeAttribute('src'); np.art.hidden = true; }
+        if (np.blur) { if (thumb) { np.blur.src = thumb; np.blur.hidden = false; } else { np.blur.removeAttribute('src'); np.blur.hidden = true; } }
         np.card.hidden = false;
         var pos = Number(c.positionMs) || 0;
         var dur = Number(c.durationMs) || 0;
@@ -344,6 +371,7 @@
         var tick = function () {
             var p = c.paused ? pos : pos + (Date.now() - t0);
             np.bar.style.width = dur ? Math.min(100, p / dur * 100).toFixed(1) + '%' : '0%';
+            if (np.now) { np.now.textContent = clock(dur ? Math.min(p, dur) : p); np.total.textContent = clock(dur); }
         };
         tick();
         if (!c.paused && dur) npTimer = setInterval(tick, 1000);
@@ -380,18 +408,291 @@
             widget.appendChild(placed(cfg.position, c));
             drawCounter(state && state.value, false);
         } else if (type === 'nowplaying') {
-            var card = el('div', 'sbmo-card');
+            var card = el('div', 'sbmo-card' + (cfg.background === 'cover' ? ' sbo-np--cover' : ''));
             card.hidden = true;
             var art = el('img', 'sbmo-art'); art.alt = ''; art.hidden = true;
             var text = el('div', 'sbmo-text');
-            np = { card: card, art: art, title: el('p', 'sbmo-title'), artist: el('p', 'sbmo-artist'), by: el('p', 'sbmo-by'), bar: el('span') };
+            np = { card: card, art: art, title: el('p', 'sbmo-title'), artist: el('p', 'sbmo-artist'), by: el('p', 'sbmo-by'), bar: el('span'), blur: null, now: null, total: null };
+            if (cfg.background === 'cover') { np.blur = el('img', 'sbo-np-blur'); np.blur.alt = ''; np.blur.hidden = true; card.appendChild(np.blur); }
             text.appendChild(np.title); text.appendChild(np.artist); text.appendChild(np.by);
             var barWrap = el('div', 'sbmo-bar');
             barWrap.appendChild(np.bar);
-            card.appendChild(art); card.appendChild(text); card.appendChild(barWrap);
-            widget.appendChild(placed(cfg.position, card, 440));
+            card.appendChild(art); card.appendChild(text);
+            if (cfg.showTimes) {
+                var row = el('div', 'sbo-np-times');
+                np.now = el('span', 'sbo-np-time'); np.total = el('span', 'sbo-np-time');
+                row.appendChild(np.now); row.appendChild(barWrap); row.appendChild(np.total);
+                card.appendChild(row);
+            } else {
+                card.appendChild(barWrap);
+            }
+            if (cfg.titleSize) card.style.setProperty('--sbo-np-title', cfg.titleSize + 'px');
+            if (cfg.barColor) card.style.setProperty('--sbo-np-bar', cfg.barColor);
+            widget.appendChild(placed(cfg.position, card, cfg.width || 440));
             drawNow(state && state.now);
+        } else if (type === 'scene') {
+            buildScene(state || {});
         }
+    }
+    // ── scene screen: artwork, title, scrolling line, countdown, glows and weather (all in % of the artwork) ──
+    var sceneStop = null;
+    function rgbOf(h) {
+        var m = String(h || '').match(/^#?([0-9a-f]{6})$/i);
+        var n = m ? parseInt(m[1], 16) : 0xffffff;
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    function rgbaOf(h, a) { var c = rgbOf(h); return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+    function shade(h, f) {
+        return 'rgb(' + rgbOf(h).map(function (x) { return Math.round(f < 0 ? x * (1 + f) : x + (255 - x) * f); }).join(',') + ')';
+    }
+    function fitCanvas(cv) {
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var r = cv.getBoundingClientRect();
+        cv.width = Math.max(2, Math.round(r.width * dpr));
+        cv.height = Math.max(2, Math.round(r.height * dpr));
+        cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { w: r.width, h: r.height };
+    }
+    function buildScene(state) {
+        if (sceneStop) { sceneStop(); sceneStop = null; }
+        var alive = true;
+        var timers = [];
+        var onResize = [];
+        sceneStop = function () {
+            alive = false;
+            timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
+            onResize.forEach(function (f) { window.removeEventListener('resize', f); });
+        };
+        function frames(fn) { var f = function (t) { if (!alive) return; fn(t); requestAnimationFrame(f); }; requestAnimationFrame(f); }
+        function resized(fn) { onResize.push(fn); window.addEventListener('resize', fn); }
+        function pct(n, v) { n.style.left = v.x + '%'; n.style.top = v.y + '%'; }
+        var c = cfg;
+        var kinds = state.media || {};
+        var root = el('div', 'sbs');
+        var art = el('div', 'sbs-art');
+        var kb = el('div', 'sbs-kb' + (c.kenBurns ? '' : ' is-still'));
+        kb.style.setProperty('--sbs-kb-scale', String((Number(c.kenBurnsScale) || 106) / 100));
+        kb.style.setProperty('--sbs-kb-sec', (Number(c.kenBurnsSec) || 38) + 's');
+        art.appendChild(kb);
+        root.appendChild(art);
+        var aspect = 16 / 9;
+        function fitArt() { art.style.width = 'max(100vw, calc(100vh * ' + aspect.toFixed(5) + '))'; art.style.aspectRatio = aspect.toFixed(5); }
+        fitArt();
+        function mediaEl(id, cls) {
+            if (!id) return null;
+            var n;
+            if (kinds[id] === 'video') { n = el('video', cls); n.muted = true; n.loop = true; n.autoplay = true; n.playsInline = true; }
+            else { n = el('img', cls); n.alt = ''; }
+            n.src = url('media/' + id);
+            return n;
+        }
+        var bg = mediaEl(c.background, 'sbs-bg');
+        // A see-through window in the artwork (a camera placed behind this source shows through it), soft-edged.
+        function cutWindow() {
+            var wv = c.window || {};
+            if (!bg || !wv.enabled) return;
+            var W = 1000, H = Math.max(2, Math.round(1000 / aspect));
+            var cv = document.createElement('canvas');
+            cv.width = W; cv.height = H;
+            var g = cv.getContext('2d');
+            g.fillStyle = '#000';
+            g.fillRect(0, 0, W, H);
+            g.globalCompositeOperation = 'destination-out';
+            g.filter = 'blur(' + Math.max(0.5, (Number(wv.feather) || 0) / 100 * W) + 'px)';
+            g.fillRect(wv.x / 100 * W, wv.y / 100 * H, wv.w / 100 * W, wv.h / 100 * H);
+            var mask = 'url("' + cv.toDataURL('image/png') + '")';
+            bg.style.webkitMaskImage = mask; bg.style.maskImage = mask;
+            bg.style.webkitMaskSize = '100% 100%'; bg.style.maskSize = '100% 100%';
+        }
+        if (bg) {
+            kb.appendChild(bg);
+            var known = function () {
+                var w = bg.tagName === 'VIDEO' ? bg.videoWidth : bg.naturalWidth;
+                var h = bg.tagName === 'VIDEO' ? bg.videoHeight : bg.naturalHeight;
+                if (w && h) { aspect = w / h; fitArt(); cutWindow(); }
+            };
+            bg.addEventListener(bg.tagName === 'VIDEO' ? 'loadedmetadata' : 'load', known);
+        }
+        if (Number(c.dim) > 0) { var dim = el('div', 'sbs-dim'); dim.style.opacity = String(Number(c.dim) / 100); kb.appendChild(dim); }
+        var ins = c.inset || {};
+        var inset = c.window && c.window.enabled ? null : mediaEl(ins.media, 'sbs-inset');
+        if (inset) { pct(inset, ins); inset.style.width = ins.w + '%'; inset.style.height = ins.h + '%'; kb.appendChild(inset); }
+        (c.glows || []).forEach(function (gl) {
+            var g = el('div', 'sbs-glow sbs-glow--' + (gl.style || 'pulse'));
+            pct(g, gl);
+            g.style.width = gl.size + 'cqw'; g.style.height = gl.size + 'cqw';
+            g.style.background = 'radial-gradient(circle, ' + rgbaOf(gl.color, 0.95) + ' 0%, ' + rgbaOf(gl.color, 0.55) + ' 35%, ' + rgbaOf(gl.color, 0.12) + ' 62%, ' + rgbaOf(gl.color, 0) + ' 78%)';
+            kb.appendChild(g);
+        });
+        if (c.smoke && c.smoke.enabled) {
+            var sw = el('div', 'sbs-smoke');
+            pct(sw, c.smoke);
+            var scv = document.createElement('canvas');
+            sw.appendChild(scv);
+            kb.appendChild(sw);
+            var sctx = scv.getContext('2d');
+            var SW = 0, SH = 0, puffs = [], acc = 0, rate = Math.max(0.1, (Number(c.smoke.intensity) || 100) / 100);
+            var ssize = function () { var s = fitCanvas(scv); SW = s.w; SH = s.h; };
+            timers.push(setTimeout(ssize, 0)); resized(ssize);
+            frames(function (t) {
+                if (!SW) return;
+                sctx.clearRect(0, 0, SW, SH);
+                acc += 1;
+                if (acc >= 7 / rate) {
+                    acc = 0;
+                    puffs.push({ x: SW * 0.5 + (Math.random() - 0.5) * SW * 0.06, y: SH * 0.97, r: SW * 0.04 + Math.random() * SW * 0.03, vy: -(SH * 0.0016 + Math.random() * SH * 0.0014),
+                        vx: (Math.random() * 0.4 + 0.1) * (SW * 0.0016), grow: 1.004 + Math.random() * 0.004, phase: Math.random() * Math.PI * 2, life: 0, max: 150 + Math.random() * 90 });
+                }
+                for (var i = puffs.length - 1; i >= 0; i--) {
+                    var p = puffs[i];
+                    p.life++; p.y += p.vy; p.x += p.vx + Math.sin(t * 0.0012 + p.phase) * 0.4; p.r *= p.grow;
+                    var k = p.life / p.max;
+                    if (k >= 1) { puffs.splice(i, 1); continue; }
+                    var a = (k < 0.2 ? k / 0.2 : (1 - k)) * 0.16;
+                    var gr = sctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+                    gr.addColorStop(0, 'rgba(210,210,205,' + a + ')'); gr.addColorStop(1, 'rgba(210,210,205,0)');
+                    sctx.fillStyle = gr; sctx.beginPath(); sctx.arc(p.x, p.y, p.r, 0, 7); sctx.fill();
+                }
+            });
+        }
+        if (Number(c.fog) > 0) {
+            var fog = el('div', 'sbs-fog');
+            fog.style.opacity = String(Number(c.fog) / 100);
+            ['f1', 'f2', 'f3'].forEach(function (k) { fog.appendChild(el('span', k)); });
+            root.appendChild(fog);
+        }
+        function fullCanvas(cls) { var cv = document.createElement('canvas'); cv.className = cls; root.appendChild(cv); return cv; }
+        if (Number(c.embers) > 0) {
+            var ecv = fullCanvas('sbs-fx');
+            var ectx = ecv.getContext('2d');
+            var EW = 0, EH = 0, parts = [];
+            var centre = c.emberArea === 'centre';
+            var spawn = function (reset) {
+                return centre
+                    ? { x: EW * 0.26 + Math.random() * EW * 0.52, y: reset ? EH + Math.random() * EH * 0.35 : EH * 0.45 + Math.random() * EH * 0.55, r: 0.4 + Math.random() * 1.5,
+                        vy: 0.25 + Math.random() * 0.65, sway: 0.4 + Math.random() * 0.9, phase: Math.random() * Math.PI * 2, life: 0, max: 240 + Math.random() * 360, hue: 24 + Math.random() * 18 }
+                    : { x: Math.random() * EW, y: reset ? EH + Math.random() * EH * 0.4 : Math.random() * EH, r: 0.5 + Math.random() * 1.9,
+                        vy: 0.25 + Math.random() * 0.7, sway: 0.4 + Math.random() * 0.9, phase: Math.random() * Math.PI * 2, life: 0, max: 280 + Math.random() * 420, hue: 25 + Math.random() * 20 };
+            };
+            var esize = function () { var s = fitCanvas(ecv); EW = s.w; EH = s.h; parts = []; for (var i = 0; i < Number(c.embers); i++) parts.push(spawn(false)); };
+            timers.push(setTimeout(esize, 0)); resized(esize);
+            frames(function (t) {
+                if (!EW) return;
+                ectx.clearRect(0, 0, EW, EH);
+                ectx.globalCompositeOperation = 'lighter';
+                parts.forEach(function (p) {
+                    p.life++; p.y -= p.vy; p.x += Math.sin((t * 0.001 * p.sway) + p.phase) * 0.4;
+                    var k = p.life / p.max;
+                    var fade = k < 0.12 ? k / 0.12 : (k > 0.7 ? (1 - k) / 0.3 : 1);
+                    var a = centre ? fade * Math.min(1, p.y / (EH * 0.55)) * 0.5 : fade * 0.55;
+                    if ((centre ? p.y < EH * 0.05 : p.y < -10) || p.life > p.max) { var n = spawn(true); Object.keys(n).forEach(function (key) { p[key] = n[key]; }); return; }
+                    var rr = p.r * (centre ? 2.6 : 3);
+                    var g = ectx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr);
+                    g.addColorStop(0, 'hsla(' + p.hue + ',95%,62%,' + a + ')'); g.addColorStop(1, 'hsla(' + p.hue + ',95%,55%,0)');
+                    ectx.fillStyle = g; ectx.beginPath(); ectx.arc(p.x, p.y, rr, 0, 7); ectx.fill();
+                });
+            });
+        }
+        if (Number(c.rain) > 0) {
+            var rcv = fullCanvas('sbs-fx');
+            var rctx = rcv.getContext('2d');
+            var RW = 0, RH = 0, drops = [];
+            var mk = function () { return { x: Math.random() * RW * 1.2 - RW * 0.1, y: Math.random() * RH, len: 8 + Math.random() * 16, sp: 9 + Math.random() * 9, a: 0.05 + Math.random() * 0.12 }; };
+            var rsize = function () { var s = fitCanvas(rcv); RW = s.w; RH = s.h; drops = []; for (var i = 0; i < Math.round(220 * Number(c.rain) / 100); i++) drops.push(mk()); };
+            timers.push(setTimeout(rsize, 0)); resized(rsize);
+            frames(function () {
+                if (!RW) return;
+                rctx.clearRect(0, 0, RW, RH);
+                rctx.lineWidth = 1;
+                rctx.lineCap = 'round';
+                drops.forEach(function (d) {
+                    rctx.strokeStyle = 'rgba(185,205,225,' + d.a + ')';
+                    rctx.beginPath(); rctx.moveTo(d.x, d.y); rctx.lineTo(d.x + 0.18 * d.len, d.y + d.len); rctx.stroke();
+                    d.y += d.sp; d.x += 0.18 * d.sp;
+                    if (d.y > RH) { d.y = -20; d.x = Math.random() * RW * 1.2 - RW * 0.1; }
+                });
+            });
+        }
+        if (Number(c.vignette) > 0) { var vg = el('div', 'sbs-vignette'); vg.style.setProperty('--sbs-vig', String(Number(c.vignette) / 100)); root.appendChild(vg); }
+        if (c.lightning) {
+            var bolt = el('div', 'sbs-lightning');
+            root.appendChild(bolt);
+            var flash = function () {
+                if (!alive) return;
+                bolt.classList.remove('is-on'); void bolt.offsetWidth; bolt.classList.add('is-on');
+                timers.push(setTimeout(flash, 7000 + Math.random() * 12000));
+            };
+            timers.push(setTimeout(flash, 2500 + Math.random() * 4000));
+        }
+        root.style.setProperty('--sbs-glow', rgbOf(c.glowColor).join(','));
+        if (c.title) {
+            var tw = el('div', 'sbs-title-wrap');
+            tw.style.top = c.titleY + '%';
+            var title = el('p', 'sbs-title sbs-title--' + (c.titleStyle || 'glow'), c.title);
+            title.style.fontSize = c.titleSize + 'px';
+            title.style.color = c.titleColor;
+            if (c.titleStyle === 'shimmer') {
+                title.style.backgroundImage = 'linear-gradient(100deg, ' + shade(c.titleColor, -0.35) + ' 0%, ' + c.titleColor + ' 30%, ' + shade(c.titleColor, 0.45) + ' 50%, ' + c.titleColor + ' 70%, ' + shade(c.titleColor, -0.35) + ' 100%)';
+            }
+            tw.appendChild(title);
+            root.appendChild(tw);
+        }
+        if (c.subtitle) {
+            var sub = el('p', 'sbs-sub', c.subtitle);
+            sub.style.fontSize = c.subtitleSize + 'px';
+            sub.style.color = c.subtitleColor;
+            if (c.subtitleMode === 'marquee') {
+                var mq = el('div', 'sbs-marquee');
+                mq.style.top = c.subtitleY + '%';
+                var track = el('span', 'sbs-track');
+                track.style.animationDuration = (Number(c.marqueeSec) || 18) + 's';
+                track.appendChild(sub);
+                mq.appendChild(track);
+                root.appendChild(mq);
+            } else {
+                var still = el('div', 'sbs-line');
+                still.style.top = c.subtitleY + '%';
+                still.appendChild(sub);
+                root.appendChild(still);
+            }
+        }
+        if (c.countdown && c.countdown.enabled) {
+            var cdw = el('div', 'sbs-line');
+            cdw.style.top = c.countdown.y + '%';
+            var cdt = el('p', 'sbs-count');
+            cdt.style.color = c.subtitleColor;
+            cdw.appendChild(cdt);
+            root.appendChild(cdw);
+            // Counts from when this source is shown (Studio creates it with "Refresh browser when scene becomes active").
+            var ends = Date.now() + (Number(c.countdown.minutes) || 5) * 60000;
+            var paint = function () {
+                var left = ends - Date.now();
+                cdt.textContent = left > 0 ? (c.countdown.label ? c.countdown.label + ' ' : '') + clock(left + 999) : (c.countdown.endText || '');
+            };
+            paint();
+            timers.push(setInterval(paint, 250));
+        }
+        if (c.socials) {
+            var so = el('div', 'sbs-line');
+            so.style.top = c.socialsY + '%';
+            var sp = el('p', 'sbs-socials', c.socials);
+            sp.style.color = c.subtitleColor;
+            so.appendChild(sp);
+            root.appendChild(so);
+        }
+        if (Number(c.grain) > 0) {
+            var gcv = document.createElement('canvas');
+            gcv.width = 170; gcv.height = 170;
+            var gctx = gcv.getContext('2d');
+            var img = gctx.createImageData(170, 170);
+            for (var i = 0; i < img.data.length; i += 4) { var v = Math.random() * 255; img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v; img.data[i + 3] = 255; }
+            gctx.putImageData(img, 0, 0);
+            var grain = el('div', 'sbs-grain');
+            grain.style.backgroundImage = 'url("' + gcv.toDataURL('image/png') + '")';
+            grain.style.opacity = String(Number(c.grain) / 100);
+            root.appendChild(grain);
+        }
+        widget.appendChild(root);
     }
     function apply(d) {
         page = d || {};

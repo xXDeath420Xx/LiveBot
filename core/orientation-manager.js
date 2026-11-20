@@ -11,29 +11,98 @@ import { themeColor } from './guild-theme.js';
  * `hint` says how to set it up: `slash` is a real slash command path (picked from the / menu), `page` a dashboard
  * page (its title in core/manage-nav.js) where there is no setup command. tests/orientation-commands.test.js checks
  * that every command the guide names exists, as slash or as text, in the form it is named (H-717).
+ *
+ * `group` picks the "to set up" list a feature is shown in: 'safety' (protection and logs) or 'more'. Within a
+ * group the order is the order below. The first ones in each group are the steps of the dashboard's setup
+ * checklist (core/setup-checklist.js RECOMMENDED: what new servers set up first, 2026-11-20 data), in its order.
+ * Refreshed 2026-11-20: raid detection, self-bot detection, the join gate, verification, free games, Critters
+ * and counting added; the list is split in two so neither field reaches Discord's 1,024-character limit.
  */
 export const FEATURE_CHECKS = [
+    // ── safety and logs ──
+    {
+        name: 'Logging / Audit Trail',
+        emoji: '📝',
+        group: 'safety',
+        query: 'SELECT guild_id FROM logging_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { slash: '/manage logs-setup apply' }
+    },
+    {
+        name: 'Raid Detection',
+        emoji: '🚧',
+        group: 'safety',
+        query: 'SELECT guild_id FROM raid_detection_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { slash: '/protection raid enable' }
+    },
+    {
+        name: 'Phishing Protection',
+        emoji: '🚨',
+        group: 'safety',
+        query: 'SELECT guild_id FROM phishing_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { page: 'Phishing links' }
+    },
+    {
+        name: 'Self-bot Detection',
+        emoji: '🤖',
+        group: 'safety',
+        query: 'SELECT guild_id FROM selfbot_detection_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { slash: '/protection selfbot enable' }
+    },
+    {
+        name: 'Global Ban Network',
+        emoji: '🌐',
+        group: 'safety',
+        query: 'SELECT guild_id FROM global_ban_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { slash: '/protection globalban enable' }
+    },
+    {
+        name: 'Anti-Nuke Protection',
+        emoji: '☢️',
+        group: 'safety',
+        query: 'SELECT guild_id FROM anti_nuke_config WHERE guild_id = ? LIMIT 1',
+        hint: { slash: '/protection antinuke enable' }
+    },
+    {
+        name: 'Join Gate',
+        emoji: '🚪',
+        group: 'safety',
+        query: `SELECT guild_id FROM join_gate_config WHERE guild_id = ? AND (age_gate_enabled = 1 OR rejoin_limit_enabled = 1
+            OR spammer_enabled = 1 OR name_filters_enabled = 1 OR avatar_enabled = 1) LIMIT 1`,
+        hint: { slash: '/protection joingate enable' }
+    },
+    {
+        name: 'Verification',
+        emoji: '✅',
+        group: 'safety',
+        query: 'SELECT guild_id FROM verify_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { slash: '/admin verification setup' }
+    },
+    {
+        name: 'Moderation Tools',
+        emoji: '🛡️',
+        group: 'safety',
+        query: 'SELECT guild_id FROM moderation_config WHERE guild_id = ? LIMIT 1',
+        hint: { page: 'Moderation' }
+    },
+    // ── more ──
+    {
+        name: 'Welcome & Goodbye',
+        emoji: '👋',
+        group: 'more',
+        query: 'SELECT guild_id FROM welcome_settings WHERE guild_id = ? LIMIT 1',
+        hint: { slash: '/manage welcome set-welcome' }
+    },
     {
         name: 'Ticketing System',
-        emoji: '\uD83C\uDFAB',
+        emoji: '🎫',
+        group: 'more',
         query: 'SELECT panel_id FROM ticket_panels WHERE guild_id = ? LIMIT 1',
         hint: { slash: '/support ticket setup' }
     },
     {
-        name: 'Leveling & Rank Cards',
-        emoji: '\uD83D\uDCC8',
-        query: 'SELECT guild_id FROM level_config WHERE guild_id = ? LIMIT 1',
-        hint: { slash: '/level setup' }
-    },
-    {
-        name: 'Reaction Roles',
-        emoji: '\uD83C\uDFAD',
-        query: 'SELECT id FROM reaction_role_panels WHERE guild_id = ? LIMIT 1',
-        hint: { slash: '/manage roles create-panel' }
-    },
-    {
         name: 'Stream Announcements',
-        emoji: '\uD83D\uDCE1',
+        emoji: '📡',
+        group: 'more',
         query: `SELECT 1 FROM (
             SELECT guild_id FROM subscriptions WHERE guild_id = ?
             UNION ALL
@@ -45,114 +114,132 @@ export const FEATURE_CHECKS = [
         hint: { slash: '/socials streamer add' }
     },
     {
+        name: 'Leveling & Rank Cards',
+        emoji: '📈',
+        group: 'more',
+        query: 'SELECT guild_id FROM level_config WHERE guild_id = ? LIMIT 1',
+        hint: { slash: '/level setup' }
+    },
+    {
+        name: 'Reaction Roles',
+        emoji: '🎭',
+        group: 'more',
+        query: 'SELECT id FROM reaction_role_panels WHERE guild_id = ? LIMIT 1',
+        hint: { slash: '/manage roles create-panel' }
+    },
+    {
         name: 'Self-Promo Tracking',
-        emoji: '\uD83D\uDCE3',
+        emoji: '📣',
+        group: 'more',
         query: 'SELECT guild_id FROM self_promo_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
         hint: { slash: '/systems selfpromo setup' }
     },
     {
         name: 'Community Support',
-        emoji: '\uD83E\uDD1D',
+        emoji: '🤝',
+        group: 'more',
         query: 'SELECT guild_id FROM community_support_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
         hint: { slash: '/systems community setup' }
     },
     {
-        name: 'Logging / Audit Trail',
-        emoji: '\uD83D\uDCDD',
-        query: 'SELECT guild_id FROM logging_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: { slash: '/manage logs-setup apply' }
-    },
-    {
-        name: 'Moderation Tools',
-        emoji: '\uD83D\uDEE1\uFE0F',
-        query: 'SELECT guild_id FROM moderation_config WHERE guild_id = ? LIMIT 1',
-        hint: { page: 'Moderation' }
-    },
-    {
-        name: 'Phishing Protection',
-        emoji: '\uD83D\uDEA8',
-        query: 'SELECT guild_id FROM phishing_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: { page: 'Phishing links' }
-    },
-    {
-        name: 'Global Ban Network',
-        emoji: '\uD83C\uDF10',
-        query: 'SELECT guild_id FROM global_ban_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: { slash: '/protection globalban enable' }
-    },
-    {
-        name: 'Anti-Nuke Protection',
-        emoji: '\u2622\uFE0F',
-        query: 'SELECT guild_id FROM anti_nuke_config WHERE guild_id = ? LIMIT 1',
-        hint: { slash: '/protection antinuke enable' }
+        name: 'Free Games Alerts',
+        emoji: '🎁',
+        group: 'more',
+        query: 'SELECT guild_id FROM free_games_subscriptions WHERE guild_id = ? AND is_enabled = 1 LIMIT 1',
+        hint: { slash: '/alerts freegames subscribe' }
     },
     {
         name: 'Economy System',
-        emoji: '\uD83D\uDCB0',
+        emoji: '💰',
+        group: 'more',
         query: 'SELECT guild_id FROM economy_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
         hint: { page: 'Economy' }
     },
     {
+        name: 'Critters',
+        emoji: '🐾',
+        group: 'more',
+        query: 'SELECT guild_id FROM critter_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+        hint: { page: 'Critters' }
+    },
+    {
+        name: 'Counting',
+        emoji: '🔢',
+        group: 'more',
+        query: 'SELECT guild_id FROM counting_channels WHERE guild_id = ? AND is_active = 1 LIMIT 1',
+        hint: { page: 'Counting' }
+    },
+    {
         name: 'Starboard',
-        emoji: '\u2B50',
+        emoji: '⭐',
+        group: 'more',
         query: 'SELECT guild_id FROM starboard_config WHERE guild_id = ? LIMIT 1',
         hint: { slash: '/community starboard setup' }
     },
     {
         name: 'Birthday Celebrations',
-        emoji: '\uD83C\uDF82',
+        emoji: '🎂',
+        group: 'more',
         query: 'SELECT guild_id FROM birthday_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
         hint: { slash: '/engage birthday setup' }
     },
     {
         name: 'Suggestions',
-        emoji: '\uD83D\uDCA1',
+        emoji: '💡',
+        group: 'more',
         query: 'SELECT guild_id FROM suggestion_config WHERE guild_id = ? LIMIT 1',
         hint: { slash: '/engage suggest setup' }
     },
     {
         name: 'Music Playback',
-        emoji: '\uD83C\uDFB5',
+        emoji: '🎵',
+        group: 'more',
         query: 'SELECT guild_id FROM music_config WHERE guild_id = ? LIMIT 1',
         hint: { slash: '/music play' }
     },
     {
         name: 'VC Sound Drops',
-        emoji: '\uD83D\uDD0A',
+        emoji: '🔊',
+        group: 'more',
         query: 'SELECT guild_id FROM vc_sound_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
         hint: { slash: '/admin vcsounds enable' }
     },
     {
         name: 'Auto Publisher',
-        emoji: '\uD83D\uDCE4',
+        emoji: '📤',
+        group: 'more',
         query: 'SELECT guild_id FROM auto_publisher_config WHERE guild_id = ? AND is_enabled = 1 LIMIT 1',
         hint: { slash: '/alerts autopublish enable' }
     },
     {
-        name: 'Welcome & Goodbye',
-        emoji: '\uD83D\uDC4B',
-        query: 'SELECT guild_id FROM welcome_settings WHERE guild_id = ? LIMIT 1',
-        hint: { slash: '/manage welcome set-welcome' }
-    },
-    {
         name: 'Confessions',
-        emoji: '\uD83E\uDD2B',
+        emoji: '🤫',
+        group: 'more',
         query: 'SELECT guild_id FROM confession_config WHERE guild_id = ? LIMIT 1',
         hint: { page: 'Confessions' }
     }
 ];
 
+/** The two "to set up" fields, in embed order. */
+export const SETUP_GROUPS = [
+    { id: 'safety', title: '🛡️ Safety and Logs to Set Up' },
+    { id: 'more', title: '⚙️ More to Set Up' },
+];
+
 /**
  * The "Always Available" lines. `slash`: picked from the / menu. `typed`: text commands (not registered with
  * Discord since the slash/text split, docs/command-split-2026-11-18.md), typed as a message that starts with /.
+ * `where`: no command, said in words (a dashboard page or a website).
  */
 export const ALWAYS_AVAILABLE = [
     { emoji: '🎲', title: 'Fun & Games', text: 'jokes, 8ball, memes, Cards Against Humanity and word games', typed: ['/8ball', '/meme', '/cah', '/wordgame'] },
+    { emoji: '🐾', title: 'Critters & Collecting', text: 'catch and battle critters for acorns, collect cats and go fishing', typed: ['/owo', '/cat', '/fish'] },
     { emoji: '⚔️', title: 'D&D RPG', text: '5e characters, dice, combat, spells, dungeons, party and PvP', typed: ['/rpg'] },
-    { emoji: '💰', title: 'Economy & Arcade', text: 'currency, shop, pets, gambling and arcade games', typed: ['/economy', '/arcade'] },
+    { emoji: '💰', title: 'Economy & Arcade', text: 'currency, shop, pets, gambling and arcade games, including Greenhouse Tycoon', typed: ['/economy', '/arcade'] },
     { emoji: '🎵', title: 'Music & Voice', text: 'a full music player with an AI DJ, and tools for your own voice channel', slash: ['/music'], typed: ['/voice'] },
     { emoji: '🔧', title: 'Utility', text: 'translate, QR codes, unit and currency converters, colours, AFK and more', typed: ['/tools'] },
     { emoji: '📅', title: 'Info & Schedules', text: 'server and member info, and event schedules', typed: ['/server info', '/user profile info'], slash: ['/schedule'] },
+    { emoji: '📺', title: 'For Streamers', text: 'the Stream bot runs chat commands, timers, alerts and overlays on your own Twitch and Kick channel, and the CertiFried Studio app links it to OBS and your lights', where: 'Set it up on the dashboard\'s Stream bot page' },
 ];
 
 const codeList = (list) => {
@@ -160,7 +247,7 @@ const codeList = (list) => {
     return items.length > 1 ? `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}` : items[0];
 };
 
-/** One "Available to Set Up" line: the setup command, or the dashboard page when there is no command. */
+/** One "to set up" line: the setup command, or the dashboard page when there is no command. */
 export function hintText(hint) {
     if (hint?.slash) return `\`${hint.slash}\``;
     if (hint?.page) return `dashboard, ${hint.page} page`;
@@ -172,8 +259,8 @@ export function alwaysAvailableLine(item) {
     const parts = [];
     if (item.slash?.length) parts.push(`pick ${codeList(item.slash)} from the / menu`);
     if (item.typed?.length) parts.push(`type ${codeList(item.typed)} as a message`);
-    const how = parts.join('; ');
-    return `${item.emoji} **${item.title}**: ${item.text}. ${how.charAt(0).toUpperCase()}${how.slice(1)}.`;
+    const how = parts.join('; ') || item.where || '';
+    return `${item.emoji} **${item.title}**: ${item.text}.${how ? ` ${how.charAt(0).toUpperCase()}${how.slice(1)}.` : ''}`;
 }
 
 /**
@@ -214,6 +301,18 @@ function capValue(s) {
     return s.slice(0, cut > 0 ? cut : 1000) + '\n… use `/help` for the rest';
 }
 
+/** Lines packed into embed field values of at most 1,024 characters, never splitting a line. */
+export function packLines(lines, max = 1024) {
+    const out = [];
+    let cur = '';
+    for (const line of lines) {
+        const next = cur ? `${cur}\n${line}` : line;
+        if (next.length > max && cur) { out.push(cur); cur = line; } else cur = next;
+    }
+    if (cur) out.push(capValue(cur));
+    return out;
+}
+
 export async function buildOrientationEmbed(client, guildId, { detect = detectFeatures } = {}) {
     const guild = client.guilds.cache.get(guildId);
     const botName = client.user.displayName || client.user.username;
@@ -235,7 +334,7 @@ export async function buildOrientationEmbed(client, guildId, { detect = detectFe
 
     // Enabled features
     if (enabled.length > 0) {
-        const lines = enabled.map(f => `${f.emoji} **${f.name}**`);
+        const lines = [...enabled].sort((a, b) => FEATURE_CHECKS.indexOf(a) - FEATURE_CHECKS.indexOf(b)).map(f => `${f.emoji} **${f.name}**`);
         embed.addFields({
             name: '\u2705 Active Features',
             value: capValue(lines.join('\n')),
@@ -243,24 +342,36 @@ export async function buildOrientationEmbed(client, guildId, { detect = detectFe
         });
     }
 
-    // Available but not configured
-    if (available.length > 0) {
-        const lines = available.map(f => `${f.emoji} ${f.name}: ${hintText(f.hint)}`);
+    // Available but not configured: two lists (safety and logs, then the rest), each in FEATURE_CHECKS order
+    // (detectFeatures fills its arrays in the order the queries finish).
+    const order = (f) => FEATURE_CHECKS.indexOf(f);
+    for (const group of SETUP_GROUPS) {
+        const lines = available.filter(f => (f.group || 'more') === group.id).sort((a, b) => order(a) - order(b))
+            .map(f => `${f.emoji} ${f.name}: ${hintText(f.hint)}`);
+        if (!lines.length) continue;
         embed.addFields({
-            name: '\u2699\uFE0F Available to Set Up',
+            name: group.title,
             value: capValue(lines.join('\n')),
             inline: false
         });
     }
 
     // Always-available features
-    embed.addFields({
-        name: '\uD83C\uDF1F Always Available',
-        value: capValue(ALWAYS_AVAILABLE.map(alwaysAvailableLine).join('\n')),
+    // More than one field's worth (1,024 characters): whole lines go into a second field rather than being cut.
+    packLines(ALWAYS_AVAILABLE.map(alwaysAvailableLine)).forEach((value, i) => embed.addFields({
+        name: i === 0 ? '\uD83C\uDF1F Always Available' : '\uD83C\uDF1F Always Available (continued)',
+        value,
         inline: false
-    });
+    }));
 
     const dashboardUrl = process.env.DASHBOARD_URL || 'https://certifriedmultitool.com/';
+
+    // The guides on the website (dashboard/content/guides): one per feature, with screenshots.
+    embed.addFields({
+        name: '\uD83D\uDCD6 Guides',
+        value: `Step-by-step guides with screenshots for each feature, and a search for any setting or command: [open the guides](${dashboardUrl}docs/guides).`,
+        inline: false
+    });
 
     // Against_The_Tide stream team invite — any CertiFried user is welcome to apply.
     embed.addFields({
@@ -421,6 +532,57 @@ export async function updateOrientationMessage(client, guildId) {
         logger.warn(`[Orientation] Could not update message for guild ${guildId} — message may have been deleted`);
         return false;
     }
+}
+
+
+/**
+ * Refresh every server's existing guide message in place (owner request 2026-11-20).
+ * Edits only: a server whose message was deleted, or whose bot is not in the server, is skipped and
+ * nothing new is posted. Each server uses its own bot (custom bots included), because only the bot
+ * that posted a message can edit it. Paced at one edit every 1.5 s.
+ * @returns {Promise<{ total: number, updated: number, skipped: number, failed: number }>}
+ */
+export async function refreshAllOrientationMessages({ getClient = (id) => global.botManager?.getClientForGuild?.(id) || global.client || null, gapMs = 1500 } = {}) {
+    const [rows] = await pool.execute('SELECT guild_id FROM orientation_config WHERE message_id IS NOT NULL');
+    const out = { total: rows.length, updated: 0, skipped: 0, failed: 0 };
+    for (const { guild_id: guildId } of rows) {
+        const client = getClient(guildId);
+        if (!client?.guilds?.cache?.has(guildId)) { out.skipped++; continue; }
+        try {
+            if (await updateOrientationMessage(client, guildId)) out.updated++;
+            else out.skipped++;
+        } catch (err) {
+            out.failed++;
+            logger.warn('[Orientation] refresh-all failed for a guild', { guildId, error: err?.message });
+        }
+        await new Promise((r) => setTimeout(r, gapMs));
+    }
+    logger.info('[Orientation] refresh-all finished', out);
+    return out;
+}
+
+/**
+ * Runs refreshAllOrientationMessages once whenever data/requests/orientation-refresh-all.request exists
+ * (checked every 60 s), writes the counts to orientation-refresh-all.result.json and removes the request.
+ */
+export function startOrientationRefreshWatcher({ dir = new URL('../data/requests/', import.meta.url) } = {}) {
+    let busy = false;
+    const timer = setInterval(async () => {
+        if (busy) return;
+        const fs = await import('node:fs/promises');
+        const req = new URL('orientation-refresh-all.request', dir);
+        try { await fs.access(req); } catch { return; }
+        busy = true;
+        try {
+            await fs.unlink(req).catch(() => {});
+            const result = await refreshAllOrientationMessages();
+            await fs.writeFile(new URL('orientation-refresh-all.result.json', dir), JSON.stringify({ ...result, finishedAt: new Date().toISOString() }, null, 2));
+        } catch (err) {
+            logger.warn('[Orientation] refresh-all request failed', { error: err?.message });
+        } finally { busy = false; }
+    }, 60_000);
+    timer.unref?.();
+    return () => clearInterval(timer);
 }
 
 /**

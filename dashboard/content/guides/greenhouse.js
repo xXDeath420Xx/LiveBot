@@ -1,6 +1,7 @@
 // Checked against: dashboard/routes/greenhouse.js, services/cfx/ (config/game.js, domain/*, http/routes/*),
 // commands/games/arcade.js + arcade-greenhouse-handler.js, dashboard/views/partials/manage/greenhouse.ejs,
-// frontend/greenhouse/src/views/your-data.js (the Your data card, H-641).
+// frontend/greenhouse/src/views/your-data.js (the Your data card, H-641), frontend/greenhouse/src/activity-host.js and
+// frontend/activities/src/main.js (the Discord Activity).
 export default {
     slug: 'greenhouse',
     title: 'Greenhouse Tycoon',
@@ -17,6 +18,13 @@ export default {
                 'Open [Greenhouse Tycoon](/greenhouse) and sign in with Discord, Twitch or Kick. You start with $500, two benches and seeds for the first three plants.',
                 'Plant, water and harvest, then sell what you grow. Spend the money on upgrades and more benches, hire staff, and cross-breed new varieties.',
             ],
+        },
+        {
+            title: 'Play inside Discord',
+            text: [
+                'Join a voice channel, press the Activities button (the rocket), choose CertiFried, then **Greenhouse Tycoon**. It signs you in with Discord and opens the same greenhouse as the website, and everyone in the channel can play their own at the same time.',
+            ],
+            image: 'activity-launcher',
         },
         {
             title: 'Check in from Discord',

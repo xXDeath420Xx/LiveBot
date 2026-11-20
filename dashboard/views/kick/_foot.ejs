@@ -1,33 +1,6 @@
-  </main>
-
-  <footer class="footer">
-    <div class="kick-foot">
-      <div class="footer-links">
-        <a href="/kick" class="footer-link">Kick Defender</a>
-        <a href="/kick/features" class="footer-link">Features</a>
-        <a href="/docs#kick-defender" class="footer-link">Docs</a>
-        <a href="/discord" class="footer-link">Discord bot</a>
-        <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener" class="footer-link">Support</a>
-        <a href="/donate" class="footer-link">Donate</a>
-        <a href="/terms" class="footer-link">Terms</a>
-        <a href="/privacy" class="footer-link">Privacy</a>
-      </div>
-      <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool</p>
-    </div>
-  </footer>
-
-  <script>
-    (function () {
-      var btn = document.getElementById('mobileMenuBtn');
-      var menu = document.getElementById('mobileMenu');
-      if (!btn || !menu) return;
-      btn.addEventListener('click', function () {
-        var open = menu.classList.toggle('is-open');
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-      });
-    })();
-  </script>
-  <%- typeof extraJs !== 'undefined' ? extraJs : '' %>
+<%# Kick Defender pages: closes the frame opened by _head.ejs. Locals: extraJs (page scripts, trusted). %>
+</main>
+<%- include('partials/site-footer') %>
+<%- typeof extraJs !== 'undefined' ? extraJs : '' %>
 </body>
 </html>

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Counter</title>
+    <link rel="stylesheet" href="pi.css">
+</head>
+<body>
+    <form id="settings">
+    <div class="row"><label for="counter">Counter</label><select id="counter" data-setting="counter" data-list="counters" data-placeholder="Choose a counter"></select></div>
+    <p class="hint" id="counter-hint"></p>
+    <div class="row"><label for="direction">On press</label><select id="direction" data-setting="direction" data-default="up"><option value="up">Add</option><option value="down">Take away</option></select></div>
+    <div class="row"><label for="step">By</label><input id="step" type="number" min="1" max="1000" step="1" data-setting="step" data-default="1"></div>
+    </form>
+    <div id="connection"></div>
+    <script src="pi.js"></script>
+</body>
+</html>

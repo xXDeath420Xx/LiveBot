@@ -3,14 +3,17 @@
  *
  * Kick channel page timers post on their Kick channel through the Kick Defender sign-in, as they always did.
  * Stream bot timers post on the profile's linked channels: Twitch through the CertiFried bot account (the chat
- * action's path, io.sendChat), Kick through the same Kick path. A timer that runs an automation starts it with the
+ * action's path, io.sendChat), Kick through the same Kick path, YouTube as the streamer's channel through io.sendChat
+ * (20 quota units a post; only for timers set to YouTube, only while YouTube is set up, and not once the quota guard
+ * is at 'critical'; timers.js timerTargets). A timer that runs an automation starts it with the
  * engine's manual option (no trigger match or conditions; the profile's busy limits still apply), source 'timer'.
  * last_sent_at only moves when something was posted or run, so a timer held back by "only while live" or
  * "N chat lines" is checked again the next minute.
  *
  * If migration 456 has not been applied yet, the job falls back to the old Kick-only query and plain sending.
  */
-import { createTimerStore, fireTimer, legacyTokens, renderPlain } from './timers.js';
+import { createTimerStore, fireTimer, legacyTokens, renderPlain, timerTargets } from './timers.js';
+import { youtubeBotConfig } from './youtube/config.js';
 
 let warnedSchema = false;
 
@@ -65,9 +68,11 @@ export async function runDueTimers({ pool, logger = null, sendKick, getStreamBot
                 profile = await sb.store.getProfile(Number(t.profile_id));
                 if (!profile?.enabled) continue;
                 const channels = await sb.io.channelsFor(profile.id);
-                targets = channels
-                    .filter((c) => (c.platform === 'twitch' || c.platform === 'kick') && (!t.platforms || t.platforms === 'all' || c.platform === t.platforms))
-                    .map((c) => ({ platform: c.platform, channelId: String(c.platform_user_id), login: c.login || '' }));
+                let youtubeLevel = 'normal';
+                try { youtubeLevel = sb.youtube?.quota?.level?.() || 'normal'; } catch { /* no guard: YouTube is off */ }
+                targets = timerTargets(t.platforms, channels, { youtube: youtubeBotConfig().enabled && !!sb.youtube?.service, youtubeLevel })
+                    // A YouTube chat exists only during a broadcast: skip YouTube while it is not live (the service's own state, no API call).
+                    .filter((tg) => tg.platform !== 'youtube' || !!sb.youtube.service.streamInfo?.({ profileId: profile.id, channelId: tg.channelId })?.live);
             } else {
                 targets = [{ platform: 'kick', channelId: String(t.kick_channel_id), login: t.channel_name || '' }];
             }
@@ -91,8 +96,9 @@ export async function runDueTimers({ pool, logger = null, sendKick, getStreamBot
                         return !!(await sendKick(channelId, text));
                     }
                     if (!sb) return false;
-                    const res = await sb.io.sendChat({ profileId: profile?.id, platform: 'twitch', channelId, login, text });
-                    if (!res.ok) logger?.warn?.('[KickTimers] Twitch send failed', { timerId: t.id, error: res.error });
+                    const res = await sb.io.sendChat({ profileId: profile?.id, platform: platform === 'youtube' ? 'youtube' : 'twitch', channelId, login, text });
+                    // Not live on YouTube is not a failure: the timer is checked again next minute (no YouTube call was made).
+                    if (!res.ok && !res.notLive) logger?.warn?.(`[KickTimers] ${platform === 'youtube' ? 'YouTube' : 'Twitch'} send failed`, { timerId: t.id, error: res.error });
                     return !!res.ok;
                 },
                 async runAutomation(target) {

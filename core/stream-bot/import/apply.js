@@ -10,7 +10,8 @@
  * Idempotency: every created thing is recorded in import_items under (profile, source, kind, source id). On a
  * re-import an item whose target still exists is left alone ("already imported"), except that an automation nobody
  * has edited since it was imported is brought up to the current mapping ("updated"); one whose target was deleted is
- * created again, and items an earlier mapper could not handle are created once it can. Counters and viewer values are never overwritten. Channel commands that already exist under the
+ * created again, and items an earlier mapper could not handle are created once it can. Counters are never overwritten; viewer records
+ * keep what an import added apart (core/stream-bot/viewers/store.js importRows), so importing again replaces it instead of adding it twice. Channel commands that already exist under the
  * same name (made by hand) are not touched.
  *
  * Nothing here sends chat, calls OBS or writes to Twitch, except recreateReward(), which only runs when the owner
@@ -22,6 +23,8 @@
 import { SOURCE_LABEL } from './mapper.js';
 import { reportOf } from './report.js';
 import crypto from 'node:crypto';
+import { createViewerStore } from '../viewers/store.js';
+import { withDefaults as viewerSettings } from '../viewers/settings.js';
 
 /** What an automation does (name, trigger, conditions, steps): compared to tell an untouched import from an edited one. */
 export function automationHash(a) {
@@ -135,7 +138,40 @@ export function createImportStore({ db, prefix = 'stream_bot_', channelTables = 
             const r = await q(`INSERT INTO ${TM} (channel_id, message, interval_min, is_enabled, created_by) VALUES (?, ?, ?, 0, ?)`, [channelId, message, minutes, createdBy]);
             return Number(r.insertId);
         },
-        /** Per-viewer values, never overwriting one that exists. Returns rows written. */
+        /**
+         * Viewer records (H-747, migration 464). Rows last seen more than 400 days ago are left out: the retention sweep would
+         * delete them that night. → { created, updated, unchanged, skippedOld }
+         */
+        async importViewers(profileId, rows, source, { now = Date.now() } = {}) {
+            const vs = createViewerStore({ db, prefix });
+            if (!(await vs.available())) throw new Error('Viewer records are not switched on yet (the database update for them has not run)');
+            const cutoff = now - 400 * 86_400_000;
+            const byPlatform = new Map();
+            let skippedOld = 0;
+            // Old rows stay when the viewer was seen since: in the other upload (seenElsewhere) or already in Viewers.
+            const old = (rows || []).filter((r) => r.lastSeen && new Date(r.lastSeen).getTime() < cutoff && !(Number(r.seenElsewhere) >= cutoff));
+            const recent = new Set();
+            for (const p of ['twitch', 'kick']) {
+                const ids = old.filter((r) => (r.platform === 'kick' ? 'kick' : 'twitch') === p).map((r) => String(r.id));
+                for (const [id, at] of await vs.lastSeenFor(profileId, p, ids)) if (new Date(at).getTime() >= cutoff) recent.add(`${p}:${id}`);
+            }
+            for (const r of rows || []) {
+                const last = r.lastSeen ? new Date(r.lastSeen).getTime() : null;
+                const keep = Number(r.seenElsewhere) >= cutoff || recent.has(`${r.platform === 'kick' ? 'kick' : 'twitch'}:${r.id}`);
+                if (last && last < cutoff && !keep) { skippedOld++; continue; }
+                const p = r.platform === 'kick' ? 'kick' : 'twitch';
+                if (!byPlatform.has(p)) byPlatform.set(p, []);
+                byPlatform.get(p).push({ id: r.id, login: r.login || null, name: r.name || null, firstSeen: r.firstSeen || null, lastSeen: r.lastSeen || null,
+                    minutes: r.watchMinutes, messages: r.chatMessages, points: r.points });
+            }
+            const out = { created: 0, updated: 0, unchanged: 0, skippedOld };
+            for (const [p, list] of byPlatform) {
+                const r = await vs.importRows(profileId, p, list, source);
+                out.created += r.created; out.updated += r.updated; out.unchanged += r.unchanged;
+            }
+            return out;
+        },
+        /** Older imports (before H-747) stored {db:} values; kept for scripts that still call it. Returns rows written. */
         async insertViewerValues(profileId, rows) {
             let n = 0;
             for (let i = 0; i < rows.length; i += 200) {
@@ -350,6 +386,19 @@ export async function applyPlan({ store, importStore, profileId, plan, categorie
                     const links = [{ label: 'Review banned words', href: '/stream/bot/import#sbi-words-title' }];
                     if (prev?.data?.words) record(it, added.length ? 'updated' : 'already', added.length ? `${added.length} more saved, not applied` : 'Already saved, not applied', links);
                     else record(it, 'created', `${words.length} banned word${words.length === 1 ? '' : 's'} saved, not applied. Press "Apply to Kick automod" when you switch over`, links);
+                    break;
+                }
+                case 'viewer_records': {
+                    const r = await importStore.importViewers(profileId, t.rows, it.source);
+                    let note = '';
+                    if (t.settings && !(await store.getSettingsKey(profileId, 'viewers'))) {
+                        await store.setSettingsKey(profileId, 'viewers', viewerSettings(t.settings));
+                        note = '; points name, earning and ranks set from Firebot';
+                    }
+                    await importStore.upsertItem(profileId, { importId, source: it.source, kind: it.kind, sourceId: it.sourceId, name: it.name, status: it.status, targetKind: 'viewer_records', targetRef: `viewers:${t.rows.length}` });
+                    const changed = r.created + r.updated;
+                    const detail = `${r.created} new, ${r.updated} updated, ${r.unchanged} unchanged${r.skippedOld ? `, ${r.skippedOld} not seen for over 400 days left out` : ''}${note}`;
+                    record(it, !changed ? 'already' : r.created ? 'created' : 'updated', detail, [{ label: 'Viewers', href: '/stream/bot/viewers' }]);
                     break;
                 }
                 case 'viewer_values': {

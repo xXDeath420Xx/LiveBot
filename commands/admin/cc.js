@@ -1,5 +1,5 @@
 /**
- * /cc (deployed as /tools cc, core/command-mounts.js) — list, show, create or replace, delete and run
+ * /cc (a text command typed as /cc, core/command-registration.js) — list, show, create or replace, delete and run
  * this server's custom commands from Discord. Add and remove need Manage Server; list, show and run
  * are open to everyone.
  *
@@ -52,7 +52,7 @@ function describeAction(row) {
 async function handleList(interaction) {
     const rows = await cc.list(interaction.guild.id);
     if (!rows.length) {
-        return interaction.reply({ content: 'This server has no custom commands yet. `/tools cc add` or the dashboard\'s Custom Commands page creates one.', flags: EPHEMERAL });
+        return interaction.reply({ content: 'This server has no custom commands yet. `/cc add` or the dashboard\'s Custom Commands page creates one.', flags: EPHEMERAL });
     }
     const lines = rows.map(r => {
         const uses = Number(r.use_count) || 0;
@@ -67,7 +67,7 @@ async function handleList(interaction) {
     const embed = new EmbedBuilder()
         .setTitle(`Custom commands (${rows.length})`)
         .setDescription(description)
-        .setFooter({ text: 'Run one with /tools cc run, or type it after the server prefix (e.g. !name).' });
+        .setFooter({ text: 'Run one with /cc run, or type it after the server prefix (e.g. !name).' });
     return interaction.reply({ embeds: [embed], flags: EPHEMERAL, allowedMentions: { parse: [] } });
 }
 
@@ -90,7 +90,7 @@ async function handleAdd(interaction) {
     const result = await cc.saveReply(interaction.guild.id, interaction.options.getString('name'), interaction.options.getString('response'));
     if (result.error) return interaction.reply({ content: result.error, flags: EPHEMERAL });
 
-    const lines = [`${result.created ? 'Created' : 'Updated'} \`${result.name}\`. Run it with \`/tools cc run name:${result.name}\` or type it after the server prefix.`];
+    const lines = [`${result.created ? 'Created' : 'Updated'} \`${result.name}\`. Run it with \`/cc run name:${result.name}\` or type it after the server prefix.`];
     if (result.warnings.length) {
         lines.push('', 'Saved, but check these:', ...result.warnings.slice(0, 5).map(w => `• ${w}`));
     }
@@ -137,4 +137,6 @@ async function autocomplete(interaction) {
 }
 
 export { data, execute, autocomplete };
-export default { category: 'admin', data, execute, autocomplete };
+// 'tools', not 'admin': the admin category put list, show and run behind Manage Server too (H-805);
+// add and remove check Manage Server themselves (canManage).
+export default { category: 'tools', data, execute, autocomplete };

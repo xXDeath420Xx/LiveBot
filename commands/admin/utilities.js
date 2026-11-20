@@ -498,6 +498,12 @@ export default {
 
     // ==================== BOTS GROUP ====================
     async handleBots(interaction, subcommand) {
+        // Custom bots are the whole network's, not this server's: listing every bot and restarting them is for
+        // the bot owner only, whatever the server permissions.
+        const { isSuperAdmin } = await import('../../utils/constants.js');
+        if (!isSuperAdmin(interaction.user.id)) {
+            return interaction.reply({ content: 'Only the CertiFried owner can list or restart the custom bots.', ephemeral: true });
+        }
         await interaction.deferReply({ ephemeral: true });
 
         const botId = interaction.options.getString('bot-id');

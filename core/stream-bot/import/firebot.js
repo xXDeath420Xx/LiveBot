@@ -16,6 +16,7 @@
  */
 import { stripSecrets } from './secrets.js';
 import { translateFirebot, slugKey } from './variables.js';
+import { firebotHue, firebotHueScene, firebotElgato } from './lights.js';
 
 const ROLE = Object.freeze({ broadcaster: 'broadcaster', streamer: 'broadcaster', mod: 'moderator', moderator: 'moderator', vip: 'vip', sub: 'subscriber', subscriber: 'subscriber' });
 
@@ -185,6 +186,15 @@ export function convertEffects(effects, ctx, depth = 0) {
                 break;
             }
             case 'firebot:html': gap('overlay.html', type); break;
+            // Phase 5 lights (core/stream-bot/import/lights.js): Firebot's Philips Hue and Elgato integrations.
+            case 'hue:control-light': case 'hue:scenes': case 'elgato:key-lights': case 'elgato:light-strips': {
+                const r = type === 'hue:control-light' ? firebotHue(e) : type === 'hue:scenes' ? firebotHueScene(e) : firebotElgato(e, type === 'elgato:light-strips' ? 'strip' : 'key');
+                out.actions.push(...r.actions);
+                out.notes.push(...r.notes);
+                for (const g of r.gaps) gap(g.gap, `${type} (${g.what})`);
+                if (!r.actions.length && !r.gaps.length) out.notes.push(`A ${type} effect changed nothing, so it was left out`);
+                break;
+            }
             // Phase 4 stream actions (design doc §7.3)
             case 'firebot:clip':
                 out.actions.push({ type: 'stream.clip' });
@@ -223,7 +233,20 @@ export function convertEffects(effects, ctx, depth = 0) {
             case 'firebot:clear-chat': out.actions.push({ type: 'chat.clear' }); break;
             case 'firebot:modban': case 'firebot:modTimeout': case 'firebot:modpurge': gap('mod.timeout', type); break;
             case 'firebot:tts': case 'firebot:ttsv2': gap('tts.speak', type); break;
-            case 'firebot:currency': gap('currency.change', type); break;
+            case 'firebot:currency': {
+                // Viewers and points (H-747, design §11): a change for one viewer becomes Give / Take / Set points.
+                const act = String(e.action || '').toLowerCase();
+                const target = String(e.target || 'individual').toLowerCase();
+                const kind = act === 'add' ? 'points.add' : act === 'remove' ? 'points.remove' : act === 'set' ? 'points.set' : null;
+                if (!kind || target !== 'individual') { gap(kind ? 'currency.bulk' : 'currency.change', type); break; }
+                const who = String(e.userTarget ?? '').trim();
+                const amount = tr(str(e.amount ?? '', 200)).trim();
+                if (!amount) { gap('currency.change', type); break; }
+                const self = !who || /^\$(user|username)$/i.test(who);
+                out.actions.push({ type: kind, who: self ? 'event' : 'named', viewer: self ? '' : tr(who), amount });
+                out.notes.push('A currency change became a points step (Viewers): CertiFried has one points currency per channel');
+                break;
+            }
             case 'firebot:discord': gap('discord.webhook', type); break;
             case 'firebot:http-request': {
                 const method = String(e.method || 'GET').toUpperCase();
@@ -372,7 +395,7 @@ function restrictionRoles(data) {
             }
         } else if (r.type) {
             notes.push(`The ${String(r.type).replace(/^firebot:/, '')} restriction was not kept`);
-            if (/currency/.test(r.type)) gaps.push({ gap: 'currency.change', detail: `Firebot restriction ${r.type}` });
+            if (/currency/.test(r.type)) gaps.push({ gap: 'currency.cost', detail: `Firebot restriction ${r.type}` });
         }
     }
     return { roles: [...roles], notes, gaps };
@@ -570,16 +593,65 @@ export function parseFirebot({ files = null, setup = null, quotes = null, wantVi
             if (!d?._id || d.$$indexCreated) continue;
             n++;
             for (const k of Object.keys(d)) fields.add(k);
-            if (wantViewers && /^\d{1,20}$/.test(String(d._id))) {
-                rows.push({ platform: 'twitch', id: String(d._id), login: str(d.username, 40), watchMinutes: num(d.minutesInChannel, 0), chatMessages: num(d.chatMessages, 0) });
+            if (wantViewers && /^\d{1,20}$/.test(String(d._id)) && d.twitch !== false) {
+                // H-747: names, first and last seen and the currency balance too (viewer records, core/stream-bot/viewers).
+                rows.push({ platform: 'twitch', id: String(d._id), login: str(d.username, 40), name: d.displayName ? str(d.displayName, 100) : null,
+                    watchMinutes: num(d.minutesInChannel, 0), chatMessages: num(d.chatMessages, 0),
+                    firstSeen: num(d.joinDate, 0) > 0 ? num(d.joinDate, 0) : null, lastSeen: num(d.lastSeen, 0) > 0 ? num(d.lastSeen, 0) : null,
+                    currency: d.currency && typeof d.currency === 'object' && !Array.isArray(d.currency) ? d.currency : null });
             }
         }
-        bundle.viewers = { count: n, fields: [...fields].filter((f) => !/token|auth/i.test(f)).sort(), rows: wantViewers ? rows : [] };
+        const loyalty = firebotLoyalty(fm, rows);
+        for (const r of rows) { if (loyalty.currencyId && r.currency) { const v = num(r.currency[loyalty.currencyId], 0); if (v > 0) r.points = Math.round(v); } delete r.currency; }
+        bundle.viewers = { count: n, fields: [...fields].filter((f) => !/token|auth/i.test(f)).sort(), rows: wantViewers ? rows : [], settings: loyalty.settings, notes: loyalty.notes };
     }
 
     // what files were seen (names only)
     bundle.files = [...fm.keys()].sort();
     return bundle;
+}
+
+/**
+ * Firebot's currency (currency/currency.json) and rank ladders (ranks.json) → viewer settings for CertiFried (H-747).
+ * One points currency per channel: the only active currency, else the one most viewers hold. Rank ladders: the first
+ * automatic ladder that follows view time (hours) or that currency. Anything else is reported, not guessed.
+ */
+export function firebotLoyalty(fm, rows = []) {
+    const notes = [];
+    const settings = {};
+    const defs = list(json(fm, 'currency/currency.json')).filter((c) => c && typeof c === 'object' && c.id);
+    let currencyId = null;
+    const active = defs.filter((c) => c.active !== false);
+    if (active.length === 1) currencyId = String(active[0].id);
+    else {
+        const held = new Map();
+        for (const r of rows) for (const [k, v] of Object.entries(r.currency || {})) if (num(v, 0) > 0) held.set(k, (held.get(k) || 0) + 1);
+        currencyId = [...held.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || (active[0] ? String(active[0].id) : null);
+        if (active.length > 1 || held.size > 1) notes.push('Firebot has more than one currency; CertiFried keeps one points balance, so only the most used one was brought over');
+    }
+    const def = defs.find((c) => String(c.id) === currencyId);
+    if (def) {
+        const name = str(def.name, 20).replace(/[^\p{L}\p{N} ]/gu, '').trim();
+        if (name) settings.currency = name;
+        const every = num(def.interval, 0);
+        const payout = num(def.payout, 0);
+        if (every > 0 && payout >= 0) {
+            const periods = [5, 10, 15, 20, 30, 60];
+            const minutes = periods.reduce((a, b) => (Math.abs(b - every) < Math.abs(a - every) ? b : a), 10);
+            settings.earn = { minutes, points: Math.round(payout * (minutes / every)) };
+            if (minutes !== every) notes.push(`Firebot paid every ${every} minutes; CertiFried pays every ${minutes}, with the amount scaled to match`);
+        }
+    }
+    const ladders = list(json(fm, 'ranks.json')).filter((l) => l && typeof l === 'object');
+    const ladder = ladders.find((l) => String(l.mode || 'auto') === 'auto' && Array.isArray(l.ranks) && l.ranks.length);
+    if (ladder) {
+        const by = String(ladder.settings?.trackBy || ladder.trackBy || 'view_time');
+        const basis = /currency/i.test(by) ? 'points' : 'watch';
+        const listOut = ladder.ranks.map((r) => ({ name: str(r?.name, 40).trim(), min: Math.round(num(r?.value, 0) * (basis === 'watch' ? 60 : 1)) })).filter((r) => r.name).slice(0, 20);
+        if (listOut.length) settings.ranks = { basis, list: listOut };
+        if (ladders.length > 1) notes.push('Only the first automatic rank ladder was brought over');
+    } else if (ladders.length) notes.push('Firebot ranks set by hand are not brought over: CertiFried ranks follow watch time or points');
+    return { currencyId, settings: Object.keys(settings).length ? settings : null, notes };
 }
 
 function rewardDef(kind, r, td) {

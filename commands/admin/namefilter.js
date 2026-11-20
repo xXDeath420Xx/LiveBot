@@ -225,7 +225,7 @@ const HANDLERS = {
         }
         if (r.generated) embed.addFields({ name: 'Generated username', value: `\`${r.generated.first}\` + \`${r.generated.second}\` + digits · check is ${r.generated.enabled ? `on (${ACTION_WORD[r.generated.action]})` : 'off'}` });
         if (r.notes.length) embed.addFields({ name: 'Notes', value: r.notes.join('\n') });
-        if (!r.settings.enabled) embed.setFooter({ text: 'Name checks are switched off: /namefilter settings enabled:true' });
+        if (!r.settings.enabled) embed.setFooter({ text: 'Name checks are switched off: /moderation namefilter settings enabled:true' });
         return interaction.editReply({ embeds: [embed] });
     },
 

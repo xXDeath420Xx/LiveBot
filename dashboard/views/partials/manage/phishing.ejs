@@ -36,6 +36,15 @@ const textChannels = locals.channels ? channels.filter(c => c.type === 0) : [];
                         <input type="checkbox" class="cf-switch" role="switch" id="phishing_enabled" data-feature-switch aria-describedby="phishing_enabled-desc" <%= (pc && pc.enabled) ? 'checked' : '' %>>
                     </div>
                 </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="phishing_scan_images">Read text in posted images</label>
+                        <p class="cf-row-desc" id="phishing_scan_images-desc">Scam links and phrases inside screenshots and other images are checked too. On by default.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="phishing_scan_images" aria-describedby="phishing_scan_images-desc" <%= (!pc || pc.scan_images === undefined || pc.scan_images === null || Number(pc.scan_images)) ? 'checked' : '' %>>
+                    </div>
+                </div>
                 <div class="cf-row">
                     <div class="cf-row-text">
                         <label class="cf-row-label" for="f-phishing-action">Action on detection</label>
@@ -114,7 +123,7 @@ const textChannels = locals.channels ? channels.filter(c => c.type === 0) : [];
                 <div class="cf-row">
                     <div class="cf-row-text">
                         <label class="cf-row-label" for="f-phishing-exempt_channels">Exempt channels</label>
-                        <p class="cf-row-desc" id="f-phishing-exempt_channels-desc">Detection is off in these channels. Channels named like evidence, report or red-flag are skipped automatically.</p>
+                        <p class="cf-row-desc" id="f-phishing-exempt_channels-desc">Detection is off in these channels. Channels whose name contains evidence, report, red-flag, mod-log or ban-appeal (so also scam-report, staff-report, mod-report and ban-evidence) are skipped automatically.</p>
                     </div>
                     <div class="cf-row-control">
                         <%
@@ -179,6 +188,7 @@ const textChannels = locals.channels ? channels.filter(c => c.type === 0) : [];
         const whitelistRaw = form.querySelector('[name="whitelist_domains"]').value;
         const data = {
             enabled: enabledBox.checked,
+            scan_images: document.getElementById('phishing_scan_images').checked,
             action: actionSelect.value,
             mute_duration_minutes: parseInt(form.querySelector('[name="mute_duration_minutes"]').value) || 30,
             alert_channel_id: form.querySelector('[name="alert_channel_id"]').value || null,

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Toggle source</title>
+    <link rel="stylesheet" href="pi.css">
+</head>
+<body>
+    <form id="settings">
+    <div class="row"><label for="scene">Scene</label><select id="scene" data-setting="scene" data-list="scenes" data-placeholder="Choose a scene"></select></div>
+    <p class="hint" id="scene-hint"></p>
+    <div class="row"><label for="source">Source</label><select id="source" data-setting="source" data-list="sources" data-placeholder="Choose a source" data-needs="scene"></select></div>
+    <p class="hint" id="source-hint"></p>
+    <div class="row"><label for="mode">On press</label><select id="mode" data-setting="mode" data-default="toggle"><option value="toggle">Show or hide</option><option value="show">Show</option><option value="hide">Hide</option></select></div>
+    </form>
+    <div id="connection"></div>
+    <script src="pi.js"></script>
+</body>
+</html>

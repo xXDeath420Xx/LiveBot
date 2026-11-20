@@ -399,7 +399,7 @@
         }
         @media (max-width: 500px) { .heatmap .hcell { min-height: 8px; } .heatmap { font-size: 0.5rem; grid-template-columns: 1.6rem repeat(24, 1fr); gap: 1px; } }
     </style>
-<%- include('partials/site-head', { title: (broadcaster ? broadcaster.login : guildName) + ' — Twitch analytics | CertiFried', noindex: !!locals.shareMode }) %>
+<%- include('partials/site-head', { title: (broadcaster ? broadcaster.login : guildName) + ' · Twitch analytics · CertiFried', noindex: !!locals.shareMode }) %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="/css/cf-settings.css">
     <link rel="stylesheet" href="/css/cf-analytics.css">
@@ -1713,6 +1713,16 @@
             <div class="meta">started <%= relAgo(s.began_at) %><%= s.ended_at ? ' · ended ' + relAgo(s.ended_at) : ' · in progress' %></div></div></div>
         <% }) %>
     </div>
+    <% if (!locals.shareMode && (data.followedChannels || []).length) { %>
+    <div class="card" style="margin-top: 0.75rem;" id="followed-channels"><h3>Channels you followed (as of October 28, 2026)</h3>
+        <p class="sub">Read once from Twitch on October 28, 2026, when the analytics connection still asked for your follows list. CertiFried no longer collects it, so this list does not change. It is kept while this channel has a Twitch connection to CertiFried; <code>/privacy delete</code> removes it sooner.</p>
+        <% data.followedChannels.forEach(f => { %>
+        <div class="table-row"><div class="main"><div class="title"><%= f.broadcaster_name || f.broadcaster_login || f.broadcaster_id %></div>
+            <div class="meta"><%= f.broadcaster_login || '' %></div></div>
+            <div class="side"><%= f.followed_at ? 'followed ' + new Date(f.followed_at).toISOString().slice(0, 10) : '' %></div></div>
+        <% }) %>
+    </div>
+    <% } %>
 
     <div class="section engagement" id="emotes"><h2>Emotes</h2><div class="section-sub">Most-used emotes in chat. Your channel's own emotes are marked.</div></div>
     <div class="card">

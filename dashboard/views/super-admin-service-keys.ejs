@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/super-admin-music.css?v=5">
+    <style>
+        .sk-intro { color: var(--text-muted); font-size: 0.86rem; max-width: 70ch; margin: 0 0 1.25rem; display: grid; gap: 0.35rem; }
+        .sk-intro b { color: var(--text-secondary); }
+        .sk-group { margin: 1.5rem 0 0.6rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+        .sk-grid { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
+        .sk-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1rem; display: grid; gap: 0.7rem; }
+        .sk-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
+        .sk-name { font-weight: 700; font-size: 0.98rem; color: var(--text-primary); }
+        .sk-help { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.15rem; line-height: 1.4; }
+        .sk-badge { flex: none; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; white-space: nowrap; }
+        .sk-badge.set { color: var(--accent-green); background: color-mix(in srgb, var(--accent-green) 16%, transparent); }
+        .sk-badge.unset { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 16%, transparent); }
+        .sk-meta { display: flex; flex-wrap: wrap; gap: 0.35rem 0.6rem; align-items: center; font-size: 0.76rem; color: var(--text-muted); }
+        .sk-restart { font-size: 0.72rem; font-weight: 700; padding: 0.12rem 0.5rem; border-radius: 999px; }
+        .sk-restart.none { color: var(--accent-green); background: color-mix(in srgb, var(--accent-green) 14%, transparent); }
+        .sk-restart.recommended { color: #e0a93b; background: color-mix(in srgb, #e0a93b 16%, transparent); }
+        .sk-restart.required { color: var(--accent-red, #e06565); background: color-mix(in srgb, var(--accent-red, #e06565) 16%, transparent); }
+        .sk-restart-note { font-size: 0.74rem; color: var(--text-muted); line-height: 1.4; }
+        .sk-form { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .sk-input { flex: 1 1 11rem; min-width: 0; font: inherit; font-size: 0.9rem; padding: 0.55rem 0.7rem; border-radius: 10px;
+            background: var(--bg-input, var(--bg-elevated, rgba(255,255,255,0.04))); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .sk-input:focus-visible { outline: 2px solid var(--accent-purple); outline-offset: 1px; }
+        .sk-btn { font: inherit; font-size: 0.86rem; font-weight: 600; padding: 0.55rem 0.9rem; border-radius: 10px; cursor: pointer;
+            border: 1px solid var(--accent-purple); background: var(--accent-purple); color: #fff; white-space: nowrap; }
+        .sk-btn[disabled] { opacity: 0.5; cursor: default; }
+        .sk-btn.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-color); }
+        .sk-btn.danger { color: var(--accent-red, #e06565); border-color: color-mix(in srgb, var(--accent-red, #e06565) 45%, transparent); background: transparent; }
+        .sk-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+        .sk-msg { font-size: 0.78rem; min-height: 1.1em; }
+        .sk-msg.ok { color: var(--accent-green); }
+        .sk-msg.err { color: var(--accent-red, #e06565); }
+        .sk-audit { margin-top: 1.75rem; }
+        .sk-audit h2 { font-size: 0.95rem; margin: 0 0 0.6rem; color: var(--text-secondary); }
+        .sk-audit ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+        .sk-audit li { display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; font-size: 0.8rem; color: var(--text-muted); padding: 0.35rem 0; border-bottom: 1px solid var(--border-color); }
+        .sk-audit li .k { color: var(--text-secondary); font-weight: 600; }
+        .sk-audit li .a-set { color: var(--accent-green); font-weight: 600; }
+        .sk-audit li .a-cleared { color: #e0a93b; font-weight: 600; }
+        @media (max-width: 440px) { .sk-form { flex-direction: column; } .sk-btn { width: 100%; } }
+    </style>
+<%- include('partials/site-head', { title: 'Service keys · Owner console · CertiFried', noindex: true }) %>
+</head>
+<body>
+    <%- include('partials/site-header', { user }) %>
+
+    <main id="main-content" tabindex="-1">
+        <div class="container">
+            <%- include('partials/site/_owner-nav', { ownerActive: 'service-keys' }) %>
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div class="page-icon" aria-hidden="true"><i class="fas fa-key"></i></div>
+                    <div>
+                        <h1 class="page-title">Service keys</h1>
+                        <p class="page-subtitle">Set or rotate specific .env secrets from here. Values are written to the server and never shown back.</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button type="button" class="btn" id="refresh"><i class="fas fa-rotate-right" aria-hidden="true"></i> Refresh</button>
+                    <span class="updated" id="updated"></span>
+                </div>
+            </div>
+
+            <div class="sk-intro">
+                <div>Each key shows only whether it is <b>SET</b> or <b>NOT SET</b> &mdash; the stored value is never sent to this page, not even masked. Type a new value and save to overwrite it; use Clear to remove it.</div>
+                <div>Most keys take effect the moment you save. Keys tagged <b>Restart recommended</b> or <b>Restart to apply</b> are read once when the bot starts, so run a pm2 restart afterwards for those.</div>
+            </div>
+
+            <div id="error"></div>
+            <div id="keys" aria-live="polite"><p class="sk-restart-note">Loading&hellip;</p></div>
+
+            <section class="sk-audit" id="audit-sec" hidden>
+                <h2>Recent changes</h2>
+                <ul id="audit"></ul>
+            </section>
+        </div>
+    </main>
+    <%- include('partials/site-footer') %>
+
+    <script>
+    (function () {
+        'use strict';
+        const API = '/api/super-admin/service-keys';
+        const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        let loadedAt = 0;
+
+        function h(tag, attrs, ...kids) {
+            const el = document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs || {})) {
+                if (v == null || v === false) continue;
+                if (k === 'class') el.className = v;
+                else el.setAttribute(k, String(v));
+            }
+            for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+            return el;
+        }
+        const $ = (id) => document.getElementById(id);
+        const icon = (cls) => h('i', { class: cls, 'aria-hidden': 'true' });
+        const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        function ago(ts) {
+            const s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000));
+            if (s < 60) return s + 's ago';
+            if (s < 3600) return Math.round(s / 60) + 'm ago';
+            if (s < 172800) return Math.round(s / 3600) + 'h ago';
+            return Math.round(s / 86400) + 'd ago';
+        }
+        const RESTART_LABEL = { none: 'Live on save', recommended: 'Restart recommended', required: 'Restart to apply' };
+
+        async function load() {
+            try {
+                const r = await fetch(API, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+                if (!(r.headers.get('content-type') || '').includes('application/json')) throw new Error('Your session expired — reload the page to sign in again.');
+                const body = await r.json();
+                if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+                loadedAt = Date.now();
+                $('error').replaceChildren();
+                render(body);
+            } catch (e) {
+                $('error').replaceChildren(h('div', { class: 'banner tone-down', role: 'alert' },
+                    h('div', { class: 'banner-icon' }, icon('fas fa-circle-xmark')),
+                    h('div', null, h('h2', null, 'Could not load service keys'), h('p', null, e.message))));
+            }
+            tickUpdated();
+        }
+
+        function render(data) {
+            const groups = [];
+            const seen = new Map();
+            for (const k of data.keys) {
+                if (!seen.has(k.group)) { seen.set(k.group, []); groups.push(k.group); }
+                seen.get(k.group).push(k);
+            }
+            const frag = document.createDocumentFragment();
+            for (const g of groups) {
+                frag.append(h('div', { class: 'sk-group' }, g));
+                const grid = h('div', { class: 'sk-grid' });
+                for (const k of seen.get(g)) grid.append(card(k));
+                frag.append(grid);
+            }
+            $('keys').replaceChildren(frag);
+            renderAudit(data);
+        }
+
+        function card(k) {
+            const msg = h('div', { class: 'sk-msg', role: 'status' });
+            const input = h('input', { type: 'password', class: 'sk-input', autocomplete: 'new-password', autocapitalize: 'off',
+                autocorrect: 'off', spellcheck: 'false', placeholder: k.set ? 'Enter a new value to replace it' : 'Paste the value', 'aria-label': k.label + ' value' });
+            const saveBtn = h('button', { type: 'button', class: 'sk-btn' }, 'Save');
+            const clearBtn = h('button', { type: 'button', class: 'sk-btn danger' }, 'Clear');
+
+            const badge = h('span', { class: 'sk-badge ' + (k.set ? 'set' : 'unset') }, k.set ? 'SET' : 'NOT SET');
+            const lc = k.lastChange;
+            const meta = h('div', { class: 'sk-meta' },
+                h('span', { class: 'sk-restart ' + k.restart }, RESTART_LABEL[k.restart] || k.restart),
+                lc ? h('span', { title: fmt.format(new Date(lc.at)) }, (lc.action === 'cleared' ? 'Cleared ' : 'Changed ') + ago(lc.at) + (lc.actorName ? ' by ' + lc.actorName : '')) : h('span', null, 'No changes recorded'));
+
+            function setBusy(b) { saveBtn.disabled = b; clearBtn.disabled = b; input.disabled = b; }
+            function say(text, cls) { msg.textContent = text || ''; msg.className = 'sk-msg' + (cls ? ' ' + cls : ''); }
+
+            async function post(url, payload) {
+                const r = await fetch(url, { method: 'POST', credentials: 'same-origin',
+                    headers: { 'content-type': 'application/json', accept: 'application/json', 'x-csrf-token': CSRF },
+                    body: JSON.stringify(payload || {}) });
+                const body = await r.json().catch(() => ({}));
+                if (!r.ok || !body.ok) throw new Error(body.error || ('HTTP ' + r.status));
+                return body;
+            }
+
+            saveBtn.addEventListener('click', async () => {
+                const value = input.value;
+                if (!value || !value.trim()) { say('Enter a value first.', 'err'); input.focus(); return; }
+                setBusy(true); say('Saving…');
+                try {
+                    await post(API + '/' + encodeURIComponent(k.key), { value });
+                    input.value = '';
+                    badge.className = 'sk-badge set'; badge.textContent = 'SET';
+                    say('Saved.' + (k.restart === 'none' ? '' : ' Restart pm2 to fully apply.'), 'ok');
+                    setTimeout(load, 600);
+                } catch (e) { say(e.message, 'err'); }
+                finally { setBusy(false); }
+            });
+
+            clearBtn.addEventListener('click', async () => {
+                if (!window.confirm('Remove ' + k.label + ' from .env? This cannot be undone from here.')) return;
+                setBusy(true); say('Clearing…');
+                try {
+                    await post(API + '/' + encodeURIComponent(k.key) + '/clear', {});
+                    input.value = '';
+                    badge.className = 'sk-badge unset'; badge.textContent = 'NOT SET';
+                    say('Cleared.' + (k.restart === 'none' ? '' : ' Restart pm2 to fully apply.'), 'ok');
+                    setTimeout(load, 600);
+                } catch (e) { say(e.message, 'err'); }
+                finally { setBusy(false); }
+            });
+
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); } });
+
+            return h('div', { class: 'sk-card' },
+                h('div', { class: 'sk-top' },
+                    h('div', null, h('div', { class: 'sk-name' }, k.label), h('div', { class: 'sk-help' }, k.help)),
+                    badge),
+                meta,
+                k.restartNote ? h('div', { class: 'sk-restart-note' }, k.restartNote) : null,
+                h('div', { class: 'sk-form' }, input, saveBtn),
+                h('div', { class: 'sk-actions' }, msg, clearBtn));
+        }
+
+        function renderAudit(data) {
+            const sec = $('audit-sec');
+            const list = (data.recent || []);
+            if (!list.length) { sec.hidden = true; return; }
+            sec.hidden = false;
+            $('audit').replaceChildren(...list.map(r => h('li', null,
+                h('span', { class: 'k' }, r.key_name),
+                h('span', { class: r.action === 'cleared' ? 'a-cleared' : 'a-set' }, r.action === 'cleared' ? 'CLEARED' : 'SET'),
+                h('span', { title: fmt.format(new Date(r.created_at)) }, ago(r.created_at)),
+                r.actor_name ? h('span', null, 'by ' + r.actor_name) : null)));
+        }
+
+        function tickUpdated() { $('updated').textContent = loadedAt ? 'Updated ' + ago(loadedAt) : ''; }
+        $('refresh').addEventListener('click', load);
+        setInterval(tickUpdated, 1000);
+        load();
+    })();
+    </script>
+</body>
+</html>

@@ -14,10 +14,23 @@
  * DELETE is an explicit allow-list (DELETE_PLAN / ANONYMISE_PLAN): only the member's own
  * activity, progress, content and linked accounts. Never another member's rows, and never the
  * KEPT categories below. Tables missing from the live schema are skipped at run time.
+ *
+ * The critters game (the /owo commands) lists its own per-member tables in core/critters/privacy.js (pure data);
+ * they are merged in below. Its two-party tables name members in PAIR_ID_COLUMNS; EXPORT_EXTRA lists those
+ * tables for an export, which USER_ID_COLUMNS discovery would otherwise miss.
  */
+import {
+    PRIVACY_DELETE_PLAN as CRITTERS_DELETE_PLAN, PRIVACY_ANONYMISE_PLAN as CRITTERS_ANONYMISE_PLAN, EXPORT_EXTRA as CRITTERS_EXPORT_EXTRA,
+} from './critters/privacy.js';
 
 /** Columns that hold the member's Discord id, in tables keyed by member. */
 export const USER_ID_COLUMNS = Object.freeze(['user_id', 'author_id', 'discord_user_id', 'discord_id', 'member_id', 'requester_id']);
+
+/** Member-id columns of two-party rows (a duel, a marriage, a proposal, a prayer): either side is a member. */
+export const PAIR_ID_COLUMNS = Object.freeze(['user1', 'user2', 'sender', 'receiver']);
+
+/** Tables whose member columns USER_ID_COLUMNS discovery misses: [{ table, columns }]. */
+export const EXPORT_EXTRA = Object.freeze([...CRITTERS_EXPORT_EXTRA]);
 
 /** Credentials and secrets — never exported, not even as counts. */
 export const SECRET_TABLES = new Set([
@@ -28,6 +41,12 @@ export const SECRET_TABLES = new Set([
     'stream_bot_twitch_grants', 'stream_bot_tip_sources', 'stream_bot_devices', 'stream_bot_pairing_codes',
     // Overlay URLs carry a key (hash and encrypted copy); core/stream-bot/overlays/privacy.js exports the rest (migration 459).
     'stream_bot_overlays',
+    // Govee / LIFX cloud keys (encrypted); core/stream-bot/devices/privacy.js exports provider, hint and status (migration 461).
+    'stream_bot_light_accounts',
+    // Twitch, Kick and YouTube sign-ins (encrypted tokens), keyed by owner_discord_id: core/stream-bot/platform-accounts-privacy.js
+    // and youtube/privacy.js export them without tokens and delete them (tokens revoked first), with the multicast
+    // destinations made from them (H-820).
+    'stream_platform_accounts',
 ]);
 
 /** Moderation / anti-abuse records — withheld from export (counts only), never deleted. */
@@ -93,6 +112,7 @@ export const DELETE_PLAN = Object.freeze([
     { table: 'dnd_dice_rolls', column: 'user_id', label: 'Your dice rolls' },
     { table: 'music_user_metrics', column: 'user_id', label: 'Music listening statistics' },
     { table: 'music_user_skip_stats', column: 'user_id', label: 'Music skip statistics' },
+    { table: 'activity_watch_sessions', column: 'user_id', label: 'Watch Together sessions you hosted' },
     { table: 'command_usage', column: 'user_id', label: 'Bot commands you used' },
     // Levels, economy, achievements
     { table: 'user_levels', column: 'user_id', label: 'Levels and XP' },
@@ -117,7 +137,9 @@ export const DELETE_PLAN = Object.freeze([
     { table: 'game_stats', column: 'user_id' }, { table: 'game_history', column: 'user_id' },
     { table: 'gambling_history', column: 'user_id' }, { table: 'gat_players', column: 'user_id' },
     { table: 'gat_stickers', column: 'user_id' }, { table: 'fishing_inventory', column: 'user_id' },
-    { table: 'fishing_players', column: 'user_id' }, { table: 'owo_cooldowns', column: 'user_id' },
+    { table: 'fishing_players', column: 'user_id' },
+    // The retired owo_* tables stay until the owner drops them (superseded by critter_*, migration 463).
+    { table: 'owo_cooldowns', column: 'user_id' },
     { table: 'owo_points_member', column: 'user_id' }, { table: 'owo_points_user', column: 'user_id' },
     { table: 'owo_zoo', column: 'user_id' }, { table: 'toke_user_stats', column: 'user_id' },
     { table: 'toke_user_achievements', column: 'user_id' }, { table: 'joint_claims', column: 'user_id' },
@@ -126,6 +148,8 @@ export const DELETE_PLAN = Object.freeze([
     { table: 'loyalty_points', column: 'user_id' }, { table: 'loyalty_redemptions', column: 'user_id' },
     { table: 'emoji_hunt_leaderboard', column: 'user_id' }, { table: 'emoji_hunt_participants', column: 'user_id' },
     { table: 'community_goal_payouts', column: 'user_id' },
+    // Critters (/owo game): every per-member table (core/critters/privacy.js).
+    ...CRITTERS_DELETE_PLAN,
     // Personal content and preferences
     { table: 'stoned_thoughts', column: 'user_id', label: 'Thoughts you submitted' },
     { table: 'user_birthdays', column: 'user_id', label: 'Your birthday' },
@@ -160,6 +184,8 @@ export const ANONYMISE_PLAN = Object.freeze([
     { table: 'digimon_trades', column: 'to_user', set: ['to_user'], label: 'Digimon trades offered to you (kept anonymously)' },
     { table: 'digimon_market', column: 'seller_id', set: ['seller_id'], label: 'Digimon you sold (kept anonymously)' },
     { table: 'digimon_market', column: 'buyer_id', set: ['buyer_id'], label: 'Digimon you bought (kept anonymously)' },
+    // Critters transfer ledger and last lottery winner: the other side keeps its history.
+    ...CRITTERS_ANONYMISE_PLAN,
 ]);
 
 /** What /privacy delete deliberately keeps, in member-facing words. */

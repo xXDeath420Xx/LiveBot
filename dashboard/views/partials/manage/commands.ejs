@@ -91,7 +91,7 @@ function runHow(form, fallback) {
 }
 function commandRunHow(cmd, shown) {
     const t = typeOf(cmd);
-    if (t === 'text') return 'Text command: type ' + textLabel(cmd) + ' as a message, followed by the subcommand. It is not in the / menu.';
+    if (t === 'text') return 'Text command: type ' + textLabel(cmd) + ' as a message' + ((cmd.subcommands || []).length ? ', followed by the subcommand' : '') + '. It is not in the / menu.';
     if (t === 'mixed') return 'Some parts are slash commands under /' + shown + ', the rest are typed as messages; each part below shows which.';
     return 'Slash command: pick /' + shown + ' from the / menu.';
 }
@@ -422,7 +422,7 @@ function groupRunHow(cmd, group) {
         <div class="cf-rows">
             <div class="cf-list cmd-levels">
                 <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-ok">Everyone</span> The bot adds no check of its own. The default for every command except admin commands.</div></div>
-                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-warn">Mod only</span> Members also need the Manage Server permission. Admin commands show this until you change them; until then only the Discord permission each one asks for applies, such as Administrator or Kick Members.</div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-warn">Mod only</span> Members also need the Manage Server permission. Admin commands start at this level: Manage Server plus the Discord permission each one asks for, such as Kick Members.</div></div>
                 <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill">Discord permissions</span> Most admin commands also ask Discord for a permission, and Discord checks it whatever you pick here. Server Settings, Integrations in Discord changes who passes that check.</div></div>
                 <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-bad">Disabled</span> Nobody can use the command in this server.</div></div>
                 <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-info">Settings</span> Narrows the level further: roles and channels, a cooldown, private replies, and deleting the reply after a while.</div></div>

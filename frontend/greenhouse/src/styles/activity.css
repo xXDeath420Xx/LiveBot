@@ -1,0 +1,5 @@
+/* Greenhouse Tycoon in the Discord Activity (build.mjs --activity only; the website and the Twitch panel never load
+   this file). The wide layout is the website's: for this build only, build.mjs widens app.css's [data-target="web"]
+   rules to the "activity" target too. Sign-in is Discord only: Twitch and Kick sign-in would leave Discord. */
+[data-target="activity"] [data-key="signin-twitch"],
+[data-target="activity"] [data-key="signin-kick"] { display: none; }

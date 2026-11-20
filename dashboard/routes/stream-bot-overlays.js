@@ -35,10 +35,12 @@ import { getStreamBot } from '../../core/stream-bot/index.js';
 import {
     OVERLAY_TYPES, ALERT_KINDS, ALERT_KEYS, POSITIONS, POSITION_LABEL, FONTS, LAYOUTS, LAYOUT_LABEL, ANIMATIONS, ANIMATION_LABEL, PLATES, PLATE_LABEL,
     GOAL_METRICS, GOAL_LABEL, EVENT_LIST_TYPES, LIMITS, overlayType, isOverlayType, validateConfig,
+    TITLE_STYLES, TITLE_STYLE_LABEL, GLOW_STYLES, GLOW_STYLE_LABEL, SCENE_LIMITS, NOWPLAYING_BACKGROUNDS, NOWPLAYING_BACKGROUND_LABEL,
 } from '../../core/stream-bot/overlays/config.js';
 import { isOverlayKeyShape, keyHash, setOverlayHeaders, openSse } from '../../core/stream-bot/overlays/http.js';
 import { MEDIA_LIMITS } from '../../core/stream-bot/overlays/media.js';
 import { eventType } from '../../core/stream-bot/events.js';
+import { youtubeBotConfig } from '../../core/stream-bot/youtube/config.js';
 
 const router = express.Router();
 const LOG = '[StreamBotOverlays]';
@@ -96,6 +98,7 @@ function summaryOf(o) {
         case 'goal': return `${c.title}: ${Number(o.state?.current) || 0} of ${c.target}`;
         case 'counter': return `${c.label || c.key} ({sdb:get:${c.key}})`;
         case 'nowplaying': return 'The song request playing now';
+        case 'scene': return [c.title, c.countdown?.enabled ? `a ${c.countdown.minutes}-minute countdown` : '', c.background ? 'your artwork' : ''].filter(Boolean).join(', ') || 'A full-screen scene';
         default: return 'Text and images from automations';
     }
 }
@@ -112,8 +115,18 @@ export const FORM = Object.freeze({
     plates: PLATES.map((v) => ({ value: v, label: PLATE_LABEL[v] })),
     goalMetrics: GOAL_METRICS.map((v) => ({ value: v, label: GOAL_LABEL[v] })),
     eventTypes: EVENT_LIST_TYPES.map((t) => ({ value: t, label: eventType(t)?.label || t })),
+    titleStyles: TITLE_STYLES.map((v) => ({ value: v, label: TITLE_STYLE_LABEL[v] })),
+    glowStyles: GLOW_STYLES.map((v) => ({ value: v, label: GLOW_STYLE_LABEL[v] })),
+    npBackgrounds: NOWPLAYING_BACKGROUNDS.map((v) => ({ value: v, label: NOWPLAYING_BACKGROUND_LABEL[v] })),
     limits: LIMITS,
+    sceneLimits: SCENE_LIMITS,
 });
+
+/** FORM for this server: the YouTube alerts and the YouTube chat choice only once YouTube is set up (§13.1, §13.10). */
+export function formFor(env = process.env) {
+    const youtube = youtubeBotConfig(env).enabled;
+    return { ...FORM, youtube, alertKinds: youtube ? FORM.alertKinds : FORM.alertKinds.filter((k) => k.platform !== 'youtube') };
+}
 
 /** The English Piper voices installed on this server (the ones the read-aloud option offers). */
 async function ttsVoices() {
@@ -129,11 +142,11 @@ async function ttsVoices() {
 
 router.get('/stream/bot/overlays', needPage, pageRoute(async (req, res) => {
     const { sb, profile, ov } = await load(req);
-    if (!ov) return res.render('stream-bot/overlays', { user: req.user, ready: false, profile, overlays: [], media: [], form: FORM, mediaLimits: MEDIA_LIMITS, usedBytes: 0 });
+    if (!ov) return res.render('stream-bot/overlays', { user: req.user, ready: false, profile, overlays: [], media: [], form: formFor(), mediaLimits: MEDIA_LIMITS, usedBytes: 0 });
     const [list, mediaList] = await Promise.all([ov.ostore.list(profile.id), ov.media.list(profile.id)]);
     const status = ov.service.status(profile.id);
     res.render('stream-bot/overlays', {
-        user: req.user, ready: true, profile, overlays: list.map((o) => overlayView(o, status)), media: mediaList.map(mediaView), form: FORM,
+        user: req.user, ready: true, profile, overlays: list.map((o) => overlayView(o, status)), media: mediaList.map(mediaView), form: formFor(),
         mediaLimits: MEDIA_LIMITS, usedBytes: mediaList.reduce((n, m) => n + (Number(m.size) || 0), 0), studioOnline: sb.hub.connected(profile.id).some((d) => d.kind === 'studio'),
     });
 }));
@@ -147,7 +160,7 @@ router.get('/stream/bot/overlays/:id', needPage, pageRoute(async (req, res) => {
     const [key, mediaList, soundList, voices] = await Promise.all([ov.ostore.keyOf(profile.id, o.id), ov.media.list(profile.id), sb.sounds.list(profile.id).catch(() => []), o.type === 'alerts' ? ttsVoices() : []]);
     const status = ov.service.status(profile.id);
     res.render('stream-bot/overlay-edit', {
-        user: req.user, profile, overlay: overlayView(o, status), config: o.config, state: o.state || {}, url: key ? overlayUrl(o.type, key) : null, form: FORM,
+        user: req.user, profile, overlay: overlayView(o, status), config: o.config, state: o.state || {}, url: key ? overlayUrl(o.type, key) : null, form: formFor(),
         media: mediaList.map(mediaView), sounds: soundList.map((s) => ({ id: s.id, name: s.name })), voices,
         editData: JSON.stringify({ id: o.id, type: o.type, config: o.config }).replace(/</g, '\\u003c'),
     });

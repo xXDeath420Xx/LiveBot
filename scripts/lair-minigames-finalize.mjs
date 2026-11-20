@@ -4,7 +4,7 @@
  *   1. Delete the #🎵-music-quiz channel (not needed).
  *   2. Replace the welcome embed in #🎮-arcade with one that includes a
  *      "Join / Leave Mini-Games" button (customId: minigames_join:<roleId>).
- *   3. Write owo_config.allowed_channel_ids so /owo hunt + per-subcommand
+ *   3. Write critter_config.allowed_channel_ids (the critters game) so /owo hunt + per-subcommand
  *      commands only fire in the intended channels.
  *
  * REST-only — safe to run while PM2 is up.
@@ -90,14 +90,14 @@ async function main() {
     console.log('      ↳ posted with Join button.');
 
     // 3. Write per-guild OwO config: channel routing + subcommand availability
-    console.log('[3/3] Writing owo_config.allowed_channel_ids…');
+    console.log('[3/3] Writing critter_config.allowed_channel_ids…');
     const allowed = [CH_OWO_MAIN, CH_OWO_BATTLES, CH_DAILY_LUCK, CH_ARCADE];
     const db = await mysql.createConnection({
         host: process.env.DB_HOST, user: process.env.DB_USER,
         password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
     });
     await db.execute(
-        `INSERT INTO owo_config (guild_id, enabled, allowed_channel_ids) VALUES (?, 1, ?)
+        `INSERT INTO critter_config (guild_id, enabled, allowed_channel_ids) VALUES (?, 1, ?)
          ON DUPLICATE KEY UPDATE enabled = 1, allowed_channel_ids = VALUES(allowed_channel_ids)`,
         [GUILD_ID, JSON.stringify(allowed)]
     );

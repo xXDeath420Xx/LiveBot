@@ -15,6 +15,7 @@ import { getConfig, setConfig } from '../../../../core/feature-config.js';
 import { getVoiceInfo, getVoiceOptions } from '../../../../utils/piper-tts.js';
 import { parseDays, normaliseTime, isValidTimeZone } from '../../../../core/qotd-poster.js';
 import { MOUNTS } from '../../../../core/command-mounts.js';
+import { customBotWatchNotice } from '../../../../core/activities/watch/guild-config.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -49,6 +50,11 @@ router.get('/:feature', async (req, res) => {
             spec: { ...publicSpec(feature), commandInfo: describeCommands(getSpec(feature).commands || [], client) },
             config: forPage(feature, await getConfig(feature, guildId)),
         };
+        // Cinema in a server run by a custom-branded bot: members open Watch Together through their own install.
+        if (feature === 'cinema') {
+            const notice = customBotWatchNotice(req.app?.locals?.client, guildId);
+            if (notice) payload.spec.notices = [notice];
+        }
 
         // Context menus have no setup command — the menus are defined in code, so the guild's
         // rows are created on demand here. Opening the page is exactly when the list needs to

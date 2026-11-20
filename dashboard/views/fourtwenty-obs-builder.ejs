@@ -1,79 +1,74 @@
+<%#
+  GET /420/obs (dashboard/server.js): the builder for the 4:20 world clock OBS overlay (/420, views/fourtwenty-overlay.ejs,
+  which keeps its own fixed look). The page is on the site frame and follows the site theme; only the preview stage
+  (a stand-in for the OBS canvas) and the overlay inside it keep fixed colours.
+%>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>4:20 Clock for OBS — CertiFried Utility</title>
-  <meta name="description" content="Free 4:20 world clock overlay for Twitch, Kick and YouTube streams. Customise it, copy the link, paste it into an OBS browser source." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<%- include('partials/site-head', { title: '4:20 clock for OBS · CertiFried', description: 'Free 4:20 world clock overlay for Twitch, Kick and YouTube streams. Customise it, copy the link, paste it into an OBS browser source.', path: '/420/obs' }) %>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    :root{--bg:#0a0911;--ink:#f1f0f6;--muted:#a19cb8;--line:rgba(255,255,255,.09);--green:#7dfc4f;--violet:#7c84ff}
-    body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;line-height:1.5;min-height:100vh}
-    a{color:var(--violet)}
-    .wrap{max-width:68rem;margin:0 auto;padding:2.5rem 16px 3rem}
-    .back{display:inline-block;color:var(--muted);text-decoration:none;font-size:.85rem;margin-bottom:1.5rem}
-    .back:hover{color:var(--ink)}
-    h1{font-family:'Space Grotesk',sans-serif;font-size:clamp(1.8rem,4.5vw,2.6rem);line-height:1.15;margin-bottom:.6rem}
-    h1 .g{color:var(--green)}
-    .lede{color:var(--muted);max-width:42rem;margin-bottom:2rem}
-    .grid{display:grid;grid-template-columns:minmax(0,20rem) minmax(0,1fr);gap:1.5rem;align-items:start}
-    @media(max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
-    .panel{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.025);padding:1.3rem}
-    .panel h2{font-family:'Space Grotesk',sans-serif;font-size:1rem;margin-bottom:1rem}
-    .field{margin-bottom:1.05rem}
     [hidden]{display:none!important}
-    .field > label:not(.check),.field > .lbl{display:block;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.4rem}
-    .seg{display:flex;gap:.35rem;flex-wrap:wrap}
+    .ob-title .g{color:var(--cf-accent-fg)}
+    .ob-grid{display:grid;grid-template-columns:minmax(0,20rem) minmax(0,1fr);gap:var(--cf-6);align-items:start}
+    @media(max-width:820px){.ob-grid{grid-template-columns:minmax(0,1fr)}}
+    .panel{border:1px solid var(--cf-border);border-radius:var(--cf-radius-lg);background:var(--cf-surface);padding:var(--cf-5);min-width:0}
+    .panel h2{font-size:var(--cf-text-md);font-weight:600;color:var(--cf-text);margin:0 0 var(--cf-4)}
+    .field{margin-bottom:var(--cf-4)}
+    .field > label:not(.check),.field > .lbl{display:block;font-size:var(--cf-text-xs);font-weight:500;color:var(--cf-text-2);margin-bottom:6px}
+    .seg{display:flex;gap:6px;flex-wrap:wrap}
     .seg input{position:absolute;opacity:0;pointer-events:none}
-    .seg label{flex:1 1 auto;text-align:center;font-size:.85rem;padding:.45rem .6rem;border:1px solid var(--line);border-radius:10px;cursor:pointer;color:var(--muted)}
-    .seg input:checked + label{border-color:var(--green);color:var(--ink);background:rgba(125,252,79,.08)}
-    .seg input:focus-visible + label{outline:2px solid var(--violet);outline-offset:2px}
-    .row{display:flex;align-items:center;gap:.6rem}
-    input[type=color]{width:2.6rem;height:2rem;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px}
-    input[type=range]{flex:1;accent-color:var(--green)}
-    .layouts{display:grid;gap:.35rem}
+    .seg label{flex:1 1 auto;text-align:center;font-size:var(--cf-text-sm);padding:6px 10px;border:1px solid var(--cf-border-strong);border-radius:var(--cf-radius);cursor:pointer;color:var(--cf-text-2);background:var(--cf-surface)}
+    .seg label:hover{color:var(--cf-text)}
+    .seg input:checked + label{border-color:var(--cf-accent);color:var(--cf-text);background:var(--cf-accent-soft)}
+    .seg input:focus-visible + label{outline:2px solid var(--cf-accent);outline-offset:2px}
+    .row{display:flex;align-items:center;gap:10px}
+    input[type=color]{width:2.6rem;height:2rem;cursor:pointer}
+    input[type=range]{flex:1;width:100%;accent-color:var(--cf-accent)}
+    .layouts{display:grid;gap:6px}
     .layouts input{position:absolute;opacity:0;pointer-events:none}
-    .layouts label{display:block;padding:.5rem .75rem;border:1px solid var(--line);border-radius:10px;cursor:pointer}
-    .layouts label b{display:block;font-size:.9rem;font-weight:600;color:var(--ink)}
-    .layouts label span{font-size:.76rem;color:var(--muted)}
-    .layouts input:checked + label{border-color:var(--green);background:rgba(125,252,79,.08)}
-    .layouts input:focus-visible + label{outline:2px solid var(--violet);outline-offset:2px}
-    .check{display:flex;align-items:center;gap:.55rem;font-size:.9rem;cursor:pointer;margin-bottom:.5rem}
-    .check input{accent-color:var(--green);width:1rem;height:1rem}
-    .hint{font-size:.78rem;color:var(--muted)}
-    .reset{background:none;border:none;color:var(--muted);font-size:.8rem;text-decoration:underline;cursor:pointer;font-family:inherit}
-    .stage{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);aspect-ratio:16/9;
+    .layouts label{display:block;padding:8px 12px;border:1px solid var(--cf-border-strong);border-radius:var(--cf-radius);cursor:pointer;background:var(--cf-surface)}
+    .layouts label b{display:block;font-size:var(--cf-text-sm);font-weight:600;color:var(--cf-text)}
+    .layouts label span{font-size:var(--cf-text-xs);color:var(--cf-text-3)}
+    .layouts input:checked + label{border-color:var(--cf-accent);background:var(--cf-accent-soft)}
+    .layouts input:checked + label span{color:var(--cf-text-2)}
+    .layouts input:focus-visible + label{outline:2px solid var(--cf-accent);outline-offset:2px}
+    .check{display:flex;align-items:center;gap:8px;font-size:var(--cf-text-sm);cursor:pointer;margin-bottom:var(--cf-2);color:var(--cf-text)}
+    .check input{accent-color:var(--cf-accent);width:1rem;height:1rem}
+    .hint{font-size:var(--cf-text-xs);color:var(--cf-text-3)}
+    .reset{background:none;border:none;color:var(--cf-text-2);font-size:var(--cf-text-sm);text-decoration:underline;cursor:pointer;font-family:inherit;padding:0}
+    .reset:hover{color:var(--cf-text)}
+    /* The preview stage stands in for the OBS canvas: a checkerboard for "transparent", or a plain sample scene.
+       Fixed colours on purpose: the overlay inside is made for a stream, not for the site theme. */
+    .stage{position:relative;border-radius:var(--cf-radius-lg);overflow:hidden;border:1px solid var(--cf-border);aspect-ratio:16/9;
       background-color:#1d1b29;background-image:linear-gradient(45deg,#26243a 25%,transparent 25%),linear-gradient(-45deg,#26243a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#26243a 75%),linear-gradient(-45deg,transparent 75%,#26243a 75%);
-      background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0}
-    .stage.scene{background:linear-gradient(135deg,#3a2a5c,#0f3b3a 55%,#1b1f3a)}
+      background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0; /* theme: fixed (OBS canvas stand-in) */}
+    .stage.scene{background:#22303a; /* theme: fixed (sample scene) */}
     .stage iframe{position:absolute;left:50%;top:50%;border:0;transform-origin:center center;background:transparent}
-    .stage-bar{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap}
-    .stage-bar .hint{margin:0}
-    .url{display:flex;gap:.5rem;margin-top:1rem}
-    .url input{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;color:var(--ink);background:#14121f;border:1px solid var(--line);border-radius:10px;padding:.6rem .75rem}
-    .btn{font-family:inherit;font-weight:600;font-size:.88rem;border:none;border-radius:10px;padding:.6rem 1rem;cursor:pointer;background:var(--green);color:#0a0911;white-space:nowrap;text-decoration:none;display:inline-block}
-    .btn.alt{background:rgba(255,255,255,.08);color:var(--ink)}
-    .size{margin-top:.6rem;font-size:.85rem;color:var(--muted)}
-    .size b{color:var(--ink);font-family:'Space Grotesk',sans-serif}
-    .steps{margin-top:1.5rem}
-    .steps ol{padding-left:1.2rem;color:var(--muted);font-size:.92rem}
-    .steps li{margin-bottom:.45rem}
-    .steps li b{color:var(--ink)}
-    .steps code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;background:rgba(255,255,255,.06);padding:.05rem .35rem;border-radius:5px;color:var(--ink)}
-    footer{text-align:center;color:var(--muted);font-size:.8rem;padding:1rem 16px 2rem}
-    footer a{color:var(--muted)}
+    .stage-bar{display:flex;justify-content:space-between;align-items:center;gap:var(--cf-2);margin-bottom:var(--cf-3);flex-wrap:wrap}
+    .stage-bar h2{margin:0}
+    .url{display:flex;gap:var(--cf-2);margin-top:var(--cf-4)}
+    .url input{flex:1;min-width:0;font-family:var(--cf-mono);font-size:var(--cf-text-sm)}
+    .size{margin:var(--cf-3) 0 0;font-size:var(--cf-text-sm);color:var(--cf-text-2)}
+    .size b{color:var(--cf-text);font-variant-numeric:tabular-nums}
+    .steps{margin-top:var(--cf-5)}
+    .steps ol{margin:0;padding-left:1.2rem;color:var(--cf-text-2);font-size:var(--cf-text-sm);line-height:1.6}
+    .steps li{margin-bottom:6px}
+    .steps li b{color:var(--cf-text)}
+    .steps code{font-family:var(--cf-mono);font-size:var(--cf-text-xs);background:var(--cf-surface-2);padding:1px 6px;border-radius:var(--cf-radius-sm);color:var(--cf-text)}
+    .steps .hint{margin:var(--cf-3) 0 0}
+    @media(max-width:600px){.url{flex-direction:column}}
   </style>
 </head>
-<body>
-  <main class="wrap">
-    <a class="back" href="/">&larr; CertiFried Utility</a>
-    <h1>Put the <span class="g">4:20</span> world clock on your stream</h1>
-    <p class="lede">A free overlay that counts down to the next 4:20 somewhere on Earth and lights up when it hits. Pick a style, copy the link, and paste it into an OBS (or Streamlabs) browser source. No account needed.</p>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', returnTo: '/420/obs' }) %>
+  <main id="main-content" class="cfs-main cfs-main--wide page-content" tabindex="-1">
+    <div class="cfs-pagehead">
+      <h1 class="ob-title">Put the <span class="g">4:20</span> world clock on your stream</h1>
+      <p class="cfs-lede">A free overlay that counts down to the next 4:20 somewhere on Earth and lights up when it hits. Pick a style, copy the link, and paste it into an OBS (or Streamlabs) browser source. No account needed.</p>
+    </div>
 
-    <div class="grid">
+    <div class="ob-grid">
       <form class="panel" id="opts" autocomplete="off" onsubmit="return false">
         <h2>Customise</h2>
 
@@ -95,7 +90,7 @@
             <input type="radio" name="bg" id="bg-d" value="dark"><label for="bg-d">Dark panel</label>
             <input type="radio" name="bg" id="bg-c" value="custom"><label for="bg-c">Custom</label>
           </div>
-          <div class="row" id="bg-custom-row" style="margin-top:.5rem" hidden>
+          <div class="row" id="bg-custom-row" style="margin-top:var(--cf-2)" hidden>
             <input type="color" id="bgcolor" value="#14121f" aria-label="Panel colour">
             <span class="hint">Panel colour</span>
           </div>
@@ -123,17 +118,17 @@
       <section>
         <div class="panel">
           <div class="stage-bar">
-            <h2 style="margin:0">Live preview</h2>
+            <h2>Live preview</h2>
             <div class="seg" style="flex:0 0 auto">
               <input type="radio" name="stage" id="st-check" value="check" checked><label for="st-check">Checkerboard</label>
               <input type="radio" name="stage" id="st-scene" value="scene"><label for="st-scene">Sample scene</label>
             </div>
           </div>
-          <div class="stage" id="stage"><iframe id="preview" title="4:20 clock overlay preview" src="/420"></iframe></div>
+          <div class="stage cf-keep-dark" id="stage"><iframe id="preview" title="4:20 clock overlay preview" src="/420"></iframe></div>
 
           <div class="url">
             <input id="url" readonly aria-label="Browser source URL">
-            <button type="button" class="btn" id="copy">Copy link</button>
+            <button type="button" class="btn btn-primary" id="copy">Copy link</button>
           </div>
           <p class="size">Set the browser source to <b id="size-w">700</b> × <b id="size-h">400</b> px. <a href="/420" id="open" target="_blank" rel="noopener">Open in a new tab</a></p>
         </div>
@@ -147,12 +142,12 @@
             <li>Leave <b>Custom CSS</b> as it is. The overlay is transparent unless you picked a panel.</li>
             <li>Click <b>OK</b>, then drag it where you want it. Hold <code>Alt</code> while dragging an edge to crop.</li>
           </ol>
-          <p class="hint" style="margin-top:.8rem">Streamlabs: add a <b>Browser Source</b> widget and paste the same link. The countdown runs off your streaming PC's clock, so once it has loaded it keeps ticking even if our site goes down.</p>
+          <p class="hint">Streamlabs: add a <b>Browser Source</b> widget and paste the same link. The countdown runs off your streaming PC's clock, so once it has loaded it keeps ticking even if our site goes down.</p>
         </div>
       </section>
     </div>
   </main>
-  <footer><a href="/">certifriedmultitool.com</a></footer>
+<%- include('partials/site-footer') %>
 
   <script>
   (function () {
