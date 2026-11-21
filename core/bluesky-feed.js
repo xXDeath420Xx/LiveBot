@@ -5,6 +5,7 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { getAuthorFeed, getProfile, normalizeActor, postUrlFor } from '../utils/platforms/bluesky.js';
 import { buildFeedContent } from './feed-message.js';
+import { resolveFeedTarget, pingProblem } from './feed-target.js';
 import { pollsGuild } from './guild-presence-logic.js';
 
 const BLUESKY_COLOR = 0x0085FF;
@@ -59,6 +60,8 @@ async function processFeed(feed, client) {
         logger.warn(`[BlueskyFeed] channel ${feed.channel_id} not resolvable (feed id ${feed.id})`);
         return;
     }
+    const pingIssue = pingProblem(channel.guild, channel, feed.ping_role_id);
+    if (pingIssue) logger.warn(`[BlueskyFeed] Feed ${feed.id}: ${pingIssue}`);
 
     for (const item of toPost) {
         try {
@@ -125,21 +128,19 @@ function buildEmbed(item) {
  * add routes take a channel id from the form, so a channel of another server is never posted to.
  */
 export async function resolveChannel(client, channelId, guildId) {
-    const ok = (ch) => (ch && (!guildId || String(ch.guildId) === String(guildId)) ? ch : null);
-    // Works for both the main bot and custom bots — check all bot clients
-    const own = ok(client?.channels?.cache?.get(channelId));
-    if (own) return own;
+    // This bot first, then any other bot client that has the server (main bot and custom bots).
+    // core/feed-target.js fetches through the API when the cache misses (threads) and reopens an
+    // archived thread before the post.
+    const first = await resolveFeedTarget(client, channelId, { guildId });
+    if (first.channel) return first.channel;
     if (global.botManager?.clients) {
         for (const [, c] of global.botManager.clients) {
-            const ch = ok(c.channels.cache.get(channelId));
-            if (ch) return ch;
+            if (c === client || (guildId && !c.guilds?.cache?.has?.(guildId))) continue;
+            const { channel } = await resolveFeedTarget(c, channelId, { guildId });
+            if (channel) return channel;
         }
     }
-    try {
-        return ok(await client.channels.fetch(channelId));
-    } catch {
-        return null;
-    }
+    return null;
 }
 
 export { getProfile };

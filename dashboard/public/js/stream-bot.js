@@ -123,6 +123,7 @@
     // ── automations list ───────────────────────────────────────────────────────────────────
     function initAutomations() {
         var status = document.getElementById('sb-auto-status');
+        initVoiceLog();
         Array.prototype.forEach.call(document.querySelectorAll('[data-toggle-automation]'), function (sw) {
             sw.addEventListener('change', function () {
                 var id = sw.getAttribute('data-toggle-automation');
@@ -137,10 +138,107 @@
         });
     }
 
+    // ── voice log (Studio 0.2.10): what CertiFried Studio heard, as Studio sent it; refreshed every 10 s ─────────────
+    var VOICE_OUTCOME = { fired: 'Ran', below: 'Not sure enough', cooldown: 'Waiting (ran recently)', noise: 'Not a command', disabled: 'Automation is off' };
+    var VOICE_TONE = { fired: 'is-ok', below: 'is-warn', cooldown: 'is-warn', disabled: 'is-warn', noise: '' };
+    function initVoiceLog() {
+        var box = document.getElementById('sb-voice-log');
+        if (!box) return;
+        var body = document.getElementById('sb-voice-log-rows');
+        var empty = document.getElementById('sb-voice-log-empty');
+        var table = document.getElementById('sb-voice-log-table');
+        var note = document.getElementById('sb-voice-log-note');
+        var st = document.getElementById('sb-voice-log-status');
+        function pct(v) { return Math.round((Number(v) || 0) * 100) + '%'; }
+        function when(t) { var d = new Date(t); return isNaN(d) ? '' : d.toLocaleTimeString(); }
+        // Studio 0.2.13: teach from a line. "This was <closest>" and "This was..." add the words as how you say a command;
+        // "Not a command" stores them as not it; "Wrong, undo learning" forgets the alias that matched and stores the words
+        // as not it; Undo takes back what was learned from the line.
+        var NEAR_MISS = 0.4;
+        var names = {};
+        function teach(e, url, payload, done) {
+            if (e.id) payload.entryId = e.id;
+            call('POST', url, payload).then(function (r) {
+                if (r.ok) { setStatus(st, done, 'ok'); load(); }
+                else setStatus(st, errorText(r, 'Could not save that.'), 'bad');
+            });
+        }
+        function cmdName(id) { return names[id] || 'that command'; }
+        function teachCell(e) {
+            var td = el('td', { className: 'sb-voice-teach' });
+            var b = function (label, fn, secondary) { var x = el('button', { className: 'btn btn-sm ' + (secondary ? 'btn-ghost' : 'btn-secondary'), text: label, attrs: { type: 'button' } }); x.addEventListener('click', fn); td.appendChild(x); td.appendChild(document.createTextNode(' ')); };
+            var L = e.learned;
+            if (L) {
+                td.appendChild(el('span', { className: 'cf-list-meta', text: (L.kind === 'alias' ? 'Learned as ' + cmdName(L.automationId) : 'Marked not ' + cmdName(L.automationId)) + '. ' }));
+                b('Undo', function () {
+                    if (L.undid) teach(e, '/stream/bot/api/voice/learn', { automationId: L.automationId, kind: L.undid.kind, text: L.undid.text, undo: { kind: L.kind, text: L.text } }, 'Undone.');
+                    else teach(e, '/stream/bot/api/voice/unlearn', { automationId: L.automationId, kind: L.kind, text: L.text }, 'Undone.');
+                }, true);
+                return td;
+            }
+            if (!e.heard) return td;
+            var ran = e.outcome === 'fired' || e.outcome === 'cooldown';
+            if (ran) {
+                if (e.automationId) b('Wrong, undo learning', function () {
+                    teach(e, '/stream/bot/api/voice/learn', { automationId: e.automationId, kind: 'negative', text: e.heard, undo: e.via === 'alias' && e.alias ? { kind: 'alias', text: e.alias } : null },
+                        'Undone: ' + cmdName(e.automationId) + ' will not run for these words again.');
+                });
+                return td;
+            }
+            var cid = e.closestAutomationId || e.automationId;
+            if (cid && (Number(e.confidence) || 0) >= NEAR_MISS) b('This was ' + cmdName(cid), function () { teach(e, '/stream/bot/api/voice/learn', { automationId: cid, kind: 'alias', text: e.heard }, 'Learned: this is how you say ' + cmdName(cid) + '.'); });
+            var ids = Object.keys(names);
+            if (ids.length) {
+                var pick = el('select', { className: 'sb-voice-pick', attrs: { 'aria-label': 'This was a voice command' } }, [el('option', { text: 'This was...', attrs: { value: '' } })].concat(ids.map(function (id) { return el('option', { text: names[id], attrs: { value: id } }); })));
+                pick.addEventListener('change', function () { if (pick.value) teach(e, '/stream/bot/api/voice/learn', { automationId: Number(pick.value), kind: 'alias', text: e.heard }, 'Learned: this is how you say ' + cmdName(pick.value) + '.'); });
+                td.appendChild(pick);
+                td.appendChild(document.createTextNode(' '));
+            }
+            if (cid) b('Not a command', function () { teach(e, '/stream/bot/api/voice/learn', { automationId: cid, kind: 'negative', text: e.heard }, 'Learned: this is not ' + cmdName(cid) + '.'); }, true);
+            return td;
+        }
+        function load() {
+            call('GET', '/stream/bot/api/voice/log').then(function (r) {
+                if (!r.ok) { setStatus(st, errorText(r, 'Could not load the voice log.'), 'bad'); return; }
+                var d = r.data;
+                names = d.names || {};
+                clear(body);
+                (d.entries || []).forEach(function (e) {
+                    var cmdId = e.automationId || e.closestAutomationId;
+                    var name = cmdId ? names[cmdId] : '';
+                    var phrase = e.phrase || e.closest || '';
+                    body.appendChild(el('tr', null, [
+                        el('td', { text: when(e.t) }),
+                        el('td', { text: e.heard ? '"' + e.heard + '"' : (e.outcome === 'noise' ? 'Not a command (words not shared)' : '') }),
+                        el('td', { text: phrase + (name && name !== phrase ? ' (' + name + ')' : '') + (e.via === 'alias' && e.phrase ? ', how you say it' : '') }),
+                        el('td', { text: pct(e.confidence) + (e.threshold != null ? ' of ' + pct(e.threshold) : '') }),
+                        el('td', null, [el('span', { className: 'cf-pill ' + (VOICE_TONE[e.outcome] || ''), text: VOICE_OUTCOME[e.outcome] || e.outcome })]),
+                        teachCell(e),
+                    ]));
+                });
+                var n = (d.entries || []).length;
+                table.hidden = !n;
+                empty.hidden = !!n;
+                note.textContent = d.studio && d.studio.connected
+                    ? (d.studio.voiceLog ? 'CertiFried Studio ' + (d.studio.version || '') + ' is connected' + (d.studio.threshold != null ? ', set to ' + pct(d.studio.threshold) + ' sure' : '') + '.' : 'Update CertiFried Studio to 0.2.10 or later to see what it heard here.')
+                    : 'CertiFried Studio is not connected. The list fills while it is open and listening.';
+            });
+        }
+        var clearBtn = document.getElementById('sb-voice-log-clear');
+        if (clearBtn) clearBtn.addEventListener('click', function () {
+            call('DELETE', '/stream/bot/api/voice/log').then(function (r) {
+                if (r.ok) { setStatus(st, 'Cleared here. Studio keeps its own list until you clear it there.', 'ok'); load(); }
+                else setStatus(st, errorText(r, 'Could not clear it.'), 'bad');
+            });
+        });
+        load();
+        setInterval(function () { if (!document.hidden) load(); }, 10000);
+    }
+
     // ── editor ─────────────────────────────────────────────────────────────────────────────
     var PLATFORM = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', streamelements: 'StreamElements', streamlabs: 'Streamlabs', kofi: 'Ko-fi', bmac: 'Buy Me a Coffee', throne: 'Throne', fourthwall: 'Fourthwall', studio: 'CertiFried Studio', bot: 'Stream bot', test: 'Test' };
     // Power-up or Bits trigger, Counter changed trigger, If checks (2026-11-19 stream actions).
-    var BITS_KIND = { any: 'Any use of Bits', cheer: 'Cheers only', power_up: 'Any power-up', combo: 'Combos', message_effect: 'Power-up: message effect', celebration: 'Power-up: celebration', gigantify_an_emote: 'Power-up: giant emote' };
+    var BITS_KIND = { any: 'Any use of Bits', cheer: 'Cheers only', power_up: 'Any power-up', custom_power_up: 'Your own (custom) power-ups', combo: 'Combos', message_effect: 'Power-up: message effect', celebration: 'Power-up: celebration', gigantify_an_emote: 'Power-up: giant emote' };
     var CHECK_LABEL = { role: 'The viewer\'s role', amount: 'The amount', text: 'The message, name or reward', metadata: 'An event detail or argument' };
     var MODE = { command: 'A command, like !hello', contains: 'Message contains', exact: 'Message is exactly', starts: 'Message starts with', word: 'Message has the word', regex: 'Message matches a pattern' };
     var ROLE = { everyone: 'Everyone', broadcaster: 'Broadcaster', moderator: 'Moderator', vip: 'VIP', subscriber: 'Subscriber' };
@@ -275,11 +373,50 @@
             platforms: Array.isArray(cfg.platforms) ? cfg.platforms.slice() : [],
             match: { mode: (cfg.match && cfg.match.mode) || 'command', text: (cfg.match && cfg.match.text) || '', caseSensitive: !!(cfg.match && cfg.match.caseSensitive) },
             phrases: Array.isArray(cfg.phrases) ? cfg.phrases.join('\n') : '',
+            // Studio 0.2.10: this voice command's own confidence (percent; empty = Studio's setting) and wait before it runs again.
+            voiceConf: cfg.confidence != null ? String(Math.round(Number(cfg.confidence) * 100)) : '',
+            voiceWait: cfg.cooldownSec != null ? String(cfg.cooldownSec) : '',
             bitsKind: cfg.bitsKind || 'any', varKey: cfg.key || '', varScope: cfg.scope || 'any',
+            // Wave 2 (core/stream-bot/control): trigger settings from the catalogue (viewer step, ad minutes …) and the action queue.
+            extra: Object.assign({}, cfg), queueName: (cfg.queue && cfg.queue.name) || '', queueBlocking: !(cfg.queue && cfg.queue.blocking === false),
             conditions: JSON.parse(JSON.stringify(src.conditions || [])),
             actions: JSON.parse(JSON.stringify(src.actions || [])),
         };
         var dirty = false;
+        // Studio 0.2.13: what Studio learned about how you say this command. Removing one saves at once (not with the form).
+        var learned = { aliases: Array.isArray(cfg.aliases) ? cfg.aliases.slice() : [], negatives: Array.isArray(cfg.negatives) ? cfg.negatives.slice() : [], trained: cfg.trained || null };
+        function heardAsBlock() {
+            var box = el('div', { className: 'sb-block sb-heard-as' });
+            var msg = el('span', { className: 'cf-status-line', attrs: { role: 'status', 'aria-live': 'polite' } });
+            function list(kind, items, empty) {
+                var ul = el('ul', { className: 'sb-heard-list' });
+                if (!items.length) ul.appendChild(el('li', { className: 'cf-list-meta', text: empty }));
+                items.forEach(function (x) {
+                    var rm = el('button', { className: 'btn btn-secondary btn-sm', text: 'Remove', attrs: { type: 'button', 'aria-label': 'Remove "' + x.text + '"' } });
+                    rm.addEventListener('click', function () {
+                        rm.disabled = true;
+                        call('POST', '/stream/bot/api/voice/unlearn', { automationId: S.id, kind: kind, text: x.text }).then(function (r) {
+                            if (!r.ok) { rm.disabled = false; setStatus(msg, errorText(r, 'Could not remove it.'), 'bad'); return; }
+                            learned.aliases = r.data.aliases || [];
+                            learned.negatives = r.data.negatives || [];
+                            var fresh = heardAsBlock();
+                            box.parentNode.replaceChild(fresh, box);
+                        });
+                    });
+                    ul.appendChild(el('li', null, [el('span', { text: '"' + x.text + '"' + (kind === 'alias' && x.count > 1 ? ' (' + x.count + ' times)' : '') }), ' ', rm]));
+                });
+                return ul;
+            }
+            var t = learned.trained;
+            box.appendChild(el('h3', { className: 'sb-block-title', text: 'Heard as' }));
+            box.appendChild(el('p', { className: 'cf-list-meta', text: 'How Whisper writes this command when you say it. CertiFried Studio learns these when you use "Teach Studio how you say it" or "This was ..." in the voice log, and counts them as this command.' + (t && t.at ? ' Taught in Studio on ' + new Date(t.at).toLocaleDateString() + (t.takes ? ' from ' + t.takes + ' takes' : '') + '.' : '') }));
+            box.appendChild(list('alias', learned.aliases, 'Nothing yet.'));
+            box.appendChild(el('h3', { className: 'sb-block-title', text: 'Not this command' }));
+            box.appendChild(el('p', { className: 'cf-list-meta', text: 'Things you said that were marked "Not a command". Studio is less sure when it hears words close to these.' }));
+            box.appendChild(list('negative', learned.negatives, 'Nothing yet.'));
+            box.appendChild(msg);
+            return box;
+        }
         var focusKey = null;
 
         var form = document.getElementById('sb-editor');
@@ -421,9 +558,14 @@
                 var ph = el('textarea', { id: uid('v'), attrs: { rows: '4', maxlength: '2200', spellcheck: 'false' } });
                 ph.value = S.phrases;
                 ph.addEventListener('input', function () { S.phrases = ph.value; dirty = true; });
+                var vc = numberInput(S.voiceConf, function (v) { S.voiceConf = v; dirty = true; }, { min: '20', max: '95', step: '5', placeholder: 'Studio setting' });
+                var vw = numberInput(S.voiceWait, function (v) { S.voiceWait = v; dirty = true; }, { min: '0', max: '3600', step: '1', placeholder: '10' });
                 trigBox.appendChild(el('div', { className: 'sb-block' }, [el('div', { className: 'sb-fields' }, [
                     field('Phrases, one per line (up to 20)', ph, { hint: 'Say one of these near your microphone while CertiFried Studio is listening. Recognised on your PC; no audio leaves it.' }),
+                    field('How sure, in % (optional)', vc, { hint: 'Leave empty to use the setting in Studio (70% unless you changed it). Raise it if this command runs when you did not say it; lower it a little if it is often missed. Needs Studio 0.2.10.' }),
+                    field('Wait before it can run again, in seconds', vw, { hint: 'Empty means 10 seconds. Saying it again sooner is shown in the voice log as waiting. Needs Studio 0.2.10.' }),
                 ])]));
+                if (S.id) trigBox.appendChild(heardAsBlock());
             }
             if (S.trigger === 'bits.used') {
                 var bk = selectInput(Object.keys(BITS_KIND).map(function (k) { return { value: k, label: BITS_KIND[k] }; }), S.bitsKind, function (v) { S.bitsKind = v; dirty = true; });
@@ -439,6 +581,34 @@
                     field('Which values', vs),
                 ])]));
             }
+            // Trigger settings from the catalogue (core/stream-bot/control): number, select and text fields.
+            if (def.config && def.config.length) {
+                var cfgFields = def.config.map(function (fd) {
+                    if (S.extra[fd.name] === undefined && fd.default !== undefined) S.extra[fd.name] = fd.default;
+                    var setX = function (v) { S.extra[fd.name] = v; dirty = true; };
+                    var ctl = fd.kind === 'number' ? numberInput(S.extra[fd.name], setX, { min: fd.min, max: fd.max, step: 1 })
+                        : fd.kind === 'select' ? selectInput(fd.options.map(function (o) { return { value: o, label: (fd.optionLabels || {})[o] || o }; }), S.extra[fd.name], setX)
+                            : textInput(S.extra[fd.name], setX, { maxlength: 200 });
+                    return field(fd.label, ctl, { hint: fd.help || null });
+                });
+                trigBox.appendChild(el('div', { className: 'sb-block' }, [el('div', { className: 'sb-fields' }, cfgFields)]));
+            }
+            // Action queue: runs of automations in the same "one at a time" queue wait for each other, in order.
+            (function () {
+                var qn = textInput(S.queueName, function (v) { S.queueName = v; dirty = true; }, { maxlength: 40, spellcheck: 'false' });
+                var qb = el('input', { id: uid('c'), attrs: { type: 'checkbox' } });
+                qb.checked = S.queueBlocking;
+                qb.addEventListener('change', function () { S.queueBlocking = qb.checked; dirty = true; });
+                var det = el('details', { className: 'cf-expand' }, [
+                    el('summary', { text: S.queueName ? 'Queue: ' + S.queueName : 'Queue (optional)' }),
+                    el('div', { className: 'cf-expand-body' }, [el('div', { className: 'sb-fields' }, [
+                        field('Queue name', qn, { hint: 'Automations with the same queue name share a queue. Pause, resume or clear it with the queue actions. Empty: no queue.' }),
+                        el('div', { className: 'sb-field' }, [el('span', { className: 'sb-field-label', text: 'One at a time' }), el('label', { className: 'sb-check', attrs: { for: qb.id } }, [qb, 'Wait for the run before it to finish'])]),
+                    ])]),
+                ]);
+                if (S.queueName) det.open = true;
+                trigBox.appendChild(el('div', { className: 'sb-block' }, [det]));
+            })();
             restoreFocus(trigBox);
         }
 
@@ -493,6 +663,9 @@
                     if (!fl.length) { out.push(el('p', { className: 'sb-field-hint', text: 'Unknown condition; remove it.' })); break; }
                     fl.forEach(function (fd) {
                         if (fd.kind === 'number') out.push(field(fd.label, numberInput(c[fd.name], set(fd.name), { min: fd.min, max: fd.max, step: fd.step || 1 })));
+                        // Wave 2 conditions (core/stream-bot/control): choices and short text.
+                        else if (fd.kind === 'select') out.push(field(fd.label, selectInput((fd.options || []).map(function (o) { return { value: o, label: (fd.optionLabels || {})[o] || o }; }), c[fd.name] != null ? c[fd.name] : fd.default, set(fd.name))));
+                        else if (fd.kind === 'text') out.push(field(fd.label, textInput(c[fd.name], set(fd.name), { maxlength: 300 })));
                     });
                 }
             }
@@ -609,7 +782,7 @@
                         var ta = el('textarea', { attrs: { rows: 3, maxlength: 2000, spellcheck: 'true' } });
                         ta.value = step[f.name] == null ? '' : String(step[f.name]);
                         ta.addEventListener('input', function () { set(ta.value); });
-                        out.push(field(f.label, ta, { wide: true, hint: f.optional ? 'Optional. Variables such as {user.name} work here.' : 'Variables such as {user.name} work here.' }));
+                        out.push(field(f.label, ta, { wide: true, hint: f.hint || (f.optional ? 'Optional. Variables such as {user.name} work here.' : 'Variables such as {user.name} work here.') }));
                         break;
                     }
                     case 'number':
@@ -735,6 +908,7 @@
                 }
             });
             if (wantsObs) out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'Open CertiFried Studio with OBS connected to fill these lists.' }));
+            if (def.help) out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: def.help }));
             if (def.outputs && def.outputs.length) out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'Later actions in this run can use ' + def.outputs.map(function (o) { return '{' + o + '}'; }).join(' and ') + '.' }));
             if (def.platforms && def.platforms.length === 1 && def.platforms[0] === 'twitch') out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'Twitch only: Kick has no way to do this. It works on your Twitch channel through the Stream bot grant.' }));
             if (def.platforms && def.platforms.length === 1 && def.platforms[0] === 'youtube') out.push(el('p', { className: 'sb-field-hint sb-field is-wide', text: 'YouTube only, on the viewer behind a YouTube event, while you are live. It uses a large share of the daily YouTube allowance, so it pauses when the allowance runs low.' }));
@@ -919,7 +1093,15 @@
             if (S.trigger === 'chat') trigger_config.match = { mode: S.match.mode, text: S.match.text, caseSensitive: S.match.caseSensitive };
             if (S.trigger === 'bits.used') trigger_config.bitsKind = S.bitsKind || 'any';
             if (S.trigger === 'variable.changed') { if (S.varKey.trim()) trigger_config.key = S.varKey.trim().toLowerCase(); trigger_config.scope = S.varScope || 'any'; }
-            if (S.trigger === 'voice.phrase') trigger_config.phrases = S.phrases.split('\n').map(function (t) { return t.trim(); }).filter(Boolean);
+            if (S.trigger === 'voice.phrase') {
+                trigger_config.phrases = S.phrases.split('\n').map(function (t) { return t.trim(); }).filter(Boolean);
+                if (String(S.voiceConf).trim() !== '') trigger_config.confidence = Number(S.voiceConf);
+                if (String(S.voiceWait).trim() !== '') trigger_config.cooldownSec = Number(S.voiceWait);
+            }
+            (((EVT[S.trigger] || {}).config) || []).forEach(function (fd) {
+                if (S.extra[fd.name] !== undefined && S.extra[fd.name] !== '') trigger_config[fd.name] = fd.kind === 'number' ? Number(S.extra[fd.name]) : S.extra[fd.name];
+            });
+            if (String(S.queueName).trim()) trigger_config.queue = { name: String(S.queueName).trim(), blocking: !!S.queueBlocking };
             return { name: S.name.trim(), enabled: S.enabled, trigger_type: S.trigger, trigger_config: trigger_config, conditions: S.conditions, actions: S.actions };
         }
         var saving = false;
@@ -1063,6 +1245,31 @@
                 });
             });
         });
+
+        // Heart rate (Studio 0.2.14): the optional Pulsoid token.
+        var hrForm = document.getElementById('sb-pulsoid-form');
+        var hrStatus = document.getElementById('sb-pulsoid-status');
+        if (hrForm) {
+            hrForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                setStatus(hrStatus, 'Saving', 'busy');
+                call('POST', '/stream/bot/api/heart/pulsoid', { token: document.getElementById('sb-pulsoid-token').value }).then(function (r) {
+                    if (r.ok) window.location.assign('/stream/bot/connections#sb-heart-title');
+                    else setStatus(hrStatus, errorText(r, 'Could not save it.'), 'bad');
+                });
+            });
+        }
+        var hrRemove = document.getElementById('sb-pulsoid-remove');
+        if (hrRemove) {
+            hrRemove.addEventListener('click', function () {
+                if (!window.confirm('Remove the Pulsoid token? CertiFried then uses only your watch through Studio.')) return;
+                hrRemove.disabled = true;
+                call('DELETE', '/stream/bot/api/heart/pulsoid').then(function (r) {
+                    if (r.ok) window.location.reload();
+                    else { hrRemove.disabled = false; setStatus(hrStatus, errorText(r, 'Could not remove it.'), 'bad'); }
+                });
+            });
+        }
 
         var tipForm = document.getElementById('sb-tip-form');
         var tipSource = document.getElementById('sb-tip-source');

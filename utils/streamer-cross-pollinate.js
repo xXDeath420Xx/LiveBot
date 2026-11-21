@@ -11,6 +11,7 @@
 import pool from './db.js';
 import logger from './logger.js';
 import { getStreamEndDefaults } from '../core/stream-end-defaults.js';
+import { isStreamerIdBlocked } from '../core/streamer-blocklist.js';
 
 /**
  * Cross-pollinate a streamer to all guilds they're a member of.
@@ -102,6 +103,11 @@ export async function crossPollinateStreamer(streamerId, discordUserId, originGu
             );
 
             if (existingSub.length === 0) {
+                // That server's blocked streamers list (core/streamer-blocklist.js).
+                if (await isStreamerIdBlocked(guildConfig.guild_id, streamerId)) {
+                    logger.debug(`[CrossPollinate] Skipping ${guildConfig.guild_id}: streamer ${streamerId} is on its blocked streamers list`, { category: 'streams' });
+                    continue;
+                }
                 const streamEnd = await getStreamEndDefaults(guildConfig.guild_id);
                 await pool.execute(
                     'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?, ?)',
@@ -243,6 +249,7 @@ export async function crossPollinateGuild(guildId, channelId) {
                 );
 
                 if (existing.length === 0) {
+                    if (await isStreamerIdBlocked(guildId, streamer.streamer_id)) continue; // blocked streamers list
                     const streamEnd = await getStreamEndDefaults(guildId);
                     await pool.execute(
                         'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?, ?)',

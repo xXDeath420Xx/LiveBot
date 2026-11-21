@@ -1,0 +1,42 @@
+<%#
+  GET /stream/bot/community (dashboard/routes/stream-bot-community.js). Locals: ready (migration 475 ran and the features loaded),
+  counts { items, quotes: { total, off }, media } | null, currency, gamesOn [slots|duel|heist], mediaOpen.
+%>
+<%- include('_head', { pageTitle: 'Community', active: 'community', sbPage: 'community' }) %>
+<link rel="stylesheet" href="/css/stream-bot-community.css">
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Community</h1>
+        <p class="cf-page-sub">Chat games, a store and quotes for your viewers, and videos and text read aloud on stream. Everything here uses your channel's <%= currency %>, which are free: nobody pays money for them.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'community' }) %>
+<%- include('_community-nav', { section: 'overview' }) %>
+
+<% if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Quotes, the store and media share start after the next CertiFried update. You can already change the chat game settings.</div></div>
+<% } %>
+
+<section class="cf-section" aria-labelledby="sbc-ov-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-ov-title">What is set up</h2>
+        <p class="cf-section-desc">Each feature answers chat through commands you add on its page. They are added switched off, so nothing changes in chat until you turn them on under <a href="/stream/bot/automations">Automations</a>.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label"><a href="/stream/bot/community/games">Chat games</a></p><p class="cf-row-desc">Slots, duels, heists, raffles with tickets, and a line-up for viewers who want to play with you.</p></div>
+            <div class="cf-row-control"><span class="cf-muted"><%= gamesOn.length ? `On: ${gamesOn.map((k) => ({ slots: 'slots', duel: 'duels', heist: 'heists' })[k]).join(', ')}` : 'All games are off' %></span></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label"><a href="/stream/bot/community/store">Store</a></p><p class="cf-row-desc">Items viewers redeem with their <%= currency %>, each able to run one of your automations.</p></div>
+            <div class="cf-row-control"><span class="cf-muted"><%= counts ? `${counts.items} item${counts.items === 1 ? '' : 's'}` : 'Not started' %></span></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label"><a href="/stream/bot/community/quotes">Quotes</a></p><p class="cf-row-desc"><code>!quote</code>, <code>!addquote</code> and <code>!delquote</code>, with quotes brought over from Firebot or Streamer.bot on the Import page.</p></div>
+            <div class="cf-row-control"><span class="cf-muted"><%= counts ? `${counts.quotes.total} quote${counts.quotes.total === 1 ? '' : 's'}${counts.quotes.off ? `, ${counts.quotes.off} off` : ''}` : 'Not started' %></span></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label"><a href="/stream/bot/community/media">Media and speech</a></p><p class="cf-row-desc">Viewers request YouTube videos for you to approve; automations read text aloud on stream.</p></div>
+            <div class="cf-row-control"><span class="cf-muted"><%= mediaOpen ? `Media share open${counts ? `, ${counts.media} in the queue` : ''}` : 'Media share closed' %></span></div>
+        </div>
+    </div>
+</section>
+<%- include('_foot') %>

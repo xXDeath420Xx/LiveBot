@@ -571,10 +571,8 @@ export const FEATURE_SPECS = {
             { key: 'enabled', label: 'Cinema', type: 'toggle', default: 0, hint: 'Needed for /watch (also typed as /movie): while it is off nothing can be played. The Watch party page has a second switch for the same command.' },
             { key: 'control_role_id', label: 'Playback control role', type: 'role', hint: 'Can control any film playing, not only one they started.' },
             { key: 'default_vc_id', label: 'Default voice channel', type: 'channel', channelKind: 'voice', hint: 'Used when the person starting a film is not in a voice channel.' },
-            // Discord Activities (docs/activities.md, migration 467)
-            { key: 'watch_mode', label: 'How films play', type: 'select', default: 'stream',
-              options: [{ value: 'stream', label: 'Go Live stream in the voice channel' }, { value: 'activity', label: 'Watch Together (Discord Activity)' }],
-              hint: 'Watch Together opens in the voice channel as a Discord Activity: everyone watches in sync, joins part-way at the right moment, picks their own subtitles, and the host controls playback. /movie play then opens it.' },
+            // Discord Activities (docs/activities.md, migration 467). The 'How films play' choice (watch_mode) is gone: the
+            // Go Live stream (the CertiFried-Cinema selfbot) was retired on 2026-11-20 and every server uses Watch Together.
             { key: 'jellyfin_library_id', label: 'Library', type: 'select', get options() { return jellyfinLibraryOptions(); },
               hint: 'Which library this server watches from. Every video library is the whole collection.' },
         ],

@@ -12,6 +12,7 @@
  * Tested in tests/stream-bot-engine.test.js.
  */
 import { ROLES, isEventType, eventType } from './events.js';
+import { cleanVoiceExamples } from './voice-learn.js';
 
 export const CONDITION_TYPES = [   // not frozen: registerConditionType() adds feature conditions (core/stream-bot/viewers)
     { type: 'role', label: 'Viewer role', help: 'Only when the person has (or does not have) one of these roles.' },
@@ -33,20 +34,30 @@ export function registerConditionType(def) {
     CONDITION_TYPES.push({ type: def.type, label: def.label, help: def.help || '', fields: def.fields || [] });
     return true;
 }
+/**
+ * Options any trigger can carry in trigger_config (core/stream-bot/control: `queue`). fn(raw, err) → the cleaned value, or
+ * null to leave it out.
+ */
+const TRIGGER_OPTIONS = new Map();
+export function registerTriggerOption(name, fn) {
+    if (!/^[a-z][a-z0-9_]{0,30}$/.test(String(name)) || typeof fn !== 'function' || TRIGGER_OPTIONS.has(name)) return false;
+    TRIGGER_OPTIONS.set(name, fn);
+    return true;
+}
 /** Data registered conditions read (the viewer's points and so on), loaded once per run before the checks. Never throws. */
 export async function loadConditionData(conditions, ev, { profileId } = {}) {
     const loaded = {};
     for (const c of conditions || []) {
         const def = REGISTERED.get(c?.type);
         if (!def?.load || loaded[def.load.key] !== undefined) continue;
-        try { loaded[def.load.key] = await def.load.fn({ ev, profileId }); } catch { loaded[def.load.key] = null; }
+        try { loaded[def.load.key] = await def.load.fn({ ev, profileId, conditions }); } catch { loaded[def.load.key] = null; }
     }
     return loaded;
 }
 
 export const MATCH_MODES = Object.freeze(['command', 'contains', 'exact', 'starts', 'word', 'regex']);
 /** Power-up or Bits trigger: which uses (channel.bits.use `type`, or the power-up's own type). */
-export const BITS_KINDS = Object.freeze(['any', 'cheer', 'power_up', 'combo', 'message_effect', 'celebration', 'gigantify_an_emote']);
+export const BITS_KINDS = Object.freeze(['any', 'cheer', 'power_up', 'custom_power_up', 'combo', 'message_effect', 'celebration', 'gigantify_an_emote']);
 export const METADATA_OPS = Object.freeze(['eq', 'neq', 'contains', 'in', 'gt', 'lt']);
 export const LIMITS = Object.freeze({ conditions: 10, text: 500, regex: 200, regexInput: 1000, cooldownMax: 86400, windowMax: 86400, countMax: 1000 });
 const PATH = /^[a-z0-9_]+(?:\.[a-z0-9_]+){0,4}$/i;
@@ -94,12 +105,15 @@ export function triggerMatches(automation, ev) {
     if (Array.isArray(cfg.platforms) && cfg.platforms.length && !cfg.platforms.includes(ev.platform) && ev.platform !== 'test') return false;
     if (ev.type === 'bits.used' && cfg.bitsKind && cfg.bitsKind !== 'any') {
         const m = ev.metadata || {};
-        if (['cheer', 'power_up', 'combo'].includes(cfg.bitsKind) ? m.kind !== cfg.bitsKind : m.powerUp !== cfg.bitsKind) return false;
+        if (['cheer', 'power_up', 'custom_power_up', 'combo'].includes(cfg.bitsKind) ? m.kind !== cfg.bitsKind : m.powerUp !== cfg.bitsKind) return false;
     }
     if (ev.type === 'variable.changed') {
         if (cfg.key && String(ev.metadata?.key || '') !== cfg.key) return false;
         if (cfg.scope && cfg.scope !== 'any' && ev.metadata?.scope !== cfg.scope) return false;
     }
+    // Feature triggers with their own settings (EVENT_TYPES `match`, core/stream-bot/control): viewer count step, ad minutes …
+    const tdef = eventType(ev.type);
+    if (typeof tdef?.match === 'function') { try { if (!tdef.match(cfg, ev)) return false; } catch { return false; } }
     if (ev.type === 'chat' && cfg.match && cfg.match.text) return textMatches(ev.message, cfg.match);
     if (ev.type === 'voice.phrase' && Array.isArray(cfg.phrases) && cfg.phrases.length) {
         const said = normalisePhrase(ev.message ?? ev.metadata?.phrase);
@@ -267,6 +281,24 @@ export function validateTrigger(type, cfg = {}) {
         if (list.length > 20) errors.push('At most 20 phrases for one voice command.');
         if (list.some((p) => p.length > 100)) errors.push('Each phrase can be at most 100 characters.');
         value.phrases = list.slice(0, 20).map((p) => p.slice(0, 100));
+        // Studio 0.2.10: this command's own confidence (0.2 to 0.95; a number above 1 is read as a percentage; empty = Studio's
+        // own setting) and how long after it ran before it can run again (0 to 3600 seconds; default 10).
+        if (cfg.confidence != null && cfg.confidence !== '') {
+            let c = Number(cfg.confidence);
+            if (Number.isFinite(c) && c > 1) c /= 100;
+            if (!Number.isFinite(c) || c < 0.2 || c > 0.95) errors.push('How sure for this voice command: from 20% to 95%, or leave it empty to use the setting in CertiFried Studio.');
+            else value.confidence = Math.round(c * 100) / 100;
+        }
+        if (cfg.cooldownSec != null && cfg.cooldownSec !== '') {
+            const s = Number(cfg.cooldownSec);
+            if (!Number.isInteger(s) || s < 0 || s > 3600) errors.push('Wait before it can run again: a whole number of seconds from 0 to 3600.');
+            else value.cooldownSec = s;
+        }
+        // Studio 0.2.13: what Studio learned about how the streamer says it (voice-learn.js), kept through a save, text only
+        const ex = cleanVoiceExamples(cfg);
+        if (ex.aliases.length) value.aliases = ex.aliases;
+        if (ex.negatives.length) value.negatives = ex.negatives;
+        if (ex.trained) value.trained = ex.trained;
     }
     if (type === 'bits.used') value.bitsKind = BITS_KINDS.includes(cfg.bitsKind) ? cfg.bitsKind : 'any';
     if (type === 'variable.changed') {
@@ -274,6 +306,19 @@ export function validateTrigger(type, cfg = {}) {
         if (k && !/^[a-z0-9_.-]{1,64}$/.test(k)) errors.push('Counter changed: the name may use 1 to 64 letters, numbers, _ . or -.');
         if (k) value.key = k;
         value.scope = ['channel', 'viewer'].includes(cfg.scope) ? cfg.scope : 'any';
+    }
+    // Feature trigger settings (EVENT_TYPES `config`: number, select and text fields) and options on every trigger (registerTriggerOption).
+    for (const fd of def.config || []) {
+        const raw = cfg[fd.name];
+        if (fd.kind === 'number') {
+            const n = raw === '' || raw == null ? Number(fd.default) : Number(raw);
+            if (!Number.isFinite(n) || (fd.min != null && n < fd.min) || (fd.max != null && n > fd.max)) errors.push(`${def.label}: ${fd.label} is ${fd.min ?? ''} to ${fd.max ?? ''}.`);
+            else value[fd.name] = Math.round(n);
+        } else if (fd.kind === 'select') value[fd.name] = (fd.options || []).includes(raw) ? raw : fd.default;
+        else value[fd.name] = text(raw, 200).trim();
+    }
+    for (const [k, fn] of TRIGGER_OPTIONS) {
+        try { const v = fn(cfg[k], (m) => errors.push(m)); if (v != null) value[k] = v; } catch { /* an option never breaks a save */ }
     }
     return { ok: !errors.length, errors, value };
 }

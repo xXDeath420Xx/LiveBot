@@ -1,0 +1,22 @@
+/* Your voice (/stream/bot/voice) and the owner console page (/super-admin/voice). cf tokens only, so Dark, Light and Sand all work. */
+.vc-msg { min-height: 1.2em; margin: 0 0 var(--cf-3); font-size: var(--cf-text-sm); }
+.vc-msg.is-ok, .vc-result.is-ok { color: var(--cf-success-ink); }
+.vc-msg.is-bad, .vc-result.is-bad, .vc-bad { color: var(--cf-danger-ink); }
+.vc-consent-text { max-height: 26rem; overflow-y: auto; padding: var(--cf-4); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2); margin-bottom: var(--cf-4); }
+.vc-consent-text h3 { font-size: var(--cf-text); margin: var(--cf-4) 0 var(--cf-2); color: var(--cf-text); }
+.vc-consent-text h3:first-child { margin-top: 0; }
+.vc-consent-text p { font-size: var(--cf-text-sm); color: var(--cf-text-2); margin: 0 0 var(--cf-2); line-height: 1.5; }
+.vc-stage { padding: var(--cf-5) var(--cf-4); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); margin: var(--cf-3) 0; }
+.vc-sentence { font-size: 1.35rem; line-height: 1.45; color: var(--cf-text); margin: 0 0 var(--cf-4); max-width: 46ch; }
+.vc-count, .vc-timer, .vc-progress { font-size: var(--cf-text-sm); color: var(--cf-text-3); margin: 0 0 var(--cf-2); }
+.vc-result { font-size: var(--cf-text-sm); margin: var(--cf-3) 0 0; min-height: 1.2em; }
+.vc-buttons { display: flex; flex-wrap: wrap; gap: var(--cf-2); }
+.vc-meter { display: inline-block; width: 7rem; height: 0.5rem; border-radius: 999px; background: var(--cf-surface-2); border: 1px solid var(--cf-border); overflow: hidden; vertical-align: middle; margin-right: var(--cf-2); }
+.vc-meter span { display: block; height: 100%; width: 0; background: var(--cf-accent); transition: width 80ms linear; }
+.vc-table { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+.vc-table th, .vc-table td { text-align: left; padding: var(--cf-2) var(--cf-3); border-bottom: 1px solid var(--cf-border); vertical-align: top; }
+.vc-table th { color: var(--cf-text-3); font-weight: 600; }
+.vc-table td code { font-family: var(--cf-mono); font-size: var(--cf-text-xs); }
+.vc-inline { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+.vc-inline input[type=text] { min-width: 14rem; }
+@media (max-width: 600px) { .vc-sentence { font-size: 1.15rem; } .vc-table { display: block; overflow-x: auto; } }

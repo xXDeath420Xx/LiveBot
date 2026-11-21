@@ -115,8 +115,11 @@
         renderSettings();
         renderUpdate();
         renderVoice();
+        renderAlertAudio();
+        renderPrograms();
         renderVod();
         renderLights();
+        renderHeart(S.heart);
         renderAudio();
         renderStreamdeck();
     }
@@ -461,7 +464,7 @@
     });
 
     // ── lights (Phase 5) ──
-    const DRIVER_LABEL = { govee: 'Govee', hue: 'Philips Hue', lifx: 'LIFX', nanoleaf: 'Nanoleaf', elgato: 'Elgato', litra: 'Logitech Litra' };
+    const DRIVER_LABEL = { govee: 'Govee', hue: 'Philips Hue', lifx: 'LIFX', nanoleaf: 'Nanoleaf', elgato: 'Elgato', litra: 'Logitech Litra', goveeble: 'Govee (Bluetooth)' };
     const LIGHT_ERRORS = {
         no_lights: 'No lights yet.', device_offline: 'That light did not answer. Is it on and on the same network?', needs_pairing: 'Pair it first.',
         cert_changed: 'The Hue bridge presented a different certificate than when it was paired. Forget it and pair again.', not_supported: 'That light cannot do this.',
@@ -481,7 +484,7 @@
             const caps = [d.caps && d.caps.color ? 'colour' : null, d.caps && d.caps.white ? 'white' : null, d.caps && (d.caps.scenes || []).length ? `${d.caps.scenes.length} scenes` : null, d.caps && (d.caps.effects || []).length ? `${d.caps.effects.length} effects` : null].filter(Boolean).join(', ');
             const btns = [];
             if (d.needsPairing) btns.push(el('button', { class: 'btn small', text: 'Pair', onclick: async (e) => {
-                const hint = d.driver === 'hue' ? 'Press the button on the Hue bridge now. Studio waits 30 seconds.' : 'Hold the power button on the Nanoleaf for 5 to 7 seconds until the lights flash. Studio waits 30 seconds.';
+                const hint = d.driver === 'hue' ? 'Press the button on the Hue bridge now. Studio waits 30 seconds.' : d.driver === 'goveeble' ? `Connecting to ${d.name} over Bluetooth. Only add lights that are yours: Bluetooth also reaches lights next door.` : 'Hold the power button on the Nanoleaf for 5 to 7 seconds until the lights flash. Studio waits 30 seconds.';
                 setMsg('lights-msg', hint);
                 e.target.disabled = true;
                 try { const r = await call('lights:pair', { id: d.id }); setMsg('lights-msg', r.result.message || (r.result.ok ? 'Paired.' : 'Not paired.'), r.result.ok ? 'ok' : 'bad'); } catch (err) { setMsg('lights-msg', lightError(err), 'bad'); }
@@ -512,6 +515,34 @@
         }
         for (const k of Object.keys(DRIVER_LABEL)) { const cb = $(`lights-driver-${k}`); if (cb && document.activeElement !== cb) cb.checked = (L.drivers || {})[k] !== false; }
     }
+    // 0.2.10: cloud lights through the streamer's Govee / LIFX key, run by the server.
+    let cloudLoaded = false;
+    async function loadCloud() {
+        cloudLoaded = true;
+        try {
+            const r = await call('lights:cloud');
+            const rows = (r.lights || []).map((d) => el('tr', null,
+                el('td', { text: d.name }), el('td', { text: d.providerLabel || d.provider }), el('td', { text: d.model || '' }),
+                el('td', null, el('button', { class: 'btn small', type: 'button', text: 'Test', onclick: async (ev) => {
+                    ev.target.disabled = true;
+                    setMsg('cloud-msg', `${d.name}: asking the server to flash it...`);
+                    try { const x = await call('lights:cloudTest', { id: d.id }); setMsg('cloud-msg', `${d.name}: ${x.message}`, 'ok'); } catch (err) { setMsg('cloud-msg', `${d.name}: ${err.message}`, 'bad'); }
+                    ev.target.disabled = false;
+                } }))));
+            $('cloud-table').tBodies[0].replaceChildren(...rows);
+            $('cloud-table').hidden = !rows.length;
+            $('cloud-empty').hidden = !!rows.length;
+            const bad = (r.accounts || []).filter((x) => x.status && x.status !== 'ok');
+            setMsg('cloud-msg', bad.map((x) => `${x.label}: ${x.lastError || 'the key needs checking on the dashboard.'}`).join(' '), bad.length ? 'bad' : '');
+        } catch (err) {
+            $('cloud-table').hidden = true;
+            $('cloud-empty').hidden = false;
+            setMsg('cloud-msg', err.message, 'bad');
+        }
+    }
+    $('cloud-refresh').addEventListener('click', () => loadCloud());
+    document.querySelector('.nav-item[data-tab="lights"]').addEventListener('click', () => { if (!cloudLoaded) loadCloud(); });
+
     $('lights-find').addEventListener('click', async () => {
         setMsg('lights-msg', 'Looking for lights on your network and USB...');
         try { const r = await call('lights:find'); setMsg('lights-msg', `Found ${r.count} light${r.count === 1 ? '' : 's'}.`, 'ok'); } catch (err) { setMsg('lights-msg', err.message, 'bad'); }
@@ -521,6 +552,82 @@
         e.preventDefault();
         try { const r = await call('lights:add', { driver: $('lights-add-driver').value, address: $('lights-add-address').value }); setMsg('lights-add-msg', `Added ${r.count}.`, 'ok'); $('lights-add-address').value = ''; } catch (err) { setMsg('lights-add-msg', lightError(err), 'bad'); }
     });
+
+    // ── heart rate (0.2.14) ──
+    const HEART_STATE = {
+        off: ['Off', ''], idle: ['No device', ''], connecting: ['Connecting', 'warn'], waiting: ['Waiting for a reading', 'warn'],
+        connected: ['Connected', 'ok'], reconnecting: ['Reconnecting', 'warn'], error: ['Not working', 'bad'],
+    };
+    function ago(t) {
+        if (!t) return '-';
+        const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+        return s < 2 ? 'just now' : s < 90 ? `${s} seconds ago` : `${Math.round(s / 60)} minutes ago`;
+    }
+    function drawSpark(list) {
+        const cv = $('heart-spark');
+        const ctx = cv.getContext('2d');
+        const w = cv.width, h = cv.height;
+        ctx.clearRect(0, 0, w, h);
+        const pts = (list || []).filter((x) => Number.isFinite(x));
+        if (pts.length < 2) return;
+        const lo = Math.min(...pts) - 4, hi = Math.max(...pts) + 4;
+        const css = getComputedStyle(document.documentElement);
+        ctx.strokeStyle = css.getPropertyValue('--cf-accent').trim() || '#b4e04f';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        pts.forEach((v, i) => {
+            const x = (i / (120 - 1)) * (w - 8) + 4 + (w - 8) * (1 - (pts.length - 1) / (120 - 1));
+            const y = h - 6 - ((v - lo) / Math.max(1, hi - lo)) * (h - 12);
+            if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        });
+        ctx.stroke();
+    }
+    function renderHeart(H) {
+        if (!H) return;
+        const [label, tone] = HEART_STATE[H.state] || [H.state, ''];
+        $('heart-pill').textContent = label; $('heart-pill').className = `pill ${tone}`;
+        const fresh = H.lastAt && Date.now() - H.lastAt < 15000;
+        $('heart-bpm').textContent = H.bpm != null ? String(H.bpm) : '--';
+        $('heart-bpm').className = `hr-bpm${fresh ? '' : ' is-stale'}`;
+        $('heart-device').textContent = H.device ? (H.device.name || `Device ${H.device.address.slice(-4)}`) : 'None chosen';
+        $('heart-battery').textContent = H.battery != null ? `${H.battery}%` : '-';
+        $('heart-last').textContent = ago(H.lastAt);
+        $('heart-sent').textContent = !H.share ? 'Not sent (switched off)' : !S.paired ? 'Not paired' : H.sent ? `Sent ${ago(H.sent)}` : 'Nothing sent yet';
+        if (document.activeElement !== $('heart-enabled')) $('heart-enabled').checked = !!H.enabled;
+        if (document.activeElement !== $('heart-share')) $('heart-share').checked = !!H.share;
+        $('heart-forget').hidden = !H.device;
+        $('heart-scan').textContent = H.device ? 'Choose another device' : 'Find my watch';
+        if ((H.state === 'error' || H.state === 'reconnecting') && H.error && !$('heart-msg').dataset.mine) setMsg('heart-msg', H.error, H.state === 'error' ? 'bad' : 'warn');
+        else if (!$('heart-msg').dataset.mine && H.state === 'connected') setMsg('heart-msg', '');
+        drawSpark(H.history);
+    }
+    function heartMsg(text, kind) {
+        setMsg('heart-msg', text, kind);
+        $('heart-msg').dataset.mine = text ? '1' : '';
+        if (text) setTimeout(() => { $('heart-msg').dataset.mine = ''; }, 8000);
+    }
+    $('heart-scan').addEventListener('click', async () => {
+        const btn = $('heart-scan');
+        btn.disabled = true;
+        heartMsg('Looking for heart-rate devices for 6 seconds. Make sure the app on your watch is broadcasting.');
+        try {
+            const r = await call('heart:scan', { all: $('heart-all').checked });
+            const rows = (r.devices || []).map((d) => el('tr', null,
+                el('td', null, el('span', { text: d.name || 'No name' }), el('span', { class: 'sub', text: d.hr ? 'Heart-rate sensor' : `Ends in ${d.address.slice(-4)}` })),
+                el('td', { text: d.rssi != null ? `${d.rssi} dBm` : '-' }),
+                el('td', null, el('button', { class: 'btn small', type: 'button', text: 'Use this one', onclick: async () => {
+                    try { await call('heart:choose', { address: d.address, name: d.name }); heartMsg(`Connecting to ${d.name || 'the device'}...`, 'ok'); $('heart-table').hidden = true; } catch (err) { heartMsg(err.message, 'bad'); }
+                } }))));
+            $('heart-table').tBodies[0].replaceChildren(...rows);
+            $('heart-table').hidden = !rows.length;
+            heartMsg(rows.length ? `Found ${rows.length}. Choose Use this one next to your watch.` : 'Nothing found. Start broadcasting in the app on your watch, keep it near this PC, and try again.', rows.length ? 'ok' : 'warn');
+        } catch (err) { heartMsg(err.message, 'bad'); }
+        btn.disabled = false;
+    });
+    $('heart-forget').addEventListener('click', async () => { try { await call('heart:forget'); heartMsg('Forgotten. Studio no longer connects to it.', 'ok'); } catch (err) { heartMsg(err.message, 'bad'); } });
+    $('heart-enabled').addEventListener('change', () => call('heart:settings', { enabled: $('heart-enabled').checked }).catch((err) => heartMsg(err.message, 'bad')));
+    $('heart-share').addEventListener('change', () => call('heart:settings', { share: $('heart-share').checked }).catch((err) => heartMsg(err.message, 'bad')));
 
     // ── Voicemeeter (Phase 5) ──
     const VM_TYPE = { basic: 'Voicemeeter', banana: 'Voicemeeter Banana', potato: 'Voicemeeter Potato' };
@@ -581,48 +688,246 @@
 
     // ── voice ──
     let micsLoaded = false;
-    async function loadMicrophones() {
-        if (micsLoaded) return;
+    let micsTried = 0;
+    async function loadMicrophones(force) {
+        if (micsLoaded && !force) return;
+        if (Date.now() - micsTried < 5000) return;
+        micsTried = Date.now();
         try {
             const r = await call('voice:devices');
-            const cur = S ? S.voice.settings.inputDeviceId : 'default';
-            const list = r.devices.length ? r.devices : [{ id: 'default', label: 'Windows default' }];
-            if (!list.some((d) => d.id === cur)) list.push({ id: cur, label: 'Saved microphone (not plugged in)' });
-            $('voice-device').replaceChildren(...list.map((d) => el('option', { value: d.id, text: d.id === 'default' ? 'Windows default' : d.label })));
-            $('voice-device').value = cur;
-            micsLoaded = true;
+            const cur = S ? S.voice.settings.inputDeviceId : null;
+            // 0.2.12: only real devices; Studio saves the device itself, never "default"
+            const strip = (l) => String(l || '').replace(/^(Default|Communications)\s*-\s*/i, '').trim();
+            const list = (r.devices || []).filter((d) => d.id !== 'default' && d.id !== 'communications').map((d) => ({ id: d.id, label: strip(d.label) }));
+            if (cur && !list.some((d) => d.id === cur)) {
+                list.push({ id: cur, label: cur === 'communications' ? 'Windows communications microphone' : cur === 'default' ? 'Picked when voice commands start' : `${(S && S.voice.settings.inputDeviceLabel) || 'Saved microphone'} (not plugged in)` });
+            }
+            $('voice-device').replaceChildren(...list.map((d) => el('option', { value: d.id, text: d.label })));
+            if (cur) $('voice-device').value = cur;
+            micsLoaded = list.length > 0;
         } catch (e) { /* audio window not ready */ }
     }
     const VOICE_LABEL = { off: 'Off', starting: 'Starting', listening: 'Listening', error: 'Not working' };
+    const MB = (n) => `${Math.round(n / 1048576)} MB`;
+    function engineLine(v) {
+        const st = v.status || {};
+        if (!v.settings.enabled) return '';
+        if (v.engine === 'windows') return 'Using Windows speech recognition.';
+        if (st.progress && st.state === 'starting') {
+            const what = st.progress.what === 'cuda' ? 'the graphics card files' : 'the speech model';
+            return `Downloading ${what}: ${MB(st.progress.got)} of ${MB(st.progress.total || 0)}. This happens once.`;
+        }
+        if (st.state === 'starting') return 'Starting Whisper.';
+        if (st.device === 'cuda') return `Using your graphics card${st.gpuName ? ` (${st.gpuName})` : ''} with Whisper ${st.model || ''}.`;
+        if (st.device === 'cpu' && st.gpuFailed) return `Using the processor with Whisper ${st.model || ''}, because the graphics card files could not be used (${st.gpuFailed.message}). Studio tries the graphics card again the next time voice commands start.`;
+        if (st.device === 'cpu') return `Using the processor with Whisper ${st.model || ''}.`;
+        return '';
+    }
     function renderVoice() {
         const v = S.voice;
         if (!v) return;
+        const whisper = v.engine !== 'windows';
         $('voice-unavailable').hidden = v.available;
         $('voice-enabled').checked = !!v.settings.enabled;
         $('voice-enabled').disabled = !v.available;
         let label = VOICE_LABEL[v.status.state] || 'Off';
         if (v.settings.enabled && v.status.state === 'listening' && v.settings.mode === 'ptt') label = v.held ? 'Listening (key held)' : 'Waiting for the key';
+        if (v.settings.enabled && v.status.state === 'listening' && v.settings.mode === 'wake' && whisper) label = v.status.wakeOpen ? 'Listening for a command' : 'Waiting for the wake phrase';
         $('voice-pill').textContent = label;
         $('voice-pill').className = `pill ${v.status.state === 'listening' ? 'ok' : v.status.state === 'error' || v.mic === 'error' ? 'bad' : v.status.state === 'starting' ? 'warn' : ''}`;
+        $('voice-engine-line').textContent = engineLine(v);
         $('voice-error').textContent = v.micError || (v.status.state === 'error' ? v.status.error : '') || '';
+        // Whisper stood down for Windows speech recognition this session
+        $('voice-fallback').hidden = !v.fallback;
+        $('voice-fallback-text').textContent = v.fallback ? `Whisper could not start, so Studio is using Windows speech recognition for now. It reacts to clicks and game sounds more easily. The reason: ${v.fallback.reason}` : '';
+        // the input looks like a mix or virtual bus
+        const inp = v.input || {};
+        $('voice-input-warn').hidden = !(v.settings.enabled && inp.bus);
+        $('voice-input-warn-text').textContent = inp.bus ? `"${inp.label}" looks like a mix or a virtual input, not a microphone. It can carry game sound and music, which sets commands off when nobody said them.${inp.suggestion ? '' : ' Pick your microphone below.'}` : '';
+        $('voice-input-fix').hidden = !inp.suggestion;
+        $('voice-input-fix').textContent = inp.suggestion ? `Use ${inp.suggestion.label}` : '';
         const last = v.status.lastHeard;
-        $('voice-last').textContent = last ? `Last heard: "${last.text}", ${Math.round(last.confidence * 100)}% sure${last.accepted ? '' : ' (not counted: below the setting, or said twice quickly)'}` : '';
+        $('voice-last').textContent = !last ? '' : last.outcome === 'noise' || last.outcome === 'nowake' ? 'Last heard: something that is not one of your commands.'
+            : last.outcome === 'wake' ? 'Last heard: the wake phrase. Say a command.'
+                : `Last heard: "${last.text || last.phrase}", ${Math.round((last.confidence || 0) * 100)}% sure${last.accepted ? '' : ` (not run: ${(OUTCOME_TEXT[last.outcome] || 'not counted').toLowerCase()})`}`;
         if (document.activeElement !== $('voice-mode')) $('voice-mode').value = v.settings.mode;
+        if (document.activeElement !== $('voice-engine')) $('voice-engine').value = v.settings.engine || 'auto';
         $('voice-ptt-wrap').hidden = v.settings.mode !== 'ptt';
+        $('voice-wake-wrap').hidden = v.settings.mode !== 'wake';
+        if (document.activeElement !== $('voice-wake')) $('voice-wake').value = v.settings.wakePhrase || 'hey studio';
+        $('voice-mode-help').textContent = v.settings.mode === 'wake' ? (whisper ? `Say "${v.settings.wakePhrase || 'hey studio'}" and then the command, in one go or within a few seconds.` : 'The wake phrase needs Whisper. Windows speech recognition listens all the time.')
+            : v.settings.mode === 'ptt' ? 'Hold the key while you speak. A quick press (for example a Stream Deck Hotkey button set to the same key) listens for the next phrase instead.' : '';
         if (document.activeElement !== $('voice-ptt')) $('voice-ptt').value = v.settings.pttKey || '';
+        $('voice-match-wrap').hidden = !whisper;
+        $('voice-match-help').hidden = !whisper;
+        $('voice-threshold-wrap').hidden = whisper;
+        $('voice-windows-note').hidden = whisper;
+        if (document.activeElement !== $('voice-match')) $('voice-match').value = Math.round((v.settings.matchThreshold || 0.8) * 100);
+        $('voice-match-out').textContent = `${$('voice-match').value}%`;
         if (document.activeElement !== $('voice-threshold')) $('voice-threshold').value = Math.round((v.settings.threshold || 0.7) * 100);
         $('voice-threshold-out').textContent = `${$('voice-threshold').value}%`;
+        if (!micsLoaded || (v.settings.inputDeviceId && ![...$('voice-device').options].some((o) => o.value === v.settings.inputDeviceId))) loadMicrophones(true);
+        else if (document.activeElement !== $('voice-device') && v.settings.inputDeviceId) $('voice-device').value = v.settings.inputDeviceId;
         $('voice-phrases').replaceChildren(...v.phrases.map((p) => el('li', { text: p })));
-        $('voice-empty').hidden = v.phrases.length > 0;
+        const cmds = v.commands || v.phrases.map((text) => ({ text }));
+        const globalSure = whisper ? (v.settings.matchThreshold || 0.8) : (v.settings.threshold || 0.7);
+        const training = v.training;
+        $('voice-commands').tBodies[0].replaceChildren(...cmds.map((c) => el('tr', null,
+            el('td', { text: c.text }), el('td', { text: c.automationName || '' }),
+            el('td', { text: c.confidence != null ? `${Math.round(c.confidence * 100)}% (its own)` : `${Math.round(globalSure * 100)}%` }),
+            el('td', { text: c.cooldownMs != null ? seconds(c.cooldownMs) : '10 s' }),
+            el('td', { text: c.aliases && c.aliases.length ? `${c.aliases.length} way${c.aliases.length === 1 ? '' : 's'}${c.trained && c.trained.takes ? ', taught' : ''}` : '', title: (c.aliases || []).join(', ') || null }),
+            el('td', { class: 'right' }, whisper && c.automationId ? el('button', { class: 'btn small', type: 'button', text: 'Teach Studio how you say it', disabled: !!(training && training.key === c.key && training.state !== 'off'),
+                onclick: () => startTraining(c) }) : null))));
+        renderTraining(training);
+        $('voice-commands').hidden = !cmds.length;
+        $('voice-empty').hidden = cmds.length > 0;
+        if (document.activeElement !== $('voice-logall')) $('voice-logall').checked = !!v.settings.logAllSpeech;
+        if (document.activeElement !== $('voice-share')) $('voice-share').checked = !!v.settings.shareSpeechText;
+        $('voice-share').disabled = !v.settings.logAllSpeech;
+        $('voice-privacy').querySelector('summary').textContent = `Log all speech (${v.settings.logAllSpeech ? 'on' : 'off'})`;
+        voiceLog = (v.log || []).slice(0, 200);
+        renderVoiceLog();
         setMeter(v.settings.enabled ? v.level : 0);
     }
+    // ── 0.2.13: Teach Studio how you say it ──
+    const pctText = (n) => (n == null ? '' : `${Math.round(n * 100)}%`);
+    async function startTraining(c) {
+        try {
+            const takes = Number($('voice-train-takes').value) || (S.voice.settings.trainTakes || 8);
+            await call('voice:train', { action: 'start', key: c.key, takes });
+            setMsg('voice-train-note', '', '');
+            $('voice-train').scrollIntoView({ block: 'nearest' });
+        } catch (err) { setMsg('voice-msg', err.message, 'bad'); }
+    }
+    function renderTraining(t) {
+        const box = $('voice-train');
+        const keep = !!(S.voice.settings.keepRecordings);
+        if (document.activeElement !== $('voice-train-keep')) $('voice-train-keep').checked = keep;
+        if (document.activeElement !== $('voice-train-takes')) $('voice-train-takes').value = S.voice.settings.trainTakes || 8;
+        box.hidden = !t;
+        if (!t) return;
+        $('voice-train-title').textContent = `Teach Studio how you say it: "${t.phrase}"`;
+        $('voice-train-pill').textContent = t.state === 'listening' ? `Listening, ${t.good} of ${t.want}` : t.state === 'saving' ? 'Saving' : `${t.good} take${t.good === 1 ? '' : 's'}`;
+        $('voice-train-pill').className = `pill ${t.state === 'listening' ? 'ok' : ''}`;
+        $('voice-train-help').textContent = t.state === 'listening'
+            ? `Say "${t.phrase}" the way you normally say it, with a short pause after each take. ${t.want - t.good} to go. Nothing runs while Studio is learning.`
+            : 'Check the takes. Delete any where you said something else or were interrupted, then save. Studio adds each take to how you say this command and sets how sure it needs to be.';
+        $('voice-train-setup').hidden = t.state === 'listening' || t.state === 'saving';
+        if (t.note) setMsg('voice-train-note', t.note, 'warn');
+        const rows = t.takes.map((k, i) => el('tr', null,
+            el('td', { class: 'num', text: String(i + 1) }),
+            el('td', { class: k.ok ? '' : 'quiet', text: k.ok ? `"${k.text}"${k.kept ? ' (recording kept)' : ''}` : (k.reason || 'No words heard') }),
+            el('td', { class: 'num', text: k.ok ? pctText(k.phraseScore) : '' }),
+            el('td', { class: 'num', text: k.ok && t.good > 1 ? pctText(k.score) : '' }),
+            el('td', { class: 'right' }, el('button', { class: 'btn small ghost', type: 'button', text: 'Delete', disabled: t.state === 'saving',
+                onclick: () => call('voice:train', { action: 'delete', id: k.id }).catch((err) => setMsg('voice-train-note', err.message, 'bad')) }))));
+        $('voice-train-takes-list').tBodies[0].replaceChildren(...rows);
+        $('voice-train-takes-list').hidden = !rows.length;
+        const cal = t.calibration;
+        $('voice-train-result').textContent = !cal || !cal.enough ? (t.good ? 'Record at least two good takes.' : '')
+            : `Lowest take: ${pctText(cal.lowest)}. Studio will run this command at ${pctText(cal.threshold)} and above${cal.raised ? ', a little higher than the takes alone need, so that things you said that were not this command stay below it' : ''}.`;
+        const ov = cal && cal.enough ? cal.overlaps || [] : [];
+        $('voice-train-overlap').hidden = !ov.length;
+        $('voice-train-overlap-text').textContent = ov.length ? `Some things you said that were not this command score ${pctText(ov[0].score)} or more against it, as high as your takes: ${ov.slice(0, 3).map((o) => `"${o.text}" (${pctText(o.score)})`).join(', ')}. Saving now could make it run when you say them. Delete the takes that sound like them, or record more, or mark those lines in the log below if they really were this command.` : '';
+        $('voice-train-stop').hidden = t.state !== 'listening';
+        $('voice-train-more').hidden = t.state !== 'review';
+        $('voice-train-save').hidden = t.state === 'listening';
+        $('voice-train-save').disabled = t.state === 'saving' || !(cal && cal.enough);
+        $('voice-train-cancel').disabled = t.state === 'saving';
+    }
+    $('voice-train-stop').addEventListener('click', () => call('voice:train', { action: 'stop' }).catch((err) => setMsg('voice-train-note', err.message, 'bad')));
+    $('voice-train-more').addEventListener('click', () => call('voice:train', { action: 'resume' }).catch((err) => setMsg('voice-train-note', err.message, 'bad')));
+    $('voice-train-cancel').addEventListener('click', () => call('voice:train', { action: 'cancel' }).then(() => setMsg('voice-msg', 'Nothing was saved.', '')).catch((err) => setMsg('voice-train-note', err.message, 'bad')));
+    $('voice-train-save').addEventListener('click', async () => {
+        try {
+            const r = await call('voice:train', { action: 'save' });
+            const s = r.saved || {};
+            setMsg('voice-msg', `Saved ${s.aliases} way${s.aliases === 1 ? '' : 's'} you say it${s.threshold != null ? `, and it now runs at ${pctText(s.threshold)} and above` : ''}. The dashboard shows them under Heard as.`, 'ok');
+        } catch (err) { setMsg('voice-train-note', err.message, 'bad'); }
+    });
+    $('voice-train-keep').addEventListener('change', (e) => call('voice:settings', { keepRecordings: e.target.checked }).catch((err) => setMsg('voice-train-note', err.message, 'bad')));
+    $('voice-train-takes').addEventListener('change', (e) => call('voice:settings', { trainTakes: Number(e.target.value) }).catch(() => {}));
+
+    // ── 0.2.13: teaching from the voice log ──
+    const NEAR_MISS = 0.4;
+    async function learn(e, action, automationId) {
+        try {
+            const r = await call('voice:learn', { id: e.id, action, automationId });
+            const l = r.learned;
+            setMsg('voice-msg', !l ? 'Undone.' : l.kind === 'alias' ? `Learned: "${l.text}" is how you say "${l.phrase}".` : l.kind === 'negative' ? `Learned: "${l.text}" is not "${l.phrase}".` : `Undone: "${l.phrase}" will not run for these words again.`, 'ok');
+        } catch (err) { setMsg('voice-msg', err.message, 'bad'); }
+    }
+    function teachCell(e) {
+        const td = el('td', { class: 'teach' });
+        if (!S || !S.voice.canLearn || !['fired', 'cooldown', 'below', 'noise', 'nowake'].includes(e.outcome)) return td;
+        if (e.learned) {
+            const l = e.learned;
+            td.append(el('span', { class: 'quiet', text: l.kind === 'alias' ? `Learned as "${l.phrase}". ` : l.kind === 'negative' ? `Marked not "${l.phrase}". ` : 'Undone. ' }),
+                el('button', { class: 'btn small ghost', type: 'button', text: 'Undo', onclick: () => learn(e, 'undo') }));
+            return td;
+        }
+        if (!e.heard) return td;
+        const ran = e.outcome === 'fired' || e.outcome === 'cooldown';
+        if (ran) { td.append(el('button', { class: 'btn small', type: 'button', text: 'Wrong, undo learning', onclick: () => learn(e, 'wrong') })); return td; }
+        const closestId = e.closestAutomationId || e.automationId;
+        const closest = e.closest || e.phrase;
+        if (closest && closestId && (e.confidence || 0) >= NEAR_MISS) td.append(el('button', { class: 'btn small', type: 'button', text: `This was "${closest}"`, onclick: () => learn(e, 'alias', closestId) }), ' ');
+        const cmds = (S.voice.commands || []).filter((c) => c.automationId);
+        if (cmds.length) {
+            const pick = el('select', { class: 'small', 'aria-label': 'This was a command' }, el('option', { value: '', text: 'This was...' }),
+                ...cmds.filter((c, i) => cmds.findIndex((x) => x.automationId === c.automationId) === i).map((c) => el('option', { value: String(c.automationId), text: c.automationName && c.automationName !== c.text ? `${c.text} (${c.automationName})` : c.text })));
+            pick.addEventListener('change', () => { if (pick.value) learn(e, 'alias', Number(pick.value)); });
+            td.append(pick, ' ');
+        }
+        if (closestId) td.append(el('button', { class: 'btn small ghost', type: 'button', text: 'Not a command', onclick: () => learn(e, 'negative') }));
+        return td;
+    }
+
+    function seconds(ms) { const n = Math.round(ms / 1000); return n === 0 ? 'none' : n < 120 ? `${n} s` : `${Math.round(n / 60)} min`; }
+    let voiceLog = [];
+    const OUTCOME_TEXT = { fired: 'Ran', below: 'Not sure enough', cooldown: 'Waiting (ran recently)', noise: 'Not a command', disabled: 'Automation is off',
+        short: 'Ignored: not speech', nowake: 'No wake phrase', wake: 'Wake phrase heard' };
+    const secs = (ms) => `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
+    function vadText(e) {
+        if (!e.vad) return '';
+        if (e.outcome === 'short') return `${e.vad.reason === 'unclear' ? 'Not clearly a voice' : `Too short for speech (${secs(e.vad.speechMs || 0)})`}${e.count > 1 ? `, ${e.count} times` : ''}`;
+        return `Speech, ${secs(e.vad.speechMs || 0)}`;
+    }
+    function outcomeText(e) {
+        const base = OUTCOME_TEXT[e.outcome] || e.outcome;
+        return e.outcome === 'fired' && Number.isFinite(e.latencyMs) ? `${base}, ${secs(e.latencyMs)} after you stopped` : base;
+    }
+    function renderVoiceLog() {
+        $('voice-log').tBodies[0].replaceChildren(...voiceLog.map((e) => el('tr', null,
+            el('td', { class: 'num', text: time(e.lastT || e.t) }),
+            el('td', { class: e.outcome === 'short' ? 'quiet' : '', text: vadText(e) }),
+            el('td', { class: e.heard ? '' : 'quiet', text: e.heard ? `"${e.heard}"` : (e.outcome === 'noise' || e.outcome === 'nowake' || e.outcome === 'below' ? 'Words not kept' : '') }),
+            el('td', { class: e.phrase ? '' : 'quiet', text: (e.phrase || e.closest || '') + (e.via === 'alias' && e.phrase ? ' (how you say it)' : '') }),
+            el('td', { class: 'num', text: e.confidence == null ? '' : `${Math.round((e.confidence || 0) * 100)}%${e.threshold != null ? ` of ${Math.round(e.threshold * 100)}%` : ''}` }),
+            el('td', { class: `out-${e.outcome}`, text: outcomeText(e) }),
+            teachCell(e))));
+        $('voice-log').hidden = !voiceLog.length;
+        $('voice-log-empty').hidden = voiceLog.length > 0;
+    }
+    // a repeated line (clicks counted on one line) comes again with the same id: replace it
+    api.on('voice-log', (e) => { const i = voiceLog.findIndex((x) => x.id === e.id); if (i >= 0) voiceLog[i] = e; else { voiceLog.unshift(e); if (voiceLog.length > 200) voiceLog.length = 200; } renderVoiceLog(); });
+    $('voice-log-clear').addEventListener('click', async () => { try { await call('voice:clearLog'); voiceLog = []; renderVoiceLog(); } catch (err) { setMsg('voice-msg', err.message, 'bad'); } });
+    $('voice-logall').addEventListener('change', (e) => call('voice:settings', { logAllSpeech: e.target.checked }).catch((err) => setMsg('voice-msg', err.message, 'bad')));
+    $('voice-share').addEventListener('change', (e) => call('voice:settings', { shareSpeechText: e.target.checked }).catch((err) => setMsg('voice-msg', err.message, 'bad')));
     function setMeter(level) { $('voice-meter').style.width = `${Math.min(100, Math.round(Math.sqrt(level) * 140))}%`; }
     api.on('voice-level', (x) => { if (S && S.voice.settings.enabled) setMeter(x.level); });
     $('voice-enabled').addEventListener('change', (e) => call('voice:settings', { enabled: e.target.checked }).catch((err) => setMsg('voice-msg', err.message, 'bad')));
     $('voice-device').addEventListener('change', (e) => call('voice:settings', { inputDeviceId: e.target.value }).catch(() => {}));
     $('voice-mode').addEventListener('change', (e) => call('voice:settings', { mode: e.target.value }).catch(() => {}));
+    $('voice-engine').addEventListener('change', (e) => call('voice:settings', { engine: e.target.value }).then(() => setMsg('voice-msg', e.target.value === 'windows' ? 'Using Windows speech recognition.' : 'Starting Whisper.', 'ok')).catch((err) => setMsg('voice-msg', err.message, 'bad')));
+    $('voice-wake').addEventListener('change', (e) => call('voice:settings', { wakePhrase: e.target.value }).then(() => setMsg('voice-msg', `Say "${e.target.value.trim()}", then the command.`, 'ok')).catch((err) => setMsg('voice-msg', err.message, 'bad')));
+    $('voice-match').addEventListener('input', (e) => { $('voice-match-out').textContent = `${e.target.value}%`; });
+    $('voice-match').addEventListener('change', (e) => call('voice:settings', { matchThreshold: Number(e.target.value) / 100 }).catch(() => {}));
     $('voice-threshold').addEventListener('input', (e) => { $('voice-threshold-out').textContent = `${e.target.value}%`; });
     $('voice-threshold').addEventListener('change', (e) => call('voice:settings', { threshold: Number(e.target.value) / 100 }).catch(() => {}));
+    $('voice-input-fix').addEventListener('click', async () => { try { const r = await call('voice:useMic'); micsLoaded = false; setMsg('voice-msg', `Voice commands now use ${r.label}.`, 'ok'); } catch (err) { setMsg('voice-msg', err.message, 'bad'); } });
+    $('voice-retry').addEventListener('click', async () => { try { await call('voice:retryWhisper'); setMsg('voice-msg', 'Starting Whisper.', 'ok'); } catch (err) { setMsg('voice-msg', err.message, 'bad'); } });
     $('voice-ptt').addEventListener('keydown', (e) => {
         if (e.key === 'Tab') return;
         e.preventDefault();
@@ -631,6 +936,49 @@
         const name = /^num\d$/.test(key) ? `Num${key.slice(3)}` : key;
         $('voice-ptt').value = name;
         call('voice:settings', { pttKey: name }).then(() => setMsg('voice-msg', `Hold ${name} to talk.`, 'ok')).catch((err) => setMsg('voice-msg', err.message, 'bad'));
+    });
+    function renderPrograms() {
+        const list = S.programs || [];
+        $('programs-table').tBodies[0].replaceChildren(...list.map((p) => el('tr', null,
+            el('td', { text: p.name }), el('td', { text: p.path }), el('td', { text: (p.args || []).join(' ') }),
+            el('td', null, el('button', { class: 'btn small ghost', type: 'button', text: 'Remove', 'aria-label': `Remove ${p.name}`, onclick: async () => {
+                try { await call('programs:remove', { id: p.id }); setMsg('programs-msg', `${p.name} removed.`, 'ok'); } catch (err) { setMsg('programs-msg', err.message, 'bad'); }
+            } })))));
+        $('programs-table').hidden = !list.length;
+        $('programs-empty').hidden = !!list.length;
+    }
+    $('programs-pick').addEventListener('click', async () => {
+        try { const r = await call('programs:pick'); if (r.path) $('programs-path').value = r.path; } catch (err) { setMsg('programs-msg', err.message, 'bad'); }
+    });
+    $('programs-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const r = await call('programs:save', { program: { name: $('programs-name').value, path: $('programs-path').value, args: $('programs-args').value } });
+            setMsg('programs-msg', `${r.program.name} added. Automations can now start it by that name.`, 'ok');
+            $('programs-name').value = ''; $('programs-path').value = ''; $('programs-args').value = '';
+        } catch (err) { setMsg('programs-msg', err.message, 'bad'); }
+    });
+    function renderAlertAudio() {
+        const A = S.alertAudio;
+        if (!A) return;
+        $('alert-audio-pill').textContent = A.managed ? 'Managed' : 'Not managed';
+        $('alert-audio-pill').className = `pill ${A.managed ? 'ok' : ''}`;
+        $('alert-audio-undo').hidden = !A.managed;
+        $('alert-audio-apply').textContent = A.managed ? 'Check them again' : 'Let CertiFried manage Sound Alerts and Blerp audio';
+        if (A.managed && !$('alert-audio-msg').textContent) setMsg('alert-audio-msg', `Managed: ${A.sources.join(', ')}.`);
+    }
+    $('alert-audio-apply').addEventListener('click', async () => {
+        setMsg('alert-audio-msg', 'Looking for Sound Alerts and Blerp sources in OBS...');
+        try {
+            const r = await call('alertAudio:apply');
+            setMsg('alert-audio-msg', `Done: ${r.applied.join(', ') || 'none'} now play through OBS, off the VOD track (track ${r.vodTrack}).${r.skipped.length ? ` Not changed: ${r.skipped.map((x) => `${x.name} (${x.reason})`).join(', ')}.` : ''}`, r.skipped.length ? 'bad' : 'ok');
+        } catch (err) { setMsg('alert-audio-msg', err.message, 'bad'); }
+    });
+    $('alert-audio-undo').addEventListener('click', async () => {
+        try {
+            const r = await call('alertAudio:undo');
+            setMsg('alert-audio-msg', `Put back: ${r.restored.join(', ') || 'none'}.${r.missing.length ? ` No longer in OBS: ${r.missing.join(', ')}.` : ''}`, 'ok');
+        } catch (err) { setMsg('alert-audio-msg', err.message, 'bad'); }
     });
     $('voice-refresh').addEventListener('click', async () => {
         try { const r = await call('voice:refresh'); setMsg('voice-msg', `${r.phrases.length} voice commands.`, 'ok'); } catch (err) { setMsg('voice-msg', err.message, 'bad'); }
@@ -772,5 +1120,6 @@
         renderActivity();
     });
     api.on('pair-code', fillCode);
+    api.on('heart', (h) => { if (!S) return; S.heart = h; renderHeart(h); });
     call('state:get').then((r) => { S = r.state; render(); fillCode(r.pendingCode); }).catch(() => {});
 })();

@@ -15,7 +15,8 @@
  *   quotes, moderation word lists, hotkeys       reported (no home that would not change behaviour at once).
  *   viewer stats    only when asked: viewer records on Viewers (core/stream-bot/viewers, H-747): Firebot watch time, messages,
  *                   points, first and last seen, and its currency and rank settings; Streamer.bot names and last seen.
- * Everything is created switched off.
+ * Everything is created switched off. Each item also carries `sourceOn`: whether it was switched on in Firebot / Streamer.bot,
+ * so the one-click switchover (switchover.js) turns on only what was on there (2026-11-20).
  *
  * Bundle (both parsers): { source, format, version, commands[], automations[], timers[], counters[], quotes[],
  *   rewards[], moderation, hotkeys[], integrations[], obs, viewers, media[], dropped[], stripped }
@@ -37,6 +38,7 @@ import { toChannelCommand } from './variables.js';
 import { gapInfo, INTEGRATIONS } from './catalog.js';
 import { COMMANDS as MUSIC_COMMANDS } from '../music/text.js';
 import { NAME_PREFIX as MUSIC_PREFIX } from '../music/seed.js';
+import { youtubeOnlyTrigger, dropRewardSteps } from '../youtube/policy.js';
 
 export const SOURCE_LABEL = Object.freeze({ firebot: 'Firebot', streamerbot: 'Streamer.bot' });
 
@@ -179,6 +181,7 @@ export function buildPlan(bundles, ctx = {}) {
     const media = [];
     const checklist = [];
     const obs = [];
+    const speech = [];
     const builtins = ctx.builtins || new Set();
     const covered = new Set(); // `${source}|${sourceId}` of items covered by song requests (no gap counted)
     const platformsLinked = new Set((ctx.channels || []).map((c) => c.platform));
@@ -194,7 +197,7 @@ export function buildPlan(bundles, ctx = {}) {
     // ── commands ──
     for (const b of bundles) {
         for (const cmd of b.commands || []) {
-            const base = { category: 'commands', source: b.source, kind: 'command', sourceId: cmd.sourceId, name: cmd.name };
+            const base = { category: 'commands', source: b.source, kind: 'command', sourceId: cmd.sourceId, name: cmd.name, sourceOn: cmd.enabled !== false };
             const gaps = gapKeys(cmd.gaps);
             const why = [...uniq(cmd.notes || [])];
             if (cmd.vars?.length) why.push(`These variables have no CertiFried equivalent and were kept as written: ${cmd.vars.join(', ')}`);
@@ -257,7 +260,7 @@ export function buildPlan(bundles, ctx = {}) {
     // ── automations (events, rewards, voice commands, power-ups, OBS) ──
     for (const b of bundles) {
         for (const a of b.automations || []) {
-            const base = { category: 'automations', source: b.source, kind: a.kind === 'reward' ? 'reward_action' : (a.kind || 'event'), sourceId: a.sourceId, name: a.name };
+            const base = { category: 'automations', source: b.source, kind: a.kind === 'reward' ? 'reward_action' : (a.kind || 'event'), sourceId: a.sourceId, name: a.name, sourceOn: a.enabled !== false };
             const gaps = gapKeys(a.gaps);
             const why = [...uniq(a.notes || [])];
             if (a.vars?.length) why.push(`These variables have no CertiFried equivalent and were kept as written: ${a.vars.join(', ')}`);
@@ -298,7 +301,7 @@ export function buildPlan(bundles, ctx = {}) {
     const linked = [...platformsLinked];
     for (const b of bundles) {
         for (const t of b.timers || []) {
-            const base = { category: 'timers', source: b.source, kind: 'timer', sourceId: t.sourceId, name: t.name };
+            const base = { category: 'timers', source: b.source, kind: 'timer', sourceId: t.sourceId, name: t.name, sourceOn: t.enabled !== false };
             const gaps = gapKeys(t.gaps);
             const why = [...uniq(t.notes || [])];
             const acts = t.actions || [];
@@ -328,12 +331,13 @@ export function buildPlan(bundles, ctx = {}) {
                 const draft = { name: automationName(b.source, `Timer: ${t.name}`), enabled: false, trigger_type: 'chat',
                     trigger_config: { match: { mode: 'command', text: `!timer-${slug}`, caseSensitive: false } },
                     conditions: [{ type: 'role', roles: ['broadcaster'], mode: 'any' }], actions: acts };
-                items.push({ category: 'timers', source: b.source, kind: 'timer_action', sourceId: t.sourceId, name: `Timer: ${t.name}`, status: 'changed',
+                items.push({ category: 'timers', source: b.source, kind: 'timer_action', sourceId: t.sourceId, name: `Timer: ${t.name}`, status: 'changed', sourceOn: t.enabled !== false,
                     why: [`Runs from the "${t.name}" timer; you can also run it with !timer-${slug} (broadcaster only)`], gaps: [], target: { system: 'automation', draft } });
                 timer.automationRef = { source: b.source, kind: 'timer_action', sourceId: t.sourceId };
-                why.push('It does more than send one line, so the timer runs an automation');
+                why.push(acts.length === 1 && acts[0].type === 'stream.say' ? 'It is sent from your own account, so the timer runs an automation with "Send a chat message as you"' : 'It does more than send one line, so the timer runs an automation');
             }
             if (t.chatLines > 0) why.push(`Only after ${t.chatLines} chat lines (counted from the restart onwards)`);
+            if (t.enabled === false) why.push(`It was switched off in ${SOURCE_LABEL[b.source] || b.source}, so the switchover leaves it off`);
             items.push({ ...base, status: why.length ? 'changed' : 'as_is', why: uniq(why), gaps, target: { system: 'bot_timer', timer } });
         }
     }
@@ -346,7 +350,10 @@ export function buildPlan(bundles, ctx = {}) {
         if (it.kind !== 'power_up' || it.target?.system !== 'automation') continue;
         const src = bundles.find((b) => b.source === it.source)?.automations.find((a) => a.sourceId === it.sourceId);
         const def = src?.rewardId ? powerUps.get(String(src.rewardId)) : null;
-        if (def && def.cost > 0) {
+        if (it.target.draft.trigger_config?.bitsKind === 'custom_power_up') {
+            // Keyed by the custom power-up's id (EventSub custom_power_up.reward_id), the same id Firebot and Streamer.bot keep.
+            it.why = uniq([...it.why, `Runs when the custom power-up ${def ? `"${def.title}" (${def.cost} Bits)` : 'with this id'} is used: matched by its id${def ? '' : ' (its definition is not in the import)'}`]);
+        } else if (def && def.cost > 0) {
             it.target.draft.conditions = [...(it.target.draft.conditions || []), { type: 'amount', min: def.cost, max: def.cost, currency: 'bits' }];
             it.why = uniq([...it.why, `Matched by its Bits cost (${def.cost}): Twitch reports power-ups by kind, not by the "${def.title}" power-up's id`]);
         } else {
@@ -364,7 +371,7 @@ export function buildPlan(bundles, ctx = {}) {
             notes.push('A "run command" step pointed at a command that is not an automation here, so it was left out');
             return null;
         }
-        if (s.type !== 'chat.send' || !s._commandText) return s;
+        if ((s.type !== 'chat.send' && s.type !== 'stream.say') || !s._commandText) return s;
         const hit = commandByTrigger.get(s._commandText.toLowerCase());
         if (!hit) return s;
         const ci = commandItems.find((x) => x.cmd === hit.cmd);
@@ -375,7 +382,7 @@ export function buildPlan(bundles, ctx = {}) {
         }
         if (ci.item.target?.system === 'channel_command') {
             notes.push(`Sending ${s._commandText} to chat became that command's reply, because CertiFried does not answer its own messages`);
-            return { type: 'chat.send', platform: s.platform, text: hit.cmd.actions[0].text };
+            return { type: 'chat.send', platform: s.platform || 'twitch', text: hit.cmd.actions[0].text };
         }
         return s;
     }).filter(Boolean);
@@ -384,6 +391,14 @@ export function buildPlan(bundles, ctx = {}) {
         if (it.target.trusted) continue; // built here like the Music page builds it (musicCommandDraft)
         const notes = [];
         it.target.draft.actions = linkSteps(it.target.draft.actions, notes);
+        // YouTube API policy III.F.3.c: nothing imported gives points for a YouTube event (youtube/policy.js).
+        if (youtubeOnlyTrigger(it.target.draft.trigger_type, it.target.draft.trigger_config)) {
+            const d = dropRewardSteps(it.target.draft.actions);
+            if (d.removed) {
+                it.target.draft.actions = d.actions;
+                notes.push('Its Give points or Set points steps were left out: YouTube viewers cannot be given points (YouTube API policy)');
+            }
+        }
         if (notes.length) { it.why = uniq([...it.why, ...notes]); if (it.status === 'as_is') it.status = 'changed'; }
         const refs = [];
         const collect = (acts) => acts.forEach((s) => { if (s._ref) refs.push(s._ref); if (s.type === 'random') s.branches.forEach((br) => collect(br.actions)); });
@@ -431,7 +446,8 @@ export function buildPlan(bundles, ctx = {}) {
 
     // ── quotes, moderation, hotkeys, viewers ──
     for (const b of bundles) {
-        if (b.quotes?.length) items.push({ category: 'quotes', source: b.source, kind: 'quotes', sourceId: 'quotes', name: `${b.quotes.length} quotes`, status: 'skipped', why: [gapInfo('quotes').why], gaps: ['quotes'], target: null, data: { quotes: b.quotes } });
+        // Quotes (W2.8, migration 475): into Community, Quotes, switched off until the streamer turns them on there.
+        if (b.quotes?.length) items.push({ category: 'quotes', source: b.source, kind: 'quotes', sourceId: 'quotes', name: `${b.quotes.length} quotes`, status: 'changed', why: ['Imported switched off: chat sees them once you turn them on under Community, Quotes'], gaps: [], target: { system: 'quotes', quotes: b.quotes }, data: { quotes: b.quotes } });
         const m = b.moderation;
         if (m && (m.bannedWords.length || m.bannedRegex || m.urlModeration || m.emoteLimit != null)) {
             const why = [];
@@ -474,6 +490,7 @@ export function buildPlan(bundles, ctx = {}) {
         }
         for (const m2 of b.media || []) media.push({ ...m2, source: b.source });
         if (b.obs) obs.push({ source: b.source, host: b.obs.host, port: b.obs.port });
+        if (b.speech && Number.isFinite(b.speech.confidenceThreshold)) speech.push({ source: b.source, confidenceThreshold: b.speech.confidenceThreshold });
         for (const i of b.integrations || []) {
             const def = INTEGRATIONS[i.service] || { label: i.service, todo: 'Not available in CertiFried.', have: false };
             if (!checklist.some((c) => c.service === i.service)) checklist.push({ service: i.service, label: def.label, todo: def.todo, have: def.have, from: [SOURCE_LABEL[b.source]] });
@@ -509,7 +526,7 @@ export function buildPlan(bundles, ctx = {}) {
         const c = (counts[it.category] ||= { as_is: 0, changed: 0, skipped: 0 });
         c[it.status]++;
     }
-    return { items, checklist, obs, media, gaps: Object.values(gaps).sort((a, b) => b.count - a.count), counts };
+    return { items, checklist, obs, speech, media, gaps: Object.values(gaps).sort((a, b) => b.count - a.count), counts };
 }
 
 function automationReason(reason) {

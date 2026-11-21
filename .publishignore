@@ -76,3 +76,7 @@ __pycache__/
 
 # Service-key .env backups hold live secrets (utils/env-file.js) — never publish
 /backups/env/
+
+# Internal ops notes with the origin IP (kept off the public repo, 2026-11-21)
+docs/backups.md
+scripts/setup-ipv6-rotation.sh

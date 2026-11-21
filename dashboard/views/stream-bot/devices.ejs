@@ -45,7 +45,14 @@
                         <% } else { %><span>OBS not connected</span><% } %>
                     </p>
                     <% } %>
-                    <% if (d.kind === 'dock') { %><p class="cf-list-meta"><span>Shows your live feed, chat and counters in OBS and can run your automations. Replace it from CertiFried Studio, or revoke it here.</span></p><% } %>
+                    <% if (d.kind === 'dock') { %><p class="cf-list-meta"><span>Shows your live feed, chat and counters in OBS and can run your automations. Replace it from CertiFried Studio, or revoke it here.</span></p>
+                    <% if (!d.revoked) { %>
+                    <div class="sb-dock-access" data-dock-access="<%= d.id %>">
+                        <p class="cf-list-meta"><span>Off unless you switch it on for this key. A key replaced from Studio starts with both off.</span></p>
+                        <label class="cf-list-meta"><input type="checkbox" class="cf-switch" role="switch" data-access="chat"<% if (d.capabilities.includes('chat')) { %> checked<% } %>> <span>Allow sending chat as you, and deleting, timing out and banning from the chat dock</span></label>
+                        <label class="cf-list-meta"><input type="checkbox" class="cf-switch" role="switch" data-access="channel"<% if (d.capabilities.includes('channel')) { %> checked<% } %>> <span>Allow changing the title and category from the controls dock</span></label>
+                    </div>
+                    <% } %><% } %>
                     <% if (d.capabilities.length && d.kind !== 'dock') { %><ul class="cf-chips" aria-label="Can do"><% d.capabilities.forEach((c) => { %><li class="cf-chip"><span><%= c %></span></li><% }) %></ul><% } %>
                 </div>
                 <div class="cf-list-actions">
@@ -107,4 +114,5 @@
 <% if (typeof hardware !== 'undefined' && hardware) { %><%- include('_hardware', { hardware }) %><% } %>
 
 <script src="/js/stream-bot-devices.js" defer></script>
+<script src="/js/stream-bot-live.js" defer></script>
 <%- include('_foot') %>

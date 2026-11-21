@@ -33,9 +33,11 @@ import { createViewEngine } from '../dashboard/services/view-engine.js';
  *               runs only this profile's automations; the SSE feed is scoped to the profile and the kind, and Revoke
  *               closes it; rate limits
  *   voice       normalise, trigger validation and matching, the voice.phrases request, an event that runs an automation
- *   wiring      server.js mounts and CSRF-exempts only the dock run API; automation changes notify Studio
+ *   wiring      server.js mounts and CSRF-exempts only the key-authenticated dock APIs; automation changes notify Studio
  * Throwaway tables; a real ws and http server on 127.0.0.1.
  */
+// The chat page's empty text depends on whether YouTube is set up (the server's .env has Google keys); these tests are about Twitch and Kick.
+process.env.STREAM_BOT_YOUTUBE = '0';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const views = path.join(root, 'dashboard/views');
 let T, store, profile, other, server, hub, port, engine, ingest, feed, studio, soundDir, sounds;
@@ -300,7 +302,7 @@ test('voice.phrase: event, trigger validation and matching, the phrases request,
     const c = client(d.token);
     await c.next('welcome');
     const ph = await c.request('voice.phrases');
-    assert.deepEqual(ph.result.phrases.filter((p) => p.automationId === auto), [{ text: 'start the raid', automationId: auto, automationName: 'Raid time' }, { text: 'raid now', automationId: auto, automationName: 'Raid time' }]);
+    assert.deepEqual(ph.result.phrases.filter((p) => p.automationId === auto), [{ text: 'start the raid', automationId: auto, automationName: 'Raid time', confidence: null, cooldownSec: 10 }, { text: 'raid now', automationId: auto, automationName: 'Raid time', confidence: null, cooldownSec: 10 }]);
     assert.ok(!ph.result.phrases.some((p) => p.text === 'never listed'), 'automations that are off are left out');
     c.send({ type: 'event', event: { type: 'voice.phrase', metadata: { phrase: 'Raid Now', confidence: 0.9 } } });
     await until(async () => (await store.variableStore.get(profile.id, 'server', 'raids')) === '1');
@@ -314,12 +316,12 @@ test('voice.phrase: event, trigger validation and matching, the phrases request,
     await c.closed;
 });
 
-test('wiring: server.js mounts the dock routes and exempts only the dock run API; automation changes notify Studio; Revoke closes dock feeds', () => {
+test('wiring: server.js mounts the dock routes and exempts only the key-authenticated dock APIs; automation changes notify Studio; Revoke closes dock feeds', () => {
     const srv = fs.readFileSync(path.join(root, 'dashboard/server.js'), 'utf8');
     assert.match(srv, /import\('\.\/routes\/stream-bot-dock\.js'\)/);
-    assert.equal((srv.match(/'\/stream\/bot\/dock\/[^']*',/g) || []).join(','), "'/stream/bot/dock/api/run',", 'only the run API is CSRF-exempt');
+    assert.equal((srv.match(/'\/stream\/bot\/dock\/[^']*',/g) || []).join(''), "'/stream/bot/dock/api/run','/stream/bot/dock/api/chat','/stream/bot/dock/api/moderate','/stream/bot/dock/api/channel',", 'only the key-authenticated dock APIs are CSRF-exempt');
     const r = fs.readFileSync(path.join(root, 'dashboard/routes/stream-bot.js'), 'utf8');
-    assert.equal((r.match(/automationsChanged\(sb, profile\.id\);/g) || []).length, 4, 'create, update, delete, toggle');
+    assert.equal((r.match(/automationsChanged\(sb, profile\.id\);/g) || []).length, 5, 'create, update, delete, toggle, and (Studio 0.2.13) voice learn / unlearn');
     assert.match(r, /type: 'automations_changed'/);
     assert.equal((r.match(/closeDockStreams\(id\);/g) || []).length, 2, 'revoke and delete');
     const dockRoutes = fs.readFileSync(path.join(root, 'dashboard/routes/stream-bot-dock.js'), 'utf8');

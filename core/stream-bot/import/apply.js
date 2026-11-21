@@ -14,6 +14,9 @@
  * keep what an import added apart (core/stream-bot/viewers/store.js importRows), so importing again replaces it instead of adding it twice. Channel commands that already exist under the
  * same name (made by hand) are not touched.
  *
+ * Removed by the owner (2026-11-20): an item recorded with target_kind 'dismissed' (dismissItem()) is never imported again, and
+ * each item keeps `sourceOn` in its data (whether it was on in Firebot / Streamer.bot) for the switchover.
+ *
  * Nothing here sends chat, calls OBS or writes to Twitch, except recreateReward(), which only runs when the owner
  * presses its button. Banned words are only saved (a pending list in import_items): Kick automod turns its word rule on
  * as soon as it has words, so they reach a channel's automod only through applyPendingWords(), the owner's button.
@@ -25,6 +28,7 @@ import { reportOf } from './report.js';
 import crypto from 'node:crypto';
 import { createViewerStore } from '../viewers/store.js';
 import { withDefaults as viewerSettings } from '../viewers/settings.js';
+import { createCommunityStore } from '../community/store.js';
 
 /** What an automation does (name, trigger, conditions, steps): compared to tell an untouched import from an edited one. */
 export function automationHash(a) {
@@ -78,6 +82,13 @@ export function createImportStore({ db, prefix = 'stream_bot_', channelTables = 
                        target_ref = VALUES(target_ref), data = VALUES(data)`,
                 [profileId, importId, source, kind, String(sourceId).slice(0, 191), String(name || '').slice(0, 150), status, targetKind, targetRef ? String(targetRef).slice(0, 255) : null, json(data)]);
         },
+        /** The owner removed what this item became: record it so a re-import never brings it back. */
+        async dismissItem(profileId, { source, kind, sourceId, name, reason = '' }) {
+            await q(`INSERT INTO ${T('import_items')} (profile_id, import_id, source, kind, source_id, name, status, target_kind, target_ref, data)
+                     VALUES (?, NULL, ?, ?, ?, ?, 'skipped', 'dismissed', NULL, ?)
+                     ON DUPLICATE KEY UPDATE status = 'skipped', target_kind = 'dismissed', target_ref = NULL, data = VALUES(data)`,
+                [profileId, source, kind, String(sourceId).slice(0, 191), String(name || '').slice(0, 150), json({ dismissedAt: new Date().toISOString(), reason: String(reason).slice(0, 300) })]);
+        },
         async setItemData(profileId, id, data) {
             await q(`UPDATE ${T('import_items')} SET data = ? WHERE profile_id = ? AND id = ?`, [json(data), profileId, id]);
         },
@@ -128,7 +139,8 @@ export function createImportStore({ db, prefix = 'stream_bot_', channelTables = 
                 [profileId, v.name, v.message, JSON.stringify(v.extraMessages), v.rotation, v.intervalMin, v.onlyLive ? 1 : 0, v.minChatLines, v.automationId, v.platforms, createdBy]);
             return Number(r.insertId);
         },
-        /** Turn an imported Kick channel timer into a stream bot timer, in place (still off). */
+        async getBotTimerFull(id) { return (await q(`SELECT id, profile_id, name, message, extra_messages, rotation, interval_min, is_enabled, only_live, min_chat_lines, automation_id, platforms, send_count, created_by FROM ${TM} WHERE id = ?`, [id]))[0] || null; },
+        /** Turn an imported Kick channel timer into a stream bot timer, in place (still off). Also refreshes an untouched bot timer. */
         async convertToBotTimer(id, profileId, v) {
             await q(`UPDATE ${TM} SET channel_id = NULL, profile_id = ?, name = ?, message = ?, extra_messages = ?, rotation = ?, next_index = 0, interval_min = ?, is_enabled = 0,
                      only_live = ?, min_chat_lines = ?, automation_id = ?, platforms = ? WHERE id = ?`,
@@ -170,6 +182,12 @@ export function createImportStore({ db, prefix = 'stream_bot_', channelTables = 
                 out.created += r.created; out.updated += r.updated; out.unchanged += r.unchanged;
             }
             return out;
+        },
+        /** Quotes (W2.8, migration 475): switched off, numbered after the ones there, never twice. → { created, existing, skipped } */
+        async importQuotes(profileId, rows, source) {
+            const cs = createCommunityStore({ db, prefix });
+            if (!(await cs.available())) return { unavailable: true, created: 0, existing: 0, skipped: 0 };
+            return cs.importQuotes(profileId, source, rows);
         },
         /** Older imports (before H-747) stored {db:} values; kept for scripts that still call it. Returns rows written. */
         async insertViewerValues(profileId, rows) {
@@ -224,6 +242,7 @@ export async function applyPlan({ store, importStore, profileId, plan, categorie
         if (!want(it) || !it.target) continue;
         const t = it.target;
         const prev = await importStore.getItem(profileId, it.source, it.kind, it.sourceId);
+        if (prev?.target_kind === 'dismissed') { record(it, 'skipped', 'You removed it, so it is not imported again'); continue; }
         try {
             switch (t.system) {
                 case 'automation': {
@@ -346,7 +365,20 @@ export async function applyPlan({ store, importStore, profileId, plan, categorie
                     const prevTimer = String(prev?.target_ref || '').startsWith('timer:') ? Number(String(prev.target_ref).split(',')[0].slice(6)) : null;
                     const row = prevTimer ? await importStore.getTimer(prevTimer) : null;
                     const ref = (id) => ({ importId, source: it.source, kind: it.kind, sourceId: it.sourceId, name: it.name, status: it.status, targetKind: 'bot_timer', targetRef: `timer:${id}` });
-                    if (row && prev.target_kind === 'bot_timer') { record(it, 'already', 'Already imported'); break; }
+                    if (row && prev.target_kind === 'bot_timer') {
+                        // Refresh it to the current mapping only while nobody touched it: off, never sent, still the importer's.
+                        const full = await importStore.getBotTimerFull(row.id);
+                        const untouched = full && !Number(full.is_enabled) && !Number(full.send_count) && Number(full.profile_id) === Number(profileId) && /^Imported from /.test(String(full.created_by || ''));
+                        const same = full && full.name === v.name && full.message === v.message && JSON.stringify(parse(full.extra_messages, [])) === JSON.stringify(v.extraMessages)
+                            && full.rotation === v.rotation && Number(full.interval_min) === v.intervalMin && !!Number(full.only_live) === v.onlyLive
+                            && Number(full.min_chat_lines) === v.minChatLines && (full.automation_id == null ? null : Number(full.automation_id)) === v.automationId && full.platforms === v.platforms;
+                        if (refresh && untouched && !same) {
+                            await importStore.convertToBotTimer(row.id, profileId, v);
+                            await importStore.upsertItem(profileId, ref(row.id));
+                            record(it, 'updated', 'Updated to the current mapping (it was not changed since the import), switched off', [{ label: 'Timers', href: '/stream/bot/timers' }]);
+                        } else record(it, 'already', untouched ? 'Already imported' : 'Already imported (you changed it, so it was left as it is)');
+                        break;
+                    }
                     if (row && prev.target_kind === 'channel_timer') {
                         // Imported earlier as a Kick timed message. Untouched (off, never sent, still the importer's): make it the stream bot timer.
                         const untouched = !row.is_enabled && !Number(row.send_count) && row.profile_id == null && /^Imported from /.test(String(row.created_by || ''));
@@ -407,7 +439,19 @@ export async function applyPlan({ store, importStore, profileId, plan, categorie
                     record(it, n ? 'created' : 'already', n ? `${n} values saved` : 'Already imported');
                     break;
                 }
+                case 'quotes': {
+                    const r = await importStore.importQuotes(profileId, t.quotes, it.source);
+                    if (r.unavailable) { record(it, 'skipped', 'Quotes start after the next CertiFried update: import again then'); break; }
+                    await importStore.upsertItem(profileId, { importId, source: it.source, kind: it.kind, sourceId: it.sourceId, name: it.name, status: it.status, targetKind: 'quotes', targetRef: `quotes:${r.created + r.existing}` });
+                    record(it, r.created ? 'created' : 'already', r.created ? `${r.created} added switched off${r.existing ? `, ${r.existing} already here` : ''}${r.skipped ? `, ${r.skipped} empty left out` : ''}` : 'Already imported', [{ label: 'Quotes', href: '/stream/bot/community/quotes' }]);
+                    break;
+                }
                 default: record(it, 'skipped', 'Nothing to write');
+            }
+            // Whether it was on in Firebot / Streamer.bot: the switchover turns on only what was on there.
+            if (typeof it.sourceOn === 'boolean' && ['automation', 'channel_command', 'bot_timer', 'channel_timer'].includes(t.system)) {
+                const row = await importStore.getItem(profileId, it.source, it.kind, it.sourceId);
+                if (row && row.target_kind !== 'dismissed' && row.data?.sourceOn !== it.sourceOn) await importStore.setItemData(profileId, row.id, { ...(row.data || {}), sourceOn: it.sourceOn });
             }
         } catch (err) {
             record(it, 'failed', String(err?.message || err).slice(0, 200));
@@ -428,7 +472,8 @@ export async function applyPlan({ store, importStore, profileId, plan, categorie
         try {
             const body = { name: draft.name, enabled: false, trigger_type: draft.trigger_type, trigger_config: draft.trigger_config, conditions: draft.conditions, actions: actions.length ? actions : [{ type: 'delay', seconds: 0.1 }] };
             await store.updateAutomation(profileId, id, body);
-            await importStore.upsertItem(profileId, { importId, source: it.source, kind: it.kind, sourceId: it.sourceId, name: it.name, status: it.status, targetKind: 'automation', targetRef: `automation:${id}`, data: { hash: automationHash(body) } });
+            await importStore.upsertItem(profileId, { importId, source: it.source, kind: it.kind, sourceId: it.sourceId, name: it.name, status: it.status, targetKind: 'automation', targetRef: `automation:${id}`,
+                data: { hash: automationHash(body), ...(typeof it.sourceOn === 'boolean' ? { sourceOn: it.sourceOn } : {}) } });
         } catch (err) {
             const r = results.find((x) => x.source === it.source && x.kind === it.kind && x.sourceId === String(it.sourceId));
             if (r) r.detail += ` (a "run another automation" step could not be linked: ${String(err.message).slice(0, 80)})`;

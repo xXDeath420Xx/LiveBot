@@ -1,0 +1,234 @@
+<%#
+  Blocked streamers: accounts this server never announces (core/streamer-blocklist.js).
+  Receives { guild }; the list loads from /api/guilds/:id/streamer-blocklist on mount and rows are
+  built with createElement. Honoured by go-live posts, auto-track, cross-server auto-subscribe, the
+  community support tracker and monthly shoutout, /alerts shoutout add and the media showcase.
+%>
+<style>
+    #sbl-status { margin-right: auto; }
+    .sbl-row .cf-list-title a { color: var(--cf-text); text-decoration: none; }
+    .sbl-row .cf-list-title a:hover { text-decoration: underline; }
+    .sbl-reason { margin-top: var(--cf-2); display: flex; gap: var(--cf-2); align-items: center; flex-wrap: wrap; }
+    .sbl-reason input { max-width: 420px; }
+</style>
+
+<div class="page-section" id="sblPage">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-ban" aria-hidden="true"></i>
+                <span>Blocked streamers</span>
+            </div>
+            <div class="page-section-subtitle">Nothing is posted about these accounts in this server.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="sbl-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sbl-add-title">Add a streamer</h2>
+                <p class="cf-section-desc">Their go-live posts stop, auto-track and the monthly shoutout skip them, the support channels don't count or name them, and showcase uploads from their Discord account are not reposted. Twitch names are checked, so a rename doesn't undo it.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <form id="sbl-form" novalidate>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sbl-platform">Platform</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="sbl-platform">
+                            <option value="twitch">Twitch</option>
+                            <option value="kick">Kick</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="rumble">Rumble</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sbl-streamer">Channel</label>
+                        <p class="cf-row-desc">A name or a link to the channel.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="form-control" id="sbl-streamer" maxlength="200" autocomplete="off" required>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sbl-reason">Note</label>
+                        <p class="cf-row-desc">Optional. Only staff see it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="form-control" id="sbl-reason" maxlength="255" autocomplete="off">
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line" id="sbl-status" role="status" aria-live="polite"></span>
+                    <button type="submit" class="btn btn-primary">Block</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sbl-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sbl-list-title">On the list <span class="cf-tab-count" id="sbl-count"></span></h2>
+                <p class="cf-section-desc">Removing someone lets their next stream be announced as usual. Posts already made are not touched.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="sbl-list">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    var api = '/api/guilds/<%= guild.id %>/streamer-blocklist';
+    var NAMES = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', tiktok: 'TikTok', rumble: 'Rumble', trovo: 'Trovo', facebook: 'Facebook' };
+    var LINKS = {
+        twitch: function (u) { return 'https://twitch.tv/' + u; },
+        kick: function (u) { return 'https://kick.com/' + u; },
+        youtube: function (u) { return 'https://youtube.com/@' + u; },
+        tiktok: function (u) { return 'https://tiktok.com/@' + u; },
+        rumble: function (u) { return 'https://rumble.com/c/' + u; }
+    };
+
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+    }
+    function say(text, cls) {
+        var s = document.getElementById('sbl-status');
+        s.textContent = text;
+        s.className = 'cf-status-line' + (cls ? ' ' + cls : '');
+    }
+    async function call(method, url, body) {
+        var res = await fetch(url, {
+            method: method, credentials: 'same-origin',
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.success) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
+
+    function row(e) {
+        var item = el('div', 'cf-list-item cf-list-item--multi sbl-row');
+        item.setAttribute('data-id', e.id);
+        var main = el('div', 'cf-list-main');
+        var title = el('div', 'cf-list-title');
+        var name = e.display_name || e.username;
+        var link = LINKS[e.platform];
+        if (link) {
+            var a = el('a', null, name);
+            a.href = link(encodeURIComponent(e.username)); a.target = '_blank'; a.rel = 'noopener';
+            title.appendChild(a);
+        } else {
+            title.appendChild(document.createTextNode(name));
+        }
+        title.appendChild(document.createTextNode(' '));
+        title.appendChild(el('span', 'cf-pill', NAMES[e.platform] || e.platform));
+        var meta = el('div', 'cf-list-meta');
+        meta.appendChild(el('span', null, 'Added ' + new Date(e.created_at).toLocaleDateString()));
+        if (e.streamer_discord_id) meta.appendChild(el('span', null, 'Discord account known'));
+
+        var reason = el('div', 'sbl-reason');
+        var input = el('input', 'form-control form-control-sm');
+        input.maxLength = 255;
+        input.value = e.reason || '';
+        input.placeholder = 'No note';
+        input.setAttribute('aria-label', 'Note for ' + name);
+        input.setAttribute('data-reason', '');
+        var save = el('button', 'btn btn-sm btn-secondary', 'Save note');
+        save.type = 'button';
+        save.setAttribute('data-act', 'note');
+        save.hidden = true;
+        input.addEventListener('input', function () { save.hidden = input.value === (e.reason || ''); });
+        reason.append(input, save);
+        main.append(title, meta, reason);
+
+        var actions = el('div', 'cf-list-actions');
+        var rm = el('button', 'btn btn-sm btn-danger', 'Remove');
+        rm.type = 'button';
+        rm.setAttribute('data-act', 'remove');
+        actions.appendChild(rm);
+        item.append(main, actions);
+        return item;
+    }
+
+    function render(entries) {
+        var list = document.getElementById('sbl-list');
+        document.getElementById('sbl-count').textContent = entries.length ? String(entries.length) : '';
+        if (!entries.length) {
+            var st = el('div', 'cf-state cf-state--empty cf-state--compact');
+            st.append(el('p', 'cf-state-title', 'Nobody is blocked'), el('p', 'cf-state-text', 'Streamers you add above show up here.'));
+            list.replaceChildren(st);
+            return;
+        }
+        var wrap = el('div', 'cf-list');
+        entries.forEach(function (e) { wrap.appendChild(row(e)); });
+        list.replaceChildren(wrap);
+    }
+
+    async function load() {
+        try {
+            render((await call('GET', api)).entries || []);
+        } catch (err) {
+            var st = el('div', 'cf-state cf-state--error cf-state--compact', 'Could not load the list: ' + err.message);
+            st.setAttribute('role', 'alert');
+            document.getElementById('sbl-list').replaceChildren(st);
+        }
+    }
+
+    document.getElementById('sbl-list').addEventListener('click', async function (ev) {
+        var btn = ev.target.closest('button[data-act]');
+        if (!btn) return;
+        var item = btn.closest('.sbl-row');
+        var id = item.getAttribute('data-id');
+        try {
+            if (btn.getAttribute('data-act') === 'remove') {
+                if (!confirm('Remove from the list? Their next stream can be announced again.')) return;
+                btn.disabled = true;
+                await call('DELETE', api + '/' + id);
+                load();
+            } else {
+                btn.disabled = true;
+                await call('PATCH', api + '/' + id, { reason: item.querySelector('[data-reason]').value });
+                btn.hidden = true;
+                btn.disabled = false;
+            }
+        } catch (err) {
+            btn.disabled = false;
+            alert(err.message);
+        }
+    });
+
+    document.getElementById('sbl-form').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var body = {
+            platform: document.getElementById('sbl-platform').value,
+            streamer: document.getElementById('sbl-streamer').value.trim(),
+            reason: document.getElementById('sbl-reason').value.trim()
+        };
+        if (!body.streamer) return say('Enter a channel name or link.', 'is-bad');
+        say('Checking', 'is-busy');
+        try {
+            var d = await call('POST', api, body);
+            say(d.message, 'is-ok');
+            this.reset();
+            load();
+        } catch (err) {
+            say(err.message, 'is-bad');
+        }
+    });
+
+    load();
+})();
+</script>

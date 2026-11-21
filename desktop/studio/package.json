@@ -1,7 +1,7 @@
 {
   "name": "certifried-studio",
   "productName": "CertiFried Studio",
-  "version": "0.2.7",
+  "version": "0.2.14",
   "description": "CertiFried Studio: carries out CertiFried stream bot actions on your PC (OBS, sounds, hotkeys, lights, Voicemeeter, Stream Deck).",
   "author": "CertiFried",
   "license": "AGPL-3.0-or-later",
@@ -21,6 +21,7 @@
     "multicast-dns": "7.2.5",
     "node-hid": "3.4.0",
     "obs-websocket-js": "5.0.8",
+    "onnxruntime-node": "1.31.1",
     "uiohook-napi": "1.5.5",
     "ws": "8.18.3"
   },
@@ -42,16 +43,27 @@
       "assets/**/*",
       "!assets/logo-source.png",
       "!src/main/dev-capture.js",
-      "package.json"
+      "package.json",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/x64/DirectML.dll",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/x64/dxcompiler.dll",
+      "!scripts/**"
     ],
     "asarUnpack": [
       "node_modules/uiohook-napi/**/*",
       "node_modules/@koromix/**/*",
       "node_modules/node-hid/**/*",
-      "src/voice/**/*"
+      "src/voice/**/*",
+      "src/ble/**/*",
+      "node_modules/onnxruntime-node/bin/**/*"
     ],
     "extraResources": [
-      { "from": "../streamdeck-plugin/dist/com.certifried.studio.streamDeckPlugin", "to": "streamdeck/com.certifried.studio.streamDeckPlugin" }
+      {
+        "from": "../streamdeck-plugin/dist/com.certifried.studio.streamDeckPlugin",
+        "to": "streamdeck/com.certifried.studio.streamDeckPlugin"
+      }
     ],
     "protocols": [
       {

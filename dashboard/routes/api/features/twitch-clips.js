@@ -39,6 +39,7 @@ router.post('/', async (req, res) => {
             streamer: b.streamer,
             creatorsFilter: b.creators_filter || 'anyone',
             minViews: b.min_views || 0,
+            pingRoleId: b.ping_role_id || null,
             client: postingClient(req),
         });
         res.json({ success: true, id: feed.id, message: `Posting ${feed.display_name}'s new clips` });
@@ -54,6 +55,7 @@ router.patch('/:id', async (req, res) => {
         if (b.streamer !== undefined) changes.streamer = b.streamer;
         if (b.creators_filter !== undefined) changes.creatorsFilter = b.creators_filter;
         if (b.min_views !== undefined) changes.minViews = b.min_views;
+        if (b.ping_role_id !== undefined) changes.pingRoleId = b.ping_role_id;
 
         const { watermarkMoved } = await updateFeed(req.params.guildId, req.params.id, changes, { client: postingClient(req) });
         res.json({

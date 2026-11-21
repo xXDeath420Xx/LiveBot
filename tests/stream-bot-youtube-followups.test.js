@@ -82,10 +82,11 @@ test('chat overlay: YouTube lines with role badges, Super Chats highlighted, del
     assert.equal(visibleFor(m, { platforms: ['youtube'] }), true);
 });
 
-test('alert box: Super Chats and Super Stickers, new members, milestones and gift memberships have their own alerts', () => {
+test('alert box: subscribers, Super Chats, Super Stickers, new members, milestones and gift memberships have their own alerts', () => {
     const yt = (type, metadata = {}, o = {}) => ({ platform: 'youtube', type, channelId: CH, user: { id: FAN, login: 'maple.fan-88', name: 'Maple.Fan-88', roles: [] }, amount: null, currency: null, message: null, metadata, ...o });
     assert.equal(alertKeyFor(yt('tip', { kind: 'super_chat' }, { amount: 5 })), 'yt_superchat');
-    assert.equal(alertKeyFor(yt('tip', { kind: 'super_sticker' }, { amount: 2 })), 'yt_superchat');
+    assert.equal(alertKeyFor(yt('tip', { kind: 'super_sticker' }, { amount: 2 })), 'yt_sticker', 'Super Stickers have their own alert (2026-11-20, like Streamlabs)');
+    assert.equal(alertKeyFor(yt('follow', { subscriber: true })), 'yt_subscriber', 'a new YouTube subscriber');
     assert.equal(alertKeyFor(yt('tip', { kind: 'jewels' }, { amount: 50, currency: 'jewels' })), 'tip', 'Jewels stay a tip alert, like Bits-style gifts on tip services');
     assert.equal(alertKeyFor(yt('membership', { kind: 'new', tier: 'Lantern Club' })), 'yt_member');
     assert.equal(alertKeyFor(yt('membership', { kind: 'milestone', months: 6 })), 'yt_milestone');
@@ -98,7 +99,7 @@ test('alert box: Super Chats and Super Stickers, new members, milestones and gif
     assert.equal(alertAmount('yt_gift', yt('gift_sub', { count: 5 }, { amount: 5 })), 5);
     assert.equal(alertAmount('yt_superchat', yt('tip', { kind: 'super_chat' }, { amount: 4.99 })), 4.99);
     assert.equal(alertAmount('yt_member', yt('membership', { kind: 'new' })), 0);
-    for (const k of ['yt_superchat', 'yt_member', 'yt_milestone', 'yt_gift']) {
+    for (const k of ['yt_subscriber', 'yt_superchat', 'yt_sticker', 'yt_member', 'yt_milestone', 'yt_gift']) {
         assert.equal(ALERT_KINDS[k].platform, 'youtube');
         assert.equal(alertKeyFor(sampleFor(k)), k, `${k}: its Test sample shows that alert`);
     }
@@ -107,7 +108,7 @@ test('alert box: Super Chats and Super Stickers, new members, milestones and gif
     // From YouTube's own resources, through the normaliser.
     const norm = (it) => normaliseYouTubeMessage(it, { channelId: CH, broadcastId: 'b1' });
     assert.equal(alertKeyFor(norm(item('s1', 'superChatEvent', { superChatDetails: { amountMicros: '2000000', currency: 'USD', userComment: 'gg' } }))), 'yt_superchat');
-    assert.equal(alertKeyFor(norm(item('s2', 'superStickerEvent', { superStickerDetails: { amountMicros: '1000000', currency: 'USD', superStickerMetadata: { altText: 'Cat' } } }))), 'yt_superchat');
+    assert.equal(alertKeyFor(norm(item('s2', 'superStickerEvent', { superStickerDetails: { amountMicros: '1000000', currency: 'USD', superStickerMetadata: { altText: 'Cat' } } }))), 'yt_sticker');
     assert.equal(alertKeyFor(norm(item('j1', 'giftEvent', { giftDetails: { jewelsAmount: 10 } }))), 'tip');
     assert.equal(alertKeyFor(norm(item('n1', 'newSponsorEvent', { newSponsorDetails: { memberLevelName: 'Lantern Club' } }))), 'yt_member');
     const ms = norm(item('m1', 'memberMilestoneChatEvent', { memberMilestoneChatDetails: { memberMonth: 12, userComment: 'a year!' } }));
@@ -118,10 +119,10 @@ test('alert box: Super Chats and Super Stickers, new members, milestones and gif
 
     // The editor lists them only once YouTube is set up on the server.
     assert.equal(alertKeysFor().some((k) => k.startsWith('yt_')), false);
-    assert.deepEqual(alertKeysFor({ youtube: true }).filter((k) => k.startsWith('yt_')), ['yt_superchat', 'yt_member', 'yt_milestone', 'yt_gift']);
+    assert.deepEqual(alertKeysFor({ youtube: true }).filter((k) => k.startsWith('yt_')), ['yt_subscriber', 'yt_superchat', 'yt_sticker', 'yt_member', 'yt_milestone', 'yt_gift']);
     const off = formFor({});
     const on = formFor(ON);
-    assert.deepEqual([off.youtube, off.alertKinds.length, on.youtube, on.alertKinds.length], [false, 13, true, 17]);
+    assert.deepEqual([off.youtube, off.alertKinds.length, on.youtube, on.alertKinds.length], [false, 16, true, 22]);
     assert.equal(formFor({ ...ON, STREAM_BOT_YOUTUBE: '0' }).youtube, false, 'switched off');
 });
 
@@ -130,9 +131,10 @@ test('overlay settings pages: YouTube alerts and the YouTube chat choice only wh
     const onDemo = await overlayDemo({ root, youtube: true });
     for (const theme of ['dark', 'light', 'sand']) {
         const a = render(onDemo.edit('alerts').template, onDemo.edit('alerts').locals, theme);
-        assert.equal((a.match(/data-alert="/g) || []).length, 17, theme);
-        for (const k of ['yt_superchat', 'yt_member', 'yt_milestone', 'yt_gift']) assert.match(a, new RegExp(`data-alert="${k}"`));
-        assert.match(a, /Super Chat or Super Sticker \(YouTube\)/);
+        assert.equal((a.match(/data-alert="/g) || []).length, 22, theme);
+        for (const k of ['yt_subscriber', 'yt_superchat', 'yt_sticker', 'yt_member', 'yt_milestone', 'yt_gift']) assert.match(a, new RegExp(`data-alert="${k}"`));
+        assert.match(a, /Super Chat \(YouTube\)/);
+        assert.match(a, /Super Sticker \(YouTube\)/);
         assert.match(a, /data-cfg="alerts\.yt_superchat\.tts"/, 'read aloud for Super Chats');
         assert.match(a, /The same goes for gifted YouTube memberships\./);
         const ids = [...a.matchAll(/\sid="([^"]+)"/g)].map((x) => x[1]);
@@ -141,7 +143,7 @@ test('overlay settings pages: YouTube alerts and the YouTube chat choice only wh
         assert.match(c, /<label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="youtube"[^>]*> YouTube<\/label>/);
     }
     const a = render(offDemo.edit('alerts').template, offDemo.edit('alerts').locals);
-    assert.equal((a.match(/data-alert="/g) || []).length, 13);
+    assert.equal((a.match(/data-alert="/g) || []).length, 16);
     assert.doesNotMatch(a, /\(YouTube\)|gifted YouTube memberships/);
     const c = render(offDemo.edit('chat').template, offDemo.edit('chat').locals);
     assert.match(c, /<label class="sb-check" hidden><input type="checkbox" data-cfg="platforms" data-multi value="youtube"/, 'kept (hidden) so a save does not drop it');

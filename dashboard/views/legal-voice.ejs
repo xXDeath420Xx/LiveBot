@@ -1,0 +1,82 @@
+<%#
+  GET /legal/voice (dashboard/routes/voice-clone.js): the public notice for Your voice (invite-only own voices). It is the
+  written retention schedule and destruction policy, the Consumer Health Data Privacy Policy (Washington RCW 19.373) for
+  voice data, and the credits for the models and data the feature uses. Locals: consent { sections, version, sha },
+  limits, gpu, base (BASE_MODEL), thresholdVersion.
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Your voice: how your voice data is handled · CertiFried', description: 'What CertiFried collects for invite-only own voices, why, where, for how long, how it is destroyed, your rights, and the credits for the models used.', path: '/legal/voice' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/legal/voice' }) %>
+<main id="main-content" tabindex="-1" class="cfs-main">
+    <div class="cfs-pagehead">
+        <span class="cfs-eyebrow"><a href="/legal">Legal and data</a></span>
+        <h1>Your voice: how your voice data is handled</h1>
+        <p class="cfs-lede">&ldquo;Your voice&rdquo; makes a computer voice that sounds like one person, from that person&rsquo;s own recordings. It is invite-only and permanently so: there is no sign-up, and only people the CertiFried owner adds can use it.</p>
+        <p class="cfs-meta">Last updated November 20, 2026. Consent text version <%= consent.version %>.</p>
+    </div>
+    <div class="cfs-prose legal">
+        <h2 id="summary">In short</h2>
+        <ul>
+            <li>Only invited adults (18 or older) who live in the United States, and not in Illinois or Texas, can use it.</li>
+            <li>Nothing is recorded until you sign the written consent below and pass a live check.</li>
+            <li>Your voice speaks only in your own stream bot automations, reading fixed text you typed. It never reads viewers&rsquo; messages (such as <code>!tts</code> or alert messages), and nobody else can use it.</li>
+            <li>We never sell, rent, lease, trade or share your recordings, voiceprint or voice. Every clip carries an inaudible CertiFried watermark.</li>
+            <li>You can delete everything, or withdraw consent, at any time. It stops at once and the files go within minutes; encrypted backup copies expire within <%= limits.deletionBackupDays %> days.</li>
+        </ul>
+
+        <h2 id="health-data">Consumer Health Data Privacy Policy (voice data)</h2>
+        <p>Washington&rsquo;s My Health My Data Act (RCW 19.373) treats biometric data, including voice recordings from which an identifier can be made, as consumer health data. Because training happens in Washington state, CertiFried applies this policy to everyone who uses Your voice, wherever they live.</p>
+        <ul>
+            <li><strong>Categories collected:</strong> voice recordings you make on the Your voice page; a voiceprint (speaker embeddings from two speaker-recognition models); the voice model trained from your recordings; a consent record (consent text version and hash, your typed name, state, age confirmation, time, a hashed IP address); usage counts (characters and seconds spoken per day).</li>
+            <li><strong>Purposes:</strong> (1) training one voice for you alone; (2) checking that the recordings are yours and that the voice is not another account&rsquo;s; (3) watermarking every clip. No other purpose: no advertising, no profiling, no training of other voices.</li>
+            <li><strong>Sources:</strong> you, on the Your voice page. Nothing is collected from anyone else.</li>
+            <li><strong>Sharing:</strong> none. No third party receives your voice data. CertiFried&rsquo;s own server (OVHcloud, Vint Hill, Virginia, USA) stores it encrypted; CertiFried&rsquo;s operator&rsquo;s training computer (Washington state, USA) processes it for training only and deletes it after each run. Cloudflare carries the encrypted website traffic, as for all of CertiFried.</li>
+            <li><strong>Selling:</strong> never.</li>
+            <li><strong>Your rights:</strong> to confirm and see what we hold (the Your voice page and <code>/privacy export</code>), to delete it, and to withdraw consent, which deletes the voice. Email <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a> for anything else, or to appeal a decision about a request; we answer within 45 days.</li>
+        </ul>
+
+        <h2 id="retention">Retention schedule and destruction</h2>
+        <p>This is CertiFried&rsquo;s written policy for keeping and destroying biometric identifiers and voice data, in place before any is collected.</p>
+        <div class="cfs-table-wrap"><table>
+            <thead><tr><th>Data</th><th>Kept</th><th>How it is destroyed</th></tr></thead>
+            <tbody>
+                <tr><td>Recordings (live-check clips are never stored; script recordings are, encrypted)</td><td><%= limits.samplePurgeAfterTrainingDays %> days after your voice is trained, or until you delete them. Never more than <%= limits.sampleRetentionDays %> days from when each was made, even if you choose to keep them.</td><td>The encrypted files are deleted from the server; they are never put in backups.</td></tr>
+                <tr><td>Voiceprint (encrypted)</td><td>While the voice exists</td><td>Deleted with the voice; its encryption key is destroyed at the same moment.</td></tr>
+                <tr><td>Voice model (encrypted)</td><td>Until you delete it, or 1 year after the voice was last used</td><td>Deleted from the server at once; the key is destroyed, so encrypted copies in backups cannot be read; backup copies expire within <%= limits.deletionBackupDays %> days.</td></tr>
+                <tr><td>Training computer copy</td><td>Only while a training run is going</td><td>Kept encrypted with a key for that run only; the unlocked copy the training program reads is wiped the moment training stops; everything is deleted at the end of every run, the key is erased, and the computer sends the server a receipt.</td></tr>
+                <tr><td>Consent record (no audio, no voiceprint)</td><td>5 years after the voice is deleted</td><td>Deleted by the nightly retention sweep.</td></tr>
+                <tr><td>Training jobs and the audit trail</td><td>400 days</td><td>Deleted by the nightly retention sweep.</td></tr>
+                <tr><td>Daily usage counts</td><td>90 days</td><td>Deleted by the nightly retention sweep.</td></tr>
+            </tbody>
+        </table></div>
+        <p>Security: AES-256-GCM encryption with a key for each voice, stored wrapped by a separate server key; the decrypted model exists only in memory while it speaks; on the training computer each run gets its own AES-256-GCM key, held only in memory, and the recordings, any paused checkpoint and the trained model are stored only encrypted with it; they are unlocked only into a private folder that only the training account can open, while the training program reads them, and that folder is wiped the moment training stops, ends or fails, and again whenever the training program starts (the computer refuses to train if it cannot create that private folder); training runs only between <%= gpu.startHour %>:00 and <%= gpu.endHour %>:00 Pacific time and the recordings reach it only over an encrypted connection.</p>
+
+        <h2 id="biometric-notice">Biometric identifier notice (Washington RCW 19.375)</h2>
+        <p>CertiFried enrolls a voiceprint only for a person who has given the consent below, only for the purposes above, and keeps it no longer than this schedule says. It is not sold, leased or disclosed to anyone. It is protected with the care described under Security.</p>
+
+        <h2 id="consent">The consent people sign (version <%= consent.version %>)</h2>
+        <% consent.sections.forEach((sec) => { %><h3><%= sec.heading %></h3><% sec.paras.forEach((p) => { %><p><%= p %></p><% }) %><% }) %>
+        <p class="cfs-meta">SHA-256 of this text: <code><%= consent.sha %></code>. Speaker-check thresholds: <%= thresholdVersion %>.</p>
+
+        <h2 id="credits">Credits and licences</h2>
+        <ul>
+            <li><strong>Base voice model:</strong> every voice is fine-tuned from the Piper <code>en_US-libritts_r-medium</code> checkpoint (<%= base.name %>, SHA-256 <code><%= base.sha256.slice(0, 16) %>…</code>), trained by the Rhasspy / Open Home Foundation Piper project on <strong>LibriTTS-R</strong> by Yuma Koizumi, Heiga Zen, Shigeki Karita, Yifan Ding, Kohei Yatabe, Nobuyuki Morioka, Michiel Bacchiani, Yu Zhang, Wei Han and Ankur Bapna (2023), itself derived from LibriTTS and LibriSpeech (LibriVox recordings). LibriTTS-R is licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. CertiFried changed it: each voice is further trained on one person&rsquo;s own recordings.</li>
+            <li><strong>Training tool:</strong> <a href="https://github.com/OHF-Voice/piper1-gpl" rel="noopener">piper1-gpl</a> (GPL-3.0), run as a separate program on the training computer.</li>
+            <li><strong>Speaking:</strong> the <a href="https://github.com/rhasspy/piper" rel="noopener">Piper</a> runtime (MIT).</li>
+            <li><strong>Watermark:</strong> <a href="https://github.com/facebookresearch/audioseal" rel="noopener">AudioSeal</a> by Meta (MIT, code and weights).</li>
+            <li><strong>Speaker checks:</strong> <a href="https://github.com/IDRnD/ReDimNet" rel="noopener">ReDimNet</a> by ID R&amp;D (MIT) and <a href="https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb" rel="noopener">SpeechBrain ECAPA-TDNN</a> (Apache-2.0).</li>
+            <li><strong>Speech recognition (live check):</strong> <a href="https://github.com/ggerganov/whisper.cpp" rel="noopener">whisper.cpp</a> (MIT) with OpenAI&rsquo;s Whisper small.en model (MIT), on our own server.</li>
+            <li><strong>Script sentences:</strong> public-domain books from Project Gutenberg.</li>
+            <li><strong>Threshold calibration:</strong> LibriSpeech dev-clean by Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur (<a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>), used for testing only.</li>
+        </ul>
+        <p>Questions: <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>. See also the <a href="/privacy#voice-features">Privacy Policy</a> and <a href="/legal/data">Data we collect</a>.</p>
+    </div>
+</main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

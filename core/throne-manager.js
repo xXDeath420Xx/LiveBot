@@ -11,6 +11,7 @@ import {
     ThroneUnavailableError,
     ThroneParseError,
 } from '../utils/scrapers/throne-scraper.js';
+import { LATEST_PRICES_SQL, lastPriceMap, detectPriceChanges, pricesToRecord } from './throne-price-logic.js';
 
 const LOG_TAG = '[ThroneManager]';
 
@@ -504,25 +505,10 @@ async function checkForItemChanges(username, configs) {
         }
     }
 
-    // Detect price changes
-    const [priceRows] = await pool.execute(
-        `SELECT item_id, price_raw FROM throne_price_history WHERE throne_username = ? AND (item_id, recorded_at) IN (SELECT item_id, MAX(recorded_at) FROM throne_price_history WHERE throne_username = ? GROUP BY item_id)`,
-        [username, username]
-    );
-    const lastPriceMap = new Map(priceRows.map(r => [r.item_id, r.price_raw]));
-
-    for (const item of items) {
-        const lastPrice = lastPriceMap.get(item.id);
-        if (lastPrice != null && lastPrice !== item.priceRaw) {
-            const changePct = Math.abs((item.priceRaw - lastPrice) / lastPrice * 100);
-            priceChanges.push({
-                ...item,
-                oldPrice: lastPrice,
-                changePct: Math.round(changePct),
-                direction: item.priceRaw > lastPrice ? 'up' : 'down',
-            });
-        }
-    }
+    // Detect price changes (core/throne-price-logic.js: one index dive per known item)
+    const [priceRows] = await pool.execute(LATEST_PRICES_SQL, [username]);
+    const lastPrices = lastPriceMap(priceRows);
+    priceChanges.push(...detectPriceChanges(items, lastPrices));
 
     // Update DB: insert new items, mark removed, record prices
     if (newItems.length > 0) {
@@ -537,11 +523,13 @@ async function checkForItemChanges(username, configs) {
         }
     }
 
-    // Record current prices
-    for (const item of items) {
+    // Record prices that changed (or were never recorded); an unchanged price adds no row.
+    const toRecord = pricesToRecord(items, lastPrices);
+    if (toRecord.length > 0) {
+        const placeholders = toRecord.map(() => '(?, ?, ?, ?)').join(', ');
         await pool.execute(
-            'INSERT INTO throne_price_history (throne_username, item_id, price_raw, currency) VALUES (?, ?, ?, ?)',
-            [username, item.id, item.priceRaw, item.currency]
+            `INSERT INTO throne_price_history (throne_username, item_id, price_raw, currency) VALUES ${placeholders}`,
+            toRecord.flatMap(item => [username, item.id, item.priceRaw, item.currency ?? 'USD'])
         );
     }
 

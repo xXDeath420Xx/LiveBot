@@ -14,7 +14,7 @@ export default {
         {
             title: 'Switch it on for your server',
             text: [
-                'On the dashboard, open **Music & voice**, then **Cinema**. Turn **Cinema** on, set **How films play** to **Watch Together (Discord Activity)** and pick the **Library** your server watches from.',
+                'On the dashboard, open **Music & voice**, then **Cinema**. Turn **Cinema** on and pick the **Library** your server watches from. Films always play in Watch Together.',
                 'The **Playback control role** can control any film, not only one they started. The **Watch party** page\'s host role, if you set one, decides who may pick a film.',
             ],
             image: 'watch-together-setup',

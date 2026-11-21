@@ -599,9 +599,22 @@ function start(botClient) {
             '/stream/bot/overlay/nowplaying/',
             '/stream/bot/overlay/canvas/',
             '/stream/bot/overlay/scene/',
+            '/stream/bot/overlay/train/',
+            '/stream/bot/overlay/tipjar/',
+            '/stream/bot/overlay/credits/',
+            '/stream/bot/overlay/emotewall/',
+            '/stream/bot/overlay/poll/',
+            '/stream/bot/overlay/labels/',
+            '/stream/bot/overlay/viewers/',
+            '/stream/bot/overlay/heartrate/',
             // OBS docks (no session, no cookie): the credential is the dock key in the X-Dock-Key header, scoped to read
             // the feed and run an automation, rate limited per key and IP (dashboard/routes/stream-bot-dock.js).
             '/stream/bot/dock/api/run',
+            // Dock chat, moderation and title/category writes: same dock-key credential, each refused (403) unless the owner
+            // switched that capability on for the key on the Devices page. The session routes in stream-bot-live.js keep CSRF.
+            '/stream/bot/dock/api/chat',
+            '/stream/bot/dock/api/moderate',
+            '/stream/bot/dock/api/channel',
         ]
     }));
 
@@ -5414,6 +5427,20 @@ function start(botClient) {
                 twitterFeeds:   await pool.execute('SELECT * FROM twitter_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 blueskyFeeds:   await pool.execute('SELECT * FROM bluesky_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 rssFeeds:       await pool.execute('SELECT * FROM rss_feeds       WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
+                // Feeds page: the Post-to picker (text channels and their active threads) and the ping checks
+                // (core/feed-target.js). Only built for that page; it asks Discord for the active threads.
+                ...(req.query.page === 'feeds' ? await (async () => {
+                    const ft = await import('../core/feed-target.js');
+                    const feedTargets = await ft.loadFeedTargets(guild).catch(() => null);
+                    return {
+                        feedTargets,
+                        feedCanMentionAll: !ft.pingProblem(guild, null, 'everyone'),
+                        feedPingWarning: (channelId, roleId) => {
+                            const ch = channelId ? guild.channels.cache.get(String(channelId)) || null : null;
+                            return ft.pingProblem(guild, ch, roleId) || ft.threadPingNote(guild, ch, roleId);
+                        },
+                    };
+                })() : {}),
                 commissionConfig: await pool.execute('SELECT * FROM commission_spam_config WHERE guild_id = ?', [guildId]).then(r => r[0][0] || null).catch(() => null),
                 commissionGroups: COMMISSION_GROUPS,
                 commissionGlobalStats: await getCommissionGlobalStats().catch(() => ({ enabledCount: 0, totalRemoved: 0 })),
@@ -14056,11 +14083,38 @@ function start(botClient) {
     }).catch(err => {
         logger.error('Failed to load stream bot overlay routes:', err);
     });
+    // Stream bot Community (/stream/bot/community: chat games, store, quotes, media share, text to speech; core/stream-bot/community),
+    // and the OBS page /stream/bot/overlay/mediashare/<key> (GET only, so no CSRF exemption). After the overlay routes, which pass
+    // types they do not know on with next('route').
+    import('./routes/stream-bot-community.js').then(({ default: streamBotCommunityRouter }) => {
+        app.use('/', streamBotCommunityRouter);
+    }).catch(err => {
+        logger.error('Failed to load stream bot community routes:', err);
+    });
+    // Your voice (own-voice feature, invite-only; core/voice-clone): /stream/bot/voice, its API, the owner console page
+    // /super-admin/voice and the public notice /legal/voice. No public detection endpoint.
+    import('./routes/voice-clone.js').then(({ default: voiceCloneRouter }) => {
+        app.use('/', voiceCloneRouter);
+    }).catch(err => {
+        logger.error('Failed to load own-voice routes:', err);
+    });
+    // Owner console: who may link YouTube while Google reviews the OAuth verification (core/stream-bot/youtube/gate.js).
+    import('./routes/youtube-review.js').then(({ default: youtubeReviewRouter }) => {
+        app.use('/', youtubeReviewRouter);
+    }).catch(err => {
+        logger.error('Failed to load YouTube review routes:', err);
+    });
     // Stream bot lights, Voicemeeter and Stream Deck API (/stream/bot/api/devices/*, /stream/bot/api/lights/*; core/stream-bot/devices).
     import('./routes/stream-bot-devices.js').then(({ default: streamBotDevicesRouter }) => {
         app.use('/', streamBotDevicesRouter);
     }).catch(err => {
         logger.error('Failed to load stream bot device routes:', err);
+    });
+    // Stream bot title and category editor, Redemptions queue and dock key switches (/stream/bot/api/channel/*, /api/redemptions*, /api/devices/dock-access).
+    import('./routes/stream-bot-live.js').then(({ default: streamBotLiveRouter }) => {
+        app.use('/', streamBotLiveRouter);
+    }).catch(err => {
+        logger.error('Failed to load stream bot live tool routes:', err);
     });
     // OBS docks (/stream/bot/dock/*): opened with a dock key that CertiFried Studio puts into OBS.
     import('./routes/stream-bot-dock.js').then(({ default: streamBotDockRouter }) => {

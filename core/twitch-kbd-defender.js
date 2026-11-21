@@ -139,6 +139,29 @@ async function logAction({ bid, uid, login, action, reason, success }) {
 let domainsStarted = false;
 
 /**
+ * The AI layer for a message the KBD lists passed. detect: logged as 'detected'. enforce: the message is deleted
+ * (never a ban: a model alone does not ban anyone on Twitch). Off channels never get here.
+ */
+async function aiCheck(event, { bid, uid, login, mode }) {
+    try {
+        const { screenChat } = await import('./ai-moderation.js');
+        const r = await screenChat({ platform: PLATFORM, channelId: bid, userId: uid, text: event.message?.text || '', mode });
+        if (!r || r.action === 'none') return { acted: false, why: 'clean' };
+        const reason = `AI ${r.label} ${Math.round(r.confidence * 100)}%${r.reason ? `: ${r.reason}` : ''}`;
+        if (r.action !== 'delete') {
+            await logAction({ bid, uid, login, action: 'detected', reason: `delete: ${reason}`, success: true });
+            return { acted: false, why: 'ai_detect', ai: r };
+        }
+        const res = await deleteChatMessage(bid, event.message_id, ACTOR);
+        await logAction({ bid, uid, login, action: 'delete', reason: res.ok ? reason : `${reason} (failed: ${res.error || res.status})`, success: res.ok });
+        return { acted: !!res.ok, why: 'ai_delete', ai: r };
+    } catch (e) {
+        logger.debug(`${LOG} AI check failed: ${e.message}`);
+        return { acted: false, why: 'clean' };
+    }
+}
+
+/**
  * Called for every Twitch chat message (core/twitch-eventsub-manager.js handleChatMessage).
  * Never throws; returns what it did for tests and logs.
  */
@@ -158,7 +181,8 @@ export async function checkTwitchMessage(event) {
         const text = event.message?.text || '';
         const onBanlist = await isOnBanlist(PLATFORM, uid, login);
         const d = decide({ login, text, onBanlist, phishingDomain: onBanlist ? null : findPhishingDomain(text) });
-        if (!d) return { acted: false, why: 'clean' };
+        // Nothing on the KBD lists: the shared AI layer (core/ai-moderation.js, local models only) gets a look.
+        if (!d) return await aiCheck(event, { bid, uid, login, mode });
 
         // Phishing escalates to a ban after the channel's threshold (default 2) of offenses.
         let action = d.action;

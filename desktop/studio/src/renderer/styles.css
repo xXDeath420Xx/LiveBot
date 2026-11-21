@@ -153,3 +153,31 @@ details.advanced { margin-top: 14px; border-top: 1px solid var(--cf-border); pad
 details.advanced summary { cursor: pointer; color: var(--cf-text-2); font-size: 13px; }
 
 @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* 0.2.10: voice log */
+.voice-log td { font-size: 13px; vertical-align: top; }
+.voice-log td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.voice-log .out-fired { color: var(--cf-success); }
+.voice-log .out-below, .voice-log .out-cooldown, .voice-log .out-disabled { color: var(--cf-warning); }
+.voice-log .out-noise, .voice-log .out-short, .voice-log .out-nowake, .voice-log .out-wake, .voice-log .quiet { color: var(--cf-text-3); }
+#tab-voice .banner.warn p { margin: 0 0 6px; }
+.privacy { margin-top: 12px; border-top: 1px solid var(--cf-border); padding-top: 10px; }
+.privacy summary { cursor: pointer; color: var(--cf-text-2); font-size: 13px; }
+/* 0.2.13: teaching voice commands */
+.msg.warn { color: var(--cf-warning); }
+.voice-log td.teach { min-width: 170px; }
+.voice-log td.teach .btn, .voice-log td.teach select { margin: 0 4px 4px 0; }
+select.small { font-size: 12px; padding: 2px 6px; }
+#voice-train .row-form { margin: 8px 0; }
+#voice-train-takes { width: 80px; }
+#voice-train .actions { margin-top: 10px; }
+
+/* Heart rate (0.2.14) */
+.hr-live { display: flex; align-items: center; gap: 24px; margin: 4px 0 14px; flex-wrap: wrap; }
+.hr-reading { display: flex; align-items: baseline; gap: 6px; min-width: 132px; }
+.hr-bpm { font-family: var(--cf-mono); font-size: 44px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--cf-text); }
+.hr-bpm.is-stale { color: var(--cf-text-3); }
+.hr-unit { font-size: 12px; letter-spacing: 0.06em; color: var(--cf-text-3); }
+.hr-spark { flex: 1 1 280px; max-width: 480px; height: 72px; border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-inset); }
+.steps { margin: 0 0 10px; padding-left: 20px; }
+.steps li { margin: 0 0 6px; line-height: 1.5; }

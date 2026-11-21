@@ -60,7 +60,7 @@ test.after(async () => {
 // ── settings ───────────────────────────────────────────────────────────────────────────────
 
 test('every overlay type has defaults that validate, an OBS source name, and the alert box covers every requested event', () => {
-    assert.deepEqual(OVERLAY_TYPES.map((t) => t.type), ['alerts', 'chat', 'events', 'goal', 'counter', 'nowplaying', 'canvas', 'scene']);
+    assert.deepEqual(OVERLAY_TYPES.map((t) => t.type), ['alerts', 'chat', 'events', 'goal', 'counter', 'nowplaying', 'canvas', 'scene', 'train', 'tipjar', 'credits', 'emotewall', 'poll', 'labels', 'viewers', 'heartrate']);
     for (const t of OVERLAY_TYPES) {
         assert.match(t.sourceName, /^CertiFried /);
         const v = validateConfig(t.type, defaultConfig(t.type));
@@ -68,8 +68,8 @@ test('every overlay type has defaults that validate, an OBS source name, and the
         assert.deepEqual(v.value, defaultConfig(t.type), `${t.type} defaults round-trip`);
     }
     assert.equal(OVERLAY_TYPES.find((t) => t.type === 'alerts').sourceName, 'CertiFried Alerts');
-    assert.deepEqual(ALERT_KEYS, ['follow', 'sub', 'resub', 'gift_sub', 'cheer', 'raid', 'redemption', 'powerup', 'tip', 'hype_train', 'kick_follow', 'kick_sub', 'kick_gift',
-        'yt_superchat', 'yt_member', 'yt_milestone', 'yt_gift']);
+    assert.deepEqual(ALERT_KEYS, ['follow', 'sub', 'resub', 'gift_sub', 'cheer', 'raid', 'redemption', 'powerup', 'tip', 'hype_train', 'watch_streak', 'charity',
+        'kick_follow', 'kick_sub', 'kick_gift', 'kicks', 'yt_subscriber', 'yt_superchat', 'yt_sticker', 'yt_member', 'yt_milestone', 'yt_gift']);
     assert.deepEqual(typesFor('alert'), ['alerts']);
     assert.ok(typesFor('show').includes('canvas') && typesFor('show').includes('chat'));
 });

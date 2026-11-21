@@ -40,8 +40,10 @@ const { createLifxDriver } = require('./lifx-lan');
 const { createNanoleafDriver } = require('./nanoleaf');
 const { createElgatoDriver } = require('./elgato');
 const { createLitraDriver } = require('./litra');
+const { createGoveeBleDriver } = require('./govee-ble');
 
-const DRIVER_NAMES = Object.freeze(['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra']);
+// 0.2.11: goveeble, Govee lights over Bluetooth LE (govee-ble.js).
+const DRIVER_NAMES = Object.freeze(['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra', 'goveeble']);
 const MANUAL = new Set(['hue', 'nanoleaf', 'elgato', 'govee', 'lifx']);
 const ACTIONS = Object.freeze(['light.set', 'light.color', 'light.white', 'light.brightness', 'light.power', 'light.scene', 'light.flash', 'light.preset']);
 const PASS_CODES = new Set(['no_lights', 'device_not_found', 'device_offline', 'not_supported', 'needs_pairing', 'bad_color', 'driver_error', 'cert_changed', 'bad_params', 'scene_not_found', 'sandbox_refused']);
@@ -68,12 +70,15 @@ function publicCopy(d) {
             effects: Array.isArray(caps.effects) ? caps.effects.filter((s) => typeof s === 'string').slice(0, 100) : [],
         },
         needsPairing: !!d.needsPairing, kind: ['light', 'group', 'bridge'].includes(d.kind) ? d.kind : 'light',
+        // 0.2.11: a Bluetooth light that is also one of the streamer's Govee cloud lights (its cloud id), so the server can
+        // send that cloud light's actions here, and 'all' leaves it to the cloud (no light is set twice).
+        ...(typeof d.cloudId === 'string' && /^govee-cloud:[A-Za-z0-9:]{1,80}$/.test(d.cloudId) ? { cloudId: d.cloudId } : {}),
     };
 }
 
 function createLights({
     config, logger = null, sandbox = null, transports = {}, hid = null, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
-    hostName = null, timing = {}, drivers: injected = null,
+    hostName = null, timing = {}, drivers: injected = null, ble = {},
 } = {}) {
     const log = (lvl, m, meta) => { try { logger?.[lvl]?.(`[lights] ${m}`, meta); } catch { /* ignore */ } };
     const mdns = createMdns({ factory: transports.mdns || null, logger });
@@ -84,6 +89,7 @@ function createLights({
         nanoleaf: () => createNanoleafDriver({ logger, sandbox, config, transports, mdns, setTimer, now, timeoutMs: timing.httpTimeoutMs ?? 3000, pairTimeoutMs: timing.pairTimeoutMs ?? 30000, pairIntervalMs: timing.pairIntervalMs ?? 2000 }),
         elgato: () => createElgatoDriver({ logger, sandbox, transports, mdns, timeoutMs: timing.httpTimeoutMs ?? 3000 }),
         litra: () => createLitraDriver({ logger, sandbox, hid, readTimeoutMs: timing.litraReadMs ?? 120 }),
+        goveeble: () => createGoveeBleDriver({ logger, sandbox, helperPath: ble.helperPath || null, spawnImpl: ble.spawnImpl, getCloudMacs: ble.getCloudMacs || (() => new Map()) }),
     };
     const live = new Map();          // driver name → driver
     const listeners = new Set();
@@ -224,6 +230,7 @@ function createLights({
         if (!s) return;
         try {
             const d = driverOf(dev);
+            if (d.restoreState) { await d.restoreState(dev.id, s); emitIfChanged(); return; }
             if (s.scene && s.on && d.scene) { await d.scene(dev.id, s.scene, {}); return; }
             const st = { on: !!s.on, transitionMs: 0 };
             if (Number.isFinite(s.brightness) && s.brightness > 0 && dev.caps.brightness) st.brightness = s.brightness;
@@ -239,7 +246,8 @@ function createLights({
         const all = list();
         const want = typeof device === 'string' ? device.trim() : '';
         if (!want || want === 'all') {
-            const t = all.filter((d) => d.kind === 'light' && !d.needsPairing && d.online);
+            // A Bluetooth light that is also a cloud light is left to the cloud for 'all' (the server sets every cloud light).
+            const t = all.filter((d) => d.kind === 'light' && !d.needsPairing && d.online && !d.cloudId);
             if (!t.length) throw codeError('no_lights', 'No paired lights are online. Search for lights in Studio first.');
             return t;
         }
@@ -350,6 +358,8 @@ function createLights({
         const bright = { on: true, brightness: b, ...(colour.rgb ? { color: colour.rgb } : { kelvin: colour.kelvin }) };
         const dim = pulse ? { on: true, brightness: Math.max(1, Math.round(b * 0.15)) } : { on: false };
         return each(devs, async (dev, notes) => {
+            // 0.2.11: Bluetooth lights blink their power, so a light showing a scene keeps it (govee-ble.js).
+            if (driverOf(dev).blink) { cancelJob(dev.id); await driverOf(dev).blink(dev.id, { times, periodMs: period }); return; }
             const sOn = adapt(dev, bright, notes);
             const sOff = adapt(dev, dim, []);
             const d = driverOf(dev);
@@ -466,6 +476,12 @@ function createLights({
     }
 
     async function test(id) {
+        const dev = list().find((d) => d.id === id);
+        // Bluetooth lights blink their power instead (govee-ble.js: a scene cannot be put back after a colour change).
+        if (dev && dev.driver === 'goveeble' && !dev.needsPairing) {
+            const d = driverOf(dev);
+            try { const r = await d.test(dev.id); emitIfChanged(); return { applied: [dev.id], skipped: [], notes: [], blink: r }; } catch (e) { throw normaliseError(e); }
+        }
         return run('light.flash', { device: String(id || ''), color: '#b4e04f', brightness: 100, times: 1, periodMs: 800, mode: 'flash' });
     }
 

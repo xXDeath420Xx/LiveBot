@@ -131,3 +131,19 @@ test('a thrown error NEVER contains the value', () => {
 test('an invalid key is rejected and the error names no value', () => {
     assert.throws(() => setEnvValue('bad key', 'whatever', { envPath: '/tmp/x' }), /Invalid env key/);
 });
+
+test("setEnvValue follows a .env symlink: the link stays, the real file is replaced in its own directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "envfile-link-"));
+    const secrets = path.join(dir, ".secrets");
+    fs.mkdirSync(secrets);
+    const real = path.join(secrets, ".env");
+    fs.writeFileSync(real, "A=1\nGIPHY_API_KEY=old-dummy-value\n", { mode: 0o640 });
+    const link = path.join(dir, ".env");
+    fs.symlinkSync(".secrets/.env", link);
+    setEnvValue("GIPHY_API_KEY", "dummy-new-value-0123", { envPath: link, backupDir: path.join(dir, "bk") });
+    assert.ok(fs.lstatSync(link).isSymbolicLink(), ".env is still a symlink");
+    assert.match(fs.readFileSync(real, "utf8"), /GIPHY_API_KEY=dummy-new-value-0123/);
+    assert.equal(fs.statSync(real).mode & 0o777, 0o640, "mode kept");
+    assert.deepEqual(fs.readdirSync(dir).filter((n) => n.startsWith(".env.tmp")), [], "no temp file left in the link dir");
+    fs.rmSync(dir, { recursive: true, force: true });
+});

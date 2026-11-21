@@ -5,7 +5,9 @@
  *   config.js    overlay types, alert kinds, settings and their validation, goal counting (pure)
  *   store.js     stream_bot_overlays and stream_bot_overlay_media
  *   media.js     the image and video library (files outside git)
- *   service.js   the live side: SSE pages, alerts, chat, event list, goals, counters, now playing, overlay actions
+ *   service.js   the live side: SSE pages, alerts, chat, event list, goals, counters, now playing, overlay actions, widgets
+ *   widgets.js   the widgets' rules: tip jar, sub and hype train, polls, credits, labels, Test frames (pure)
+ *   emotes.js    7TV, BTTV and FFZ emote lists for the profile's Twitch channel (read here, served through images.js)
  *   chat.js      Twitch / Kick / YouTube chat notifications → chat lines and removals (pure)
  *   images.js    chat emotes and badges served from this server
  *   actions.js   Show text on stream, Show an image or video on stream, Change a goal
@@ -31,16 +33,57 @@ import { createMediaLibrary } from './media.js';
 import { createImageProxy } from './images.js';
 import { registerOverlayActions } from './actions.js';
 import { twitchChat, kickChat, youtubeChat } from './chat.js';
+import { maskProfanity, ownVoiceViewerText } from '../community/speech.js';
+import { createThirdPartyEmotes } from './emotes.js';
+import { coverage } from '../scopes.js';
 
 /** Read a sentence aloud with CertiFried's Piper voices (utils/piper-tts.js) → WAV bytes. */
 export function piperSynthesizer(logger = null) {
     let mod = null;
-    return async (text, voice) => {
+    return async (text, voice, { profileOwnerId = null } = {}) => {
         mod ||= await import('../../../utils/piper-tts.js');
-        const file = await mod.synthesize(String(text).slice(0, 200), voice || 'ryan');
+        // Alert messages are other people's text: a voice trained from a real person reads them only in its owner's own
+        // profile, after they opted in (core/stream-bot/community/speech.js ownVoiceViewerText); otherwise Ryan reads them.
+        const owner = voice ? mod.getVoiceInfo?.(voice)?.ownerId : null;
+        const v = voice && (!owner || await ownVoiceViewerText(voice, owner, profileOwnerId)) ? voice : 'ryan';
+        const file = await mod.synthesize(maskProfanity(String(text).slice(0, 200)), v);   // swear words and slurs read as "bleep" (W2.7)
         if (!file) return null;
         try { return await fs.readFile(file); } finally { fs.unlink(file).catch(() => logger?.debug?.('[StreamBotOverlay] tts temp file left')); }
     };
+}
+
+/**
+ * The Twitch features (scopes.js TWITCH_FEATURES keys) the profile's Twitch channel has granted, across the Stream bot grant
+ * and the server grants (the same sources as the Connections page, live.js connectionHealth), or null with no Twitch channel.
+ */
+export async function twitchFeatures({ store, pool, profileId }) {
+    const ch = (await store.listChannels(profileId)).find((c) => c.platform === 'twitch');
+    if (!ch) return null;
+    const grants = {};
+    const grant = await store.getTwitchGrant(profileId).catch(() => null);
+    if (grant && String(grant.twitch_user_id) === String(ch.platform_user_id) && grant.status === 'active') grants.streamBot = grant.scopes || [];
+    try {
+        const [rows] = await pool.query('SELECT token_scopes, tier_b_scopes FROM twitch_role_sync_config WHERE broadcaster_twitch_id = ? AND enabled = 1', [String(ch.platform_user_id)]);
+        grants.serverAnalytics = rows.flatMap((r) => String(r.token_scopes || '').split(/[\s,]+/).filter(Boolean));
+        grants.serverWrite = rows.flatMap((r) => String(r.tier_b_scopes || '').split(/[\s,]+/).filter(Boolean));
+    } catch { /* table missing: the Stream bot grant alone */ }
+    return new Set(coverage(grants).filter((f) => f.covered).map((f) => f.key));
+}
+
+/** Viewers on each linked platform now (stream-info.js, cached 60 s per channel): { live, total, platforms: { twitch: { live, viewers } … } }. */
+export async function viewerCounts({ store, streamInfo, profileId }) {
+    const out = { live: false, total: 0, platforms: {} };
+    if (!streamInfo) return out;
+    for (const c of await store.listChannels(profileId)) {
+        if (!['twitch', 'kick', 'youtube'].includes(c.platform) || out.platforms[c.platform]) continue;
+        const info = await streamInfo.get({ profileId, platform: c.platform, channelId: String(c.platform_user_id) }).catch(() => null);
+        const live = !!info?.live;
+        const viewers = live ? Math.max(0, Number(info.viewers) || 0) : 0;
+        out.platforms[c.platform] = { live, viewers };
+        out.total += viewers;
+        out.live ||= live;
+    }
+    return out;
 }
 
 export async function attachOverlays(box, { onRequest = null } = {}) {
@@ -50,11 +93,16 @@ export async function attachOverlays(box, { onRequest = null } = {}) {
     const ostore = createOverlayStore({ db: pool, prefix: store.prefix || 'stream_bot_', encryption });
     const media = createMediaLibrary({ ostore });
     const images = createImageProxy({ logger });
+    const emotes = createThirdPartyEmotes({ logger });
     const service = createOverlayService({
-        store, ostore, media, sounds: box.sounds, render: box.render, images, logger,
+        store, ostore, media, sounds: box.sounds, render: box.render, images, logger, emotes,
         nowPlaying: (profileId) => box.music?.service?.player?.nowPlaying(profileId) || null,
         synthesize: piperSynthesizer(logger),
         baseUrl: process.env.DASHBOARD_URL || 'https://certifriedmultitool.com',
+        twitchFeatures: (profileId) => twitchFeatures({ store, pool, profileId }),
+        viewerCounts: (profileId) => viewerCounts({ store, streamInfo: box.streamInfo, profileId }),
+        chatPolls: () => box.control?.polls || null,   // core/stream-bot/control (attached after the overlays)
+        heartView: (profileId) => box.heart?.service?.view(profileId) || null,   // core/stream-bot/heart (Studio 0.2.14)
     });
     const serviceRef = { current: service };
     registerOverlayActions(actionsMod, { serviceRef });

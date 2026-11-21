@@ -102,6 +102,7 @@ import { startCrossNetworkScheduler, stopCrossNetworkScheduler } from './jobs/cr
 import initGrowReminderScheduler from './jobs/grow-reminder-scheduler.js';
 import cleanupScheduler from './jobs/cleanup-scheduler.js';
 import { startRetentionSweeper, stopRetentionSweeper } from './jobs/retention-sweeper.js';
+import { startVoiceClone, stopVoiceClone } from './core/voice-clone/index.js';
 import { startCommandUsageRollup, stopCommandUsageRollup } from './jobs/command-usage-rollup.js';
 import { flush as flushCommandUsage } from './core/command-usage.js';
 import { startVCSoundScheduler, stopVCSoundScheduler } from './jobs/vc-sound-scheduler.js';
@@ -1302,6 +1303,8 @@ async function initializeSchedulersAndDashboard(client) {
   // Enforces data_retention_policy nightly. Batched and capped per table so it
   // cannot lock a large table against the 41 live bots sharing this database.
   startRetentionSweeper();
+  // Own voice (invite-only, core/voice-clone): its janitor and the loopback training API for the owner's PC (127.0.0.1:4650).
+  startVoiceClone({ logger }).catch((err) => logger.warn('[Core] Own voice not started', { error: err?.message }));
   // command_usage -> command_usage_daily (nightly 00:15 + today hourly), jobs/command-usage-rollup.js.
   startCommandUsageRollup();
   logger.info('[Core] Cleanup scheduler initialized');
@@ -1487,7 +1490,8 @@ async function start() {
 
     // Load custom bots from database
     logger.info('[BotManager] Loading custom bots from database...');
-    const [customBots] = await pool.execute(
+    // CF_OFFLINE_MODE=1 (staging): never start customer bots.
+    const [customBots] = process.env.CF_OFFLINE_MODE === '1' ? [[]] : await pool.execute(
       'SELECT * FROM custom_bots WHERE enabled = 1'
     );
 
@@ -1823,6 +1827,7 @@ async function shutdown() {
     // Stop cleanup scheduler
     cleanupScheduler.stop();
     stopRetentionSweeper();
+    stopVoiceClone();
     stopCommandUsageRollup();
     // Write any command uses still buffered (core/command-usage.js); never rejects.
     await flushCommandUsage();

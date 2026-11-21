@@ -16,7 +16,7 @@ import { getWatchSessions } from '../../core/activities/watch/registry.js';
 import { createJellyfinMedia } from '../../core/activities/watch/jellyfin-media.js';
 import { USER_INSTALL_URL } from '../../core/activities/watch/guild-config.js';
 
-const NOT_READY = 'Watch Together (the Discord Activity) is not switched on yet. Ask the bot owner, or switch Cinema back to the Go Live stream on the dashboard.';
+const NOT_READY = 'Watch Together (the Discord Activity) is not switched on yet. Ask the bot owner.';
 
 export const activitiesReady = () => !activityProblem(activityConfig());
 

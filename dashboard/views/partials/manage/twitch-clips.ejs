@@ -8,6 +8,8 @@
 const tcChannels = (typeof channels !== 'undefined' ? channels : [])
     .filter(function(c) { return c.type === 0 || c.type === 5; })
     .map(function(c) { return { id: c.id, name: c.name }; });
+const tcRoles = (typeof roles !== 'undefined' && Array.isArray(roles) ? roles : [])
+    .map(function(r) { return { id: String(r.id), name: r.name, mentionable: !!r.mentionable }; });
 let tcBotName = 'Bot', tcBotAvatar = '';
 try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild.members.me.displayAvatarURL({ size: 64 }) || ''; } catch (e) { /* bot member not cached */ }
 %>
@@ -105,6 +107,19 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
                         </div>
                     </div>
                 </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="tc-ping">Ping role</label>
+                        <p class="cf-row-desc">Mentioned above each clip. A role that is not mentionable only notifies if the bot can mention all roles.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="tc-ping">
+                            <option value="">No ping</option>
+                            <option value="everyone">@everyone</option>
+                            <% tcRoles.forEach(function(r) { %><option value="<%= r.id %>" data-kind="role">@<%= r.name %></option><% }); %>
+                        </select>
+                    </div>
+                </div>
                 <div class="cf-row cf-row--stack">
                     <div class="cf-row-text">
                         <span class="cf-row-label">How a clip is posted</span>
@@ -129,6 +144,7 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
     var tcApi = '/api/guilds/<%= guild.id %>/twitch-clips';
     var tcChannels = <%- JSON.stringify(tcChannels).replace(/</g, '\\u003c') %>;
     var tcBot = <%- JSON.stringify({ name: tcBotName, avatar: tcBotAvatar }).replace(/</g, '\\u003c') %>;
+    var tcRoles = <%- JSON.stringify(tcRoles).replace(/</g, '\\u003c') %>;
     var feedsCache = [];
 
     function el(tag, cls, text) {
@@ -155,6 +171,20 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
             s.appendChild(o);
         });
         return s;
+    }
+    function pingSelect(selected) {
+        var s = el('select', 'form-select');
+        s.setAttribute('data-f', 'ping_role_id');
+        [['', 'No ping'], ['everyone', '@everyone']].concat(tcRoles.map(function(r) { return [r.id, '@' + r.name]; })).forEach(function(o) {
+            var op = el('option', null, o[1]); op.value = o[0]; if ((selected || '') === o[0]) op.selected = true; s.appendChild(op);
+        });
+        return s;
+    }
+    function pingName(id) {
+        if (!id) return null;
+        if (id === 'everyone') return '@everyone';
+        var r = tcRoles.find(function(x) { return x.id === id; });
+        return r ? '@' + r.name : 'a deleted role';
     }
     function channelName(id) {
         var c = tcChannels.find(function(x) { return x.id === id; });
@@ -203,7 +233,7 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
         var meta = el('div', 'cf-list-meta');
         var who = f.creators_filter === 'broadcaster_only' ? "Streamer's own clips" : "Anyone's clips";
         [channelName(f.channel_id),
-         who + (f.min_views ? ', ' + f.min_views + '+ views' : ''),
+         who + (f.min_views ? ', ' + f.min_views + '+ views' : '') + (f.ping_role_id ? ', pings ' + pingName(f.ping_role_id) : ''),
          f.posted_count + ' posted, last ' + ago(f.last_posted),
          'Checked ' + ago(f.last_checked)].forEach(function(t) { meta.appendChild(el('span', null, t)); });
         var from = el('span', null, 'Counting from ' + new Date(f.posted_from).toLocaleString());
@@ -227,7 +257,7 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
         views.type = 'number'; views.min = '0'; views.max = '1000000';
         views.setAttribute('data-f', 'min_views');
         views.value = f.min_views || 0;
-        fields.append(field('Streamer', nameIn), field('Channel', channelSelect(f.channel_id, 'channel_id')), field('Whose clips', who2), field('Minimum views', views));
+        fields.append(field('Streamer', nameIn), field('Channel', channelSelect(f.channel_id, 'channel_id')), field('Whose clips', who2), field('Minimum views', views), field('Ping role', pingSelect(f.ping_role_id)));
         var foot = el('div', 'tc-edit-foot');
         var save = el('button', 'btn btn-sm btn-primary', 'Save');
         save.type = 'button';
@@ -356,7 +386,8 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
             streamer: document.getElementById('tc-streamer').value.trim(),
             channel_id: document.getElementById('tc-channel').value,
             creators_filter: document.getElementById('tc-who').value,
-            min_views: document.getElementById('tc-views').value
+            min_views: document.getElementById('tc-views').value,
+            ping_role_id: document.getElementById('tc-ping').value
         };
         if (!body.streamer) return status('Enter a Twitch name.', 'error');
         if (!body.channel_id) return status('Choose a channel to post in.', 'error');
@@ -377,8 +408,10 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
         if (!window.CFMsgPreview) return;
         var who = document.getElementById('tc-who').value;
         var name = document.getElementById('tc-streamer').value.trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i, '') || 'pixelpal';
+        var ping = document.getElementById('tc-ping').value;
         CFMsgPreview.render(document.querySelector('[data-tc-preview]'), {
             username: tcBot.name, avatarUrl: tcBot.avatar,
+            content: ping ? (ping === 'everyone' ? '@everyone' : '<@&' + ping + '>') : '',
             embeds: [{
                 color: '#9146FF', title: 'Sample clip title', url: 'https://clips.twitch.tv/',
                 fields: [{ name: 'Playing', value: 'Just Chatting', inline: true }, { name: 'Length', value: '28s', inline: true }, { name: 'Views', value: '42', inline: true }],
@@ -386,9 +419,9 @@ try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild
                 footer: { text: 'Clipped by ' + (who === 'broadcaster_only' ? name : 'a viewer') },
                 timestamp: true
             }]
-        }, { channels: tcChannels });
+        }, { channels: tcChannels, roles: tcRoles });
     }
-    ['tc-who', 'tc-streamer'].forEach(function(id) { document.getElementById(id).addEventListener('input', drawPost); document.getElementById(id).addEventListener('change', drawPost); });
+    ['tc-who', 'tc-streamer', 'tc-ping'].forEach(function(id) { document.getElementById(id).addEventListener('input', drawPost); document.getElementById(id).addEventListener('change', drawPost); });
     drawPost();
 
     load();

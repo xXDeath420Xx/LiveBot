@@ -27,7 +27,7 @@ function prefixGroups() {
   if (_groups !== null) return _groups;
   const subnet = process.env.YTDLP_IPV6_SUBNET;
   if (!subnet) { _groups = false; return false; }
-  // "2604:2dc0:200:163b::/64" → network hextets ['2604','2dc0','200','163b']
+  // "2604:2dc0:100:16d1::/64" → network hextets ['2604','2dc0','100','16d1']
   const netPart = subnet.split('/')[0];
   const groups = netPart.split(':').filter(g => g.length > 0);
   if (groups.length < 4) {

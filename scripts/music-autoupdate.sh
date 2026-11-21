@@ -11,6 +11,14 @@
 #
 # Test hooks: FORCE_CANARY_FAIL_AFTER=1 makes the post-upgrade canary fail (exercises rollback).
 set -uo pipefail
+# pm2 for the CertiFried apps: the app user's pm2 (cf-pm2, since 2026-11-21) once it runs the bot, else this user's.
+cf_pm2() {
+    if [ -x /usr/local/bin/cf-pm2 ] && systemctl is-enabled -q pm2-certifried.service 2>/dev/null; then
+        /usr/local/bin/cf-pm2 "$@"
+    else
+        pm2 "$@"
+    fi
+}
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -67,7 +75,7 @@ rebuild_bgutil() {  # $1 = git ref: a release tag, or the previous HEAD commit w
         npm ci --no-audit --no-fund --loglevel=error >/dev/null 2>&1
         npx tsc
     ) || return 1
-    pm2 restart "$BGUTIL_PM2" >/dev/null 2>&1 || return 1
+    cf_pm2 restart "$BGUTIL_PM2" >/dev/null 2>&1 || return 1
     for _ in $(seq 1 15); do curl -s -m 2 "$BGUTIL_PING" >/dev/null && return 0; sleep 1; done
     return 1
 }
@@ -141,7 +149,7 @@ if [ "${GLR_ENABLED:-0}" = "1" ]; then
                    && tar -xzf "$STAGE/glr.tgz" -C "$STAGE" && [ -x "$STAGE/go-librespot" ] && ! ldd "$STAGE/go-librespot" | grep -q "not found"; then
                     cp -a "$GLR_BIN" "$GLR_BIN-prev"
                     cp "$STAGE/go-librespot" "$GLR_BIN.new" && mv "$GLR_BIN.new" "$GLR_BIN"
-                    pm2 restart "$GLR_PM2" >/dev/null 2>&1
+                    cf_pm2 restart "$GLR_PM2" >/dev/null 2>&1
                     OKAUTH=no
                     for _ in $(seq 1 30); do
                         U=$(curl -s -m 3 "$GLR_API/status" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin).get("username") or "")' 2>/dev/null)
@@ -149,7 +157,7 @@ if [ "${GLR_ENABLED:-0}" = "1" ]; then
                     done
                     if [ "$OKAUTH" = yes ]; then GLR_ACTION="updated"; note "go-librespot $CUR -> $LATEST"
                     else
-                        mv "$GLR_BIN-prev" "$GLR_BIN"; pm2 restart "$GLR_PM2" >/dev/null 2>&1
+                        mv "$GLR_BIN-prev" "$GLR_BIN"; cf_pm2 restart "$GLR_PM2" >/dev/null 2>&1
                         GLR_ACTION="rolled_back"; note "go-librespot $LATEST failed auth check — rolled back to $CUR"
                     fi
                 else GLR_ACTION="download_failed"; note "go-librespot $LATEST download/verify failed"; fi

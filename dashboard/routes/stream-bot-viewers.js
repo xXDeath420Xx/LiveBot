@@ -198,6 +198,7 @@ router.post('/stream/bot/api/viewers/:id/points', needApi, apiRoute(async (req, 
     const opts = { mode: mode === 'set' ? 'set' : 'add', kind: 'edit', note, actor: `dashboard:${req.user.id}` };
     const delta = mode === 'remove' ? -amount : amount;
     const r = sb.viewers?.service ? await sb.viewers.service.changePoints(profile.id, row.id, delta, opts) : await vstore().changePoints(profile.id, row.id, delta, opts);
+    if (!r.ok && r.error === 'youtube') return res.status(400).json({ ok: false, error: 'YouTube viewers cannot be given points: YouTube\'s API rules do not allow it.' });
     if (!r.ok) return res.status(400).json({ ok: false, error: 'The points could not be changed.' });
     res.json({ ok: true, balance: r.balance, change: r.change });
 }));

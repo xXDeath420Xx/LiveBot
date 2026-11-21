@@ -2,7 +2,8 @@
   GET /stream/bot/overlays/:id (dashboard/routes/stream-bot-overlays.js). Locals: overlay (overlayView), config (complete settings),
   state, url (the browser-source address, or null), form (lists), media, sounds, voices, editData (page JSON), previewSrc (tests only).
   A scene screen (type scene) has its own sections: title and lines, artwork (background, frame picture, see-through window),
-  glows and weather.
+  glows and weather. The widgets (train, tipjar, credits, emotewall, poll, labels, viewers, heartrate) have a Test button that sends invented
+  frames; the Poll widget starts and ends chat polls, the Tip jar can be emptied, and Stream labels list their text addresses.
   Every setting carries data-cfg="<path>"; /js/stream-bot-overlays.js reads them into the config it saves (PUT), runs Test,
   goal, copy and new-address buttons, and scales the live preview. Nothing here builds markup from viewer text.
 %>
@@ -81,6 +82,55 @@
 </section>
 <% } %>
 
+<% const _widget = ['train', 'tipjar', 'credits', 'emotewall', 'poll', 'labels', 'viewers', 'heartrate', 'events', 'chat'].includes(t); %>
+<% if (_widget) { %>
+<section class="cf-section" aria-labelledby="sbo-wtest-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-wtest-title">Test</h2>
+        <p class="cf-section-desc">Shows invented viewers on this overlay wherever it is open (OBS and the preview). Nothing is stored or counted.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-test-status" role="status" aria-live="polite"></span> <button type="button" class="btn btn-secondary btn-sm" data-test-widget>Send a test</button></div></header>
+</section>
+<% } %>
+
+<% if (t === 'poll') { %>
+<section class="cf-section" aria-labelledby="sbo-cpoll-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-cpoll-title">Chat poll</h2>
+        <p class="cf-section-desc">Viewers vote by typing !vote and the number in Twitch, Kick or YouTube chat. One vote each; a new vote replaces the old one. The bot posts the question and the result in chat. Twitch polls and predictions show here by themselves.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-cpoll-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cpoll-q">Question</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-cpoll-q" maxlength="120" autocomplete="off"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cpoll-opts">Answers</label><p class="cf-row-desc">2 to 6, one per line.</p></div>
+            <div class="cf-row-control"><textarea id="sbo-cpoll-opts" rows="4" maxlength="400"></textarea></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cpoll-sec">Runs for (seconds)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-cpoll-sec" min="10" max="3600" value="60"> <button type="button" class="btn btn-secondary btn-sm" id="sbo-cpoll-start">Start</button> <button type="button" class="btn btn-secondary btn-sm" id="sbo-cpoll-end">End now</button></div></div>
+    </div>
+</section>
+<% } %>
+
+<% if (t === 'tipjar') { %>
+<section class="cf-section" aria-labelledby="sbo-jar-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-jar-title">In the jar</h2>
+        <p class="cf-section-desc">Now <%= Number(state.total) || 0 %> of <%= c.target %>. Test tips do not count.<%= c.resetOnLive ? ' It empties by itself when your stream goes live.' : '' %></p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-jar-status" role="status" aria-live="polite"></span> <button type="button" class="btn btn-secondary btn-sm" id="sbo-jar-reset">Empty the jar</button></div></header>
+</section>
+<% } %>
+
+<% if (t === 'labels') { %>
+<section class="cf-section" aria-labelledby="sbo-ltext-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-ltext-title">One label on its own</h2>
+        <p class="cf-section-desc">Each label as a browser source of its own, or as plain text for a tool that fills an OBS text source from an address. Keep these private like the address above.</p></div></header>
+    <div class="cf-rows">
+        <% form.labelKeys.forEach((k) => { %>
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label"><%= k.label %></p></div>
+            <div class="cf-row-control sb-fields">
+                <div class="sb-field is-wide"><label for="sbo-lb-<%= k.value %>">Browser source</label><input type="text" id="sbo-lb-<%= k.value %>" readonly value="<%= url ? url + '?label=' + k.value : '' %>"></div>
+                <div class="sb-field is-wide"><label for="sbo-lt-<%= k.value %>">Plain text</label><input type="text" id="sbo-lt-<%= k.value %>" readonly value="<%= url ? url + '/text/' + k.value : '' %>"></div>
+            </div></div>
+        <% }) %>
+    </div>
+</section>
+<% } %>
+
 <form id="sbo-form" novalidate>
 <section class="cf-section" aria-labelledby="sbo-look-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-look-title"><%= t === 'alerts' ? 'Look of every alert' : 'Settings' %></h2></div></header>
@@ -119,7 +169,9 @@
             <div class="cf-row-control"><input type="number" id="sbo-fade" data-cfg="fadeAfterSec" min="0" max="600" value="<%= c.fadeAfterSec %>"></div></div>
         <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-badges">Badges</label></div>
             <div class="cf-row-control"><input type="checkbox" id="sbo-badges" data-cfg="showBadges"<%= _on(c.showBadges) %>></div></div>
-        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pmark">Twitch or Kick mark</label></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-3p">7TV, BTTV and FFZ emotes</label><p class="cf-row-desc">Your Twitch channel's emotes and the global ones, shown as pictures. CertiFried fetches them; OBS loads nothing from those sites.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-3p" data-cfg="thirdParty"<%= _on(c.thirdParty !== false) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pmark">Platform mark</label><p class="cf-row-desc">A small Twitch, Kick or YouTube sign before each name.</p></div>
             <div class="cf-row-control"><input type="checkbox" id="sbo-pmark" data-cfg="showPlatform"<%= _on(c.showPlatform) %>></div></div>
         <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hidecmd">Hide commands</label><p class="cf-row-desc">Lines that start with !.</p></div>
             <div class="cf-row-control"><input type="checkbox" id="sbo-hidecmd" data-cfg="hideCommands"<%= _on(c.hideCommands) %>></div></div>
@@ -142,7 +194,122 @@
         <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-nptimes">Times beside the bar</label></div>
             <div class="cf-row-control"><input type="checkbox" id="sbo-nptimes" data-cfg="showTimes"<%= _on(c.showTimes) %>></div></div>
         <% } %>
-        <% if (t !== 'nowplaying' && t !== 'scene') { %>
+        <% if (t === 'train') { %>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-tr-hype">Hype train (Twitch)</label><p class="cf-row-desc">Level, progress to the next level and time left, while a hype train runs.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-tr-hype" data-cfg="showHype"<%= _on(c.showHype) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-tr-ht">Hype train title</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-tr-ht" data-cfg="hypeTitle" maxlength="60" value="<%= c.hypeTitle %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-tr-sub">Sub train</label><p class="cf-row-desc">Counts subs, resubs and gifts on Twitch and Kick and memberships on YouTube while each arrives soon after the last.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-tr-sub" data-cfg="showSubTrain"<%= _on(c.showSubTrain) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-tr-st">Sub train title</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-tr-st" data-cfg="subTitle" maxlength="60" value="<%= c.subTitle %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-tr-sec">Seconds before the sub train stops</label><p class="cf-row-desc">Each new sub starts the clock again.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-tr-sec" data-cfg="subTrainSec" min="10" max="600" value="<%= c.subTrainSec %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-tr-min">Show from this many subs</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-tr-min" data-cfg="subTrainMin" min="1" max="50" value="<%= c.subTrainMin %>"></div></div>
+        <% } %>
+        <% if (t === 'tipjar') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-tt">Title</label><p class="cf-row-desc">Empty shows no title.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-jar-tt" data-cfg="title" maxlength="60" value="<%= c.title %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-target">Full at</label><p class="cf-row-desc">Tip amounts are added as they arrive, whatever the currency.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-jar-target" data-cfg="target" min="1" step="any" value="<%= c.target %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-sym">Money sign</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-jar-sym" data-cfg="symbol" maxlength="4" value="<%= c.symbol %>"></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Fills from</legend></div>
+            <div class="cf-row-control sb-checks"><% form.jarSources.forEach((s) => { %><label class="sb-check"><input type="checkbox" data-cfg="sources" data-multi value="<%= s.value %>"<%= _on(c.sources.includes(s.value)) %>> <%= s.label %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-bits">Bits for one unit</label><p class="cf-row-desc">100 Bits are about one dollar.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-jar-bits" data-cfg="bitsPerUnit" min="1" max="100000" value="<%= c.bitsPerUnit %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-kicks">Kicks for one unit</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-jar-kicks" data-cfg="kicksPerUnit" min="1" max="100000" value="<%= c.kicksPerUnit %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-size">Jar height (px)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-jar-size" data-cfg="size" min="120" max="900" value="<%= c.size %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-total">Show the total</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-jar-total" data-cfg="showTotal"<%= _on(c.showTotal) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-jar-reset-live">Empty it when the stream goes live</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-jar-reset-live" data-cfg="resetOnLive"<%= _on(c.resetOnLive) %>></div></div>
+        <% } %>
+        <% if (t === 'credits') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cr-title">Title</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-cr-title" data-cfg="title" maxlength="80" value="<%= c.title %>"></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Sections</legend><p class="cf-row-desc">From this stream: since it last went live. Moderators are the ones who chatted.</p></div>
+            <div class="cf-row-control sb-checks"><% form.creditSections.forEach((s) => { %><label class="sb-check"><input type="checkbox" data-cfg="sections" data-multi value="<%= s.value %>"<%= _on(c.sections.includes(s.value)) %>> <%= s.label %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cr-sec">Roll takes (seconds)</label><p class="cf-row-desc">It starts when the source is shown. Tick "Refresh browser when scene becomes active" on the source in OBS.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-cr-sec" data-cfg="durationSec" min="10" max="600" value="<%= c.durationSec %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cr-loop">Roll again when it ends</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-cr-loop" data-cfg="loop"<%= _on(c.loop) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-cr-dim">Darken the scene behind (%)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-cr-dim" data-cfg="dim" min="0" max="90" value="<%= c.dim %>"></div></div>
+        <% } %>
+        <% if (t === 'emotewall') { %>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Emotes from</legend></div>
+            <div class="cf-row-control sb-checks"><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="twitch"<%= _on(c.platforms.includes('twitch')) %>> Twitch chat</label><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="kick"<%= _on(c.platforms.includes('kick')) %>> Kick chat</label><label class="sb-check"<%= form.youtube ? '' : ' hidden' %>><input type="checkbox" data-cfg="platforms" data-multi value="youtube"<%= _on(c.platforms.includes('youtube')) %>> YouTube chat</label></div></fieldset>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ew-3p">7TV, BTTV and FFZ emotes</label><p class="cf-row-desc">Your Twitch channel's emotes and the global ones. CertiFried fetches them; OBS loads nothing from those sites.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-ew-3p" data-cfg="thirdParty"<%= _on(c.thirdParty) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ew-size">Emote height (px)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-ew-size" data-cfg="size" min="24" max="256" value="<%= c.size %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ew-max">Most on screen at once</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-ew-max" data-cfg="max" min="5" max="150" value="<%= c.max %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ew-per">Most from one message</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-ew-per" data-cfg="perMessage" min="1" max="20" value="<%= c.perMessage %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ew-rise">Seconds to float up</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-ew-rise" data-cfg="riseSec" min="2" max="30" value="<%= c.riseSec %>"></div></div>
+        <% } %>
+        <% if (t === 'poll') { %>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pl-tw">Twitch polls</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-pl-tw" data-cfg="twitchPolls"<%= _on(c.twitchPolls) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pl-pr">Twitch predictions</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-pl-pr" data-cfg="predictions"<%= _on(c.predictions) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pl-ch">Chat polls</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-pl-ch" data-cfg="chatPolls"<%= _on(c.chatPolls) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pl-hide">Keep the result up for (seconds)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-pl-hide" data-cfg="hideAfterSec" min="0" max="600" value="<%= c.hideAfterSec %>"></div></div>
+        <% } %>
+        <% if (t === 'labels') { %>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Labels</legend></div>
+            <div class="cf-row-control sb-checks"><% form.labelKeys.forEach((k) => { %><label class="sb-check"><input type="checkbox" data-cfg="items" data-multi value="<%= k.value %>"<%= _on(c.items.includes(k.value)) %>> <%= k.label %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-lb-layout">Arrange</label></div>
+            <div class="cf-row-control"><select id="sbo-lb-layout" data-cfg="layout"><%- _opts([{ value: 'column', label: 'One under another' }, { value: 'row', label: 'Side by side' }], c.layout) %></select></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-lb-titles">Show what each one is</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-lb-titles" data-cfg="showTitles"<%= _on(c.showTitles) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-lb-scope">Top cheer from</label></div>
+            <div class="cf-row-control"><select id="sbo-lb-scope" data-cfg="topCheerScope"><%- _opts([{ value: 'stream', label: 'This stream' }, { value: 'all', label: 'All time' }], c.topCheerScope) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-lb-empty">Before there is one</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-lb-empty" data-cfg="empty" maxlength="40" value="<%= c.empty %>"></div></div>
+        <% } %>
+        <% if (t === 'viewers') { %>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Count</legend></div>
+            <div class="cf-row-control sb-checks"><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="twitch"<%= _on(c.platforms.includes('twitch')) %>> Twitch</label><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="kick"<%= _on(c.platforms.includes('kick')) %>> Kick</label><label class="sb-check"<%= form.youtube ? '' : ' hidden' %>><input type="checkbox" data-cfg="platforms" data-multi value="youtube"<%= _on(c.platforms.includes('youtube')) %>> YouTube</label></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-vw-mode">Show</label><p class="cf-row-desc">Updated every 30 seconds.</p></div>
+            <div class="cf-row-control"><select id="sbo-vw-mode" data-cfg="mode"><%- _opts([{ value: 'total', label: 'One number, added up' }, { value: 'each', label: 'Each platform with its sign' }], c.mode) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-vw-label">Label</label><p class="cf-row-desc">Before the added-up number. Empty shows the number only.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-vw-label" data-cfg="label" maxlength="40" value="<%= c.label %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-vw-hide">Hide while offline</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-vw-hide" data-cfg="hideOffline"<%= _on(c.hideOffline) %>></div></div>
+        <% } %>
+        <% if (t === 'heartrate') { %>
+        <div class="cf-row"><div class="cf-row-text"><span class="cf-row-label">Where the number comes from</span><p class="cf-row-desc">Your watch, through CertiFried Studio (Studio, Heart rate). With a Pulsoid token on the Connections page, Pulsoid fills in when the watch has sent nothing for 10 seconds.</p></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-label">Text after the number</label><p class="cf-row-desc">Empty shows the number only.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-hr-label" data-cfg="label" maxlength="20" value="<%= c.label %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-heart">A heart that beats with it</label><p class="cf-row-desc">In the accent colour, once per heartbeat.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-hr-heart" data-cfg="showHeart"<%= _on(c.showHeart) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-graph">Graph</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-hr-graph" data-cfg="showGraph"<%= _on(c.showGraph) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-gsec">Graph covers (seconds)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-hr-gsec" data-cfg="graphSec" min="10" max="120" value="<%= c.graphSec %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-gw">Graph width (px)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-hr-gw" data-cfg="graphWidth" min="120" max="900" value="<%= c.graphWidth %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-stats">Low, average and high</label><p class="cf-row-desc">For this stream. They start again when you go live.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-hr-stats" data-cfg="showStats"<%= _on(c.showStats) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-zones">Colour the number by zone</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-hr-zones" data-cfg="zones"<%= _on(c.zones) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-warm">Amber from (BPM)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-hr-warm" data-cfg="warmAt" min="40" max="240" value="<%= c.warmAt %>"> <input type="color" aria-label="Amber colour" data-cfg="warmColor" value="<%= c.warmColor %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-hot">Red from (BPM)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-hr-hot" data-cfg="hotAt" min="40" max="240" value="<%= c.hotAt %>"> <input type="color" aria-label="Red colour" data-cfg="hotColor" value="<%= c.hotColor %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hr-hide">Hide after no reading for (seconds)</label><p class="cf-row-desc">0 keeps the last number on screen.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-hr-hide" data-cfg="hideAfterSec" min="0" max="600" value="<%= c.hideAfterSec %>"></div></div>
+        <% } %>
+        <% if (t !== 'nowplaying' && t !== 'scene' && t !== 'emotewall') { %>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-font">Font</label><p class="cf-row-desc">Fonts every Windows PC has, so OBS shows them without downloading anything.</p></div>
             <div class="cf-row-control"><select id="sbo-font" data-cfg="<%= gp %>font"><%- _opts(form.fonts, g.font) %></select></div></div>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-size"><%= t === 'canvas' ? 'Default text size (px)' : 'Text size (px at 1080p)' %></label></div>
@@ -153,7 +320,7 @@
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-accent">Accent colour</label><p class="cf-row-desc"><%= t === 'alerts' ? "The viewer's name and the message line." : 'Highlights.' %></p></div>
             <div class="cf-row-control"><input type="color" id="sbo-accent" data-cfg="<%= gp %>accentColor" value="<%= g.accentColor %>"></div></div>
         <% } %>
-        <% if (t === 'goal') { %>
+        <% if (['goal', 'train', 'poll'].includes(t)) { %>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-bar">Bar colour</label></div>
             <div class="cf-row-control"><input type="color" id="sbo-bar" data-cfg="barColor" value="<%= c.barColor %>"></div></div>
         <% } %>
@@ -172,13 +339,13 @@
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ttsvol">Read-aloud volume</label></div>
             <div class="cf-row-control"><input type="number" id="sbo-ttsvol" data-cfg="general.ttsVolume" min="0" max="100" value="<%= c.general.ttsVolume %>"></div></div>
         <% } %>
-        <% if (['chat', 'events', 'goal', 'counter', 'nowplaying'].includes(t)) { %>
+        <% if (['chat', 'events', 'goal', 'counter', 'nowplaying', 'train', 'tipjar', 'poll', 'labels', 'viewers', 'heartrate'].includes(t)) { %>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pos">Where on screen</label></div>
             <div class="cf-row-control"><select id="sbo-pos" data-cfg="position"><%- _opts(form.positions, c.position) %></select></div></div>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-margin">Distance from the edge (px)</label></div>
             <div class="cf-row-control"><input type="number" id="sbo-margin" data-cfg="margin" min="0" max="400" value="<%= c.margin %>"></div></div>
         <% } %>
-        <% if (['chat', 'events', 'goal'].includes(t)) { %>
+        <% if (['chat', 'events', 'goal', 'train', 'poll'].includes(t)) { %>
         <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-width">Width (px)</label></div>
             <div class="cf-row-control"><input type="number" id="sbo-width" data-cfg="width" min="160" max="1920" value="<%= c.width %>"></div></div>
         <% } %>

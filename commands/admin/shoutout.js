@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } from 'discord.
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { themeColor } from '../../core/guild-theme.js';
+import { findBlockedStreamer } from '../../core/streamer-blocklist.js';
 
 export default {
     category: 'admin',
@@ -174,6 +175,10 @@ async function handleAdd(interaction, guildId, shoutoutChannelId) {
             const twitchUser = await getTwitchUser(username);
             if (!twitchUser) {
                 failed.push({ username, reason: 'not found on Twitch' });
+                continue;
+            }
+            if (await findBlockedStreamer(guildId, { platform: 'twitch', platformUserId: twitchUser.id, username: twitchUser.login })) {
+                failed.push({ username: twitchUser.login, reason: "on this server's blocked streamers list (dashboard: Blocked streamers)" });
                 continue;
             }
 

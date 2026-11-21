@@ -8,8 +8,10 @@
  * Files live outside git in STUDIO_DOWNLOADS_DIR (default /home/death/certifried-downloads/studio). Only names on
  * the whitelist below are served: latest.yml, SHA256SUMS.txt, CertiFried-Studio-Setup-<semver>.exe (+ .blockmap)
  * CertiFried-Studio-Portable-<semver>.exe and the Stream Deck plugin CertiFried-StreamDeck-<semver>.streamDeckPlugin (Phase 5;
- * shown on the page when one with Studio's version is there). Nothing from the request reaches the file system except a name
- * that matched the whitelist.
+ * shown on the page when one with Studio's version is there), and (Studio 0.2.12) CertiFried-Studio-Voice-CUDA-<tag>.zip: the
+ * graphics card part of Studio's Whisper voice recognition (ggml-cuda.dll, 88 MB, too big for the installer), which Studio
+ * downloads on first use and checks against the SHA-256 built into it. Not listed on the page. Nothing from the request reaches
+ * the file system except a name that matched the whitelist.
  *
  * The page reads the version and release date from latest.yml and the SHA-256 of each build from SHA256SUMS.txt
  * (`<sha256>  <file name>` per line); when that file is missing it hashes the builds itself, cached by size and
@@ -36,6 +38,7 @@ const FILES = [
     { re: new RegExp(`^CertiFried-Studio-Setup-${SEMVER}\\.exe\\.blockmap$`), type: 'application/octet-stream' },
     { re: new RegExp(`^CertiFried-Studio-Portable-${SEMVER}\\.exe$`), type: 'application/vnd.microsoft.portable-executable', download: true },
     { re: new RegExp(`^CertiFried-StreamDeck-${SEMVER}\\.streamDeckPlugin$`), type: 'application/octet-stream', download: true },
+    { re: /^CertiFried-Studio-Voice-CUDA-\d{1,4}\.\d{1,4}\.\d{1,6}-[0-9A-Za-z.]{1,30}-b\d{1,4}\.zip$/, type: 'application/zip' },
 ];
 
 /** The whitelist entry for a requested name, or null. */

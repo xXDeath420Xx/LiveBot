@@ -20,6 +20,7 @@ import { safeFetch } from '../utils/safe-fetch.js';
 import { themeColor } from './guild-theme.js';
 import { buildFeedContent, titlePasses } from './feed-message.js';
 import { pollsGuild } from './guild-presence-logic.js';
+import { resolveFeedTarget } from './feed-target.js';
 
 export const RSS_MAX_PER_GUILD = 10;
 const SEEN_KEEP = 150;
@@ -162,9 +163,11 @@ export async function processRssFeed(feed, client) {
             return;
         }
         const guild = client.guilds.cache.get(feed.guild_id);
-        const channel = guild ? await guild.channels.fetch(feed.channel_id).catch(() => null) : null;
+        const { channel, problem } = guild
+            ? await resolveFeedTarget(client, feed.channel_id, { guildId: feed.guild_id })
+            : { channel: null, problem: 'the bot is not in this server' };
         if (!channel) {
-            logger.warn(`[RssFeed] Feed ${feed.id}: channel ${feed.channel_id} not found`);
+            logger.warn(`[RssFeed] Feed ${feed.id}: ${problem}`);
             return;
         }
         const name = feed.feed_title || feedTitle || new URL(feed.feed_url).hostname;

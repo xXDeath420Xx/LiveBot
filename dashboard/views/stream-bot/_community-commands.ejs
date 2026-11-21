@@ -1,0 +1,20 @@
+<%# The chat commands of one Community group. Locals: commands [{ name, command, id, enabled }], group, title, desc (optional). The button runs in /js/stream-bot-community.js. %>
+<% const _made = commands.filter((c) => c.id).length; const _gid = 'sbc-cmd-' + group; %>
+<section class="cf-section" aria-labelledby="<%= _gid %>-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="<%= _gid %>-title"><%= title %></h2>
+        <p class="cf-section-desc"><%= typeof desc !== 'undefined' && desc ? desc : 'Each command is an automation you can switch on, rename or give a different cooldown on Automations. They are added switched off.' %></p></div>
+        <div class="cf-section-actions"><% if (_made < commands.length) { %><button type="button" class="btn btn-primary btn-sm" data-add-commands="<%= group %>"><%= _made ? 'Add the missing commands' : 'Add the chat commands' %></button><% } %></div></header>
+    <div class="cf-rows">
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">Command</th><th scope="col">Automation</th><th scope="col">State</th></tr></thead>
+                <tbody>
+                    <% commands.forEach((c) => { %>
+                    <tr><td><code><%= c.command %></code></td><td><% if (c.id) { %><a href="/stream/bot/automations/<%= c.id %>"><%= c.name %></a><% } else { %><span class="cf-cell-muted">Not added</span><% } %></td><td><%= c.id ? (c.enabled ? 'On' : 'Off') : '' %></td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <p class="cf-status-line" data-commands-status="<%= group %>" role="status" aria-live="polite"></p>
+    </div>
+</section>

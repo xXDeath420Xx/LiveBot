@@ -449,7 +449,10 @@ test('the grant asks for chat moderation and shoutouts, still never follows or r
     for (const s of FORBIDDEN_SCOPES) assert.equal(STREAM_BOT_SCOPES.includes(s), false);
     assert.equal(STREAM_BOT_SCOPES.some((s) => /follows|^analytics:|revenue|payout|subscriptions:read|user:read:subscriptions/.test(s)), false);
     const old = 'bits:read channel:edit:commercial channel:manage:broadcast channel:manage:polls channel:manage:predictions channel:manage:raids channel:manage:redemptions channel:read:ads channel:read:hype_train channel:read:redemptions channel:read:subscriptions clips:edit moderator:manage:announcements moderator:read:followers user:bot user:read:chat'.split(' ');
-    assert.deepEqual(reapproveNeeded(old), ['Clear chat, Delete messages', 'Shoutouts', 'Twitch blocked terms from imported banned words', 'Watch time for viewers who do not chat']);
+    assert.deepEqual(reapproveNeeded(old), ['Clear chat, Delete messages', 'Shoutouts', 'Twitch blocked terms from imported banned words', 'Watch time for viewers who do not chat', 'Send chat messages as you', 'Time out and ban from the chat dock',
+        // Wave 2 group A (2026-11-20, core/stream-bot/control).
+        'Ban, timeout and unban triggers', 'Moderator added or removed trigger', 'AutoMod held a message trigger', 'Suspicious user trigger', 'Change chat modes',
+        'Add or remove VIPs', 'Add or remove moderators', 'Shield mode', 'Warn viewers', 'Creator goal triggers', 'Snooze ads']);
     assert.ok(STREAM_BOT_SCOPES.includes('moderator:read:chatters'), 'H-747: the chatters list counts watch time for viewers who do not chat');
     assert.ok(STREAM_BOT_SCOPES.includes('moderator:manage:blocked_terms'), 'H-763: the Import page can add banned words to Twitch blocked terms');
     assert.deepEqual(reapproveNeeded(STREAM_BOT_SCOPES), []);

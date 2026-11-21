@@ -38,6 +38,25 @@ them before reusing the files outside CertiFried.
 
 See also `services/certifried-bot/defender/data/NOTICE.md` and `SOURCE.txt` in the same folder.
 
+## Your voice (own-voice feature, invite-only)
+
+Used by `core/voice-clone/**`, `services/voice-sidecar/**` and the training worker in `windows/voice-worker/`. The models are
+downloaded on the server or the training PC and are not in git. Public credits: `/legal/voice#credits`.
+
+| Component | Origin | Licence | Notes |
+|---|---|---|---|
+| Base voice checkpoint `en/en_US/libritts_r/medium/best.ckpt` (SHA-256 `e0f93367abeb352bdc2190415a8b8a98f6128cfc0f549407aa80aca80bcbc1af`) | [rhasspy/piper-checkpoints](https://huggingface.co/datasets/rhasspy/piper-checkpoints), trained on [LibriTTS-R](https://www.openslr.org/141/) (Koizumi, Zen, Karita, Ding, Yatabe, Morioka, Bacchiani, Zhang, Han, Bapna, 2023; derived from LibriTTS / LibriSpeech / LibriVox) | CC BY 4.0 | Every own voice is fine-tuned from it (modified: further trained on one person's recordings). Attribution on `/legal/voice#credits`. |
+| [piper1-gpl](https://github.com/OHF-Voice/piper1-gpl) training code | Open Home Foundation | GPL-3.0-or-later | Run as a separate program on the training PC (WSL `~/voice-lab/venv-piper`); not linked into CertiFried. |
+| [Piper](https://github.com/rhasspy/piper) runtime on the server | Rhasspy | MIT | Already used for stock voices (`utils/piper-worker.js`). |
+| [AudioSeal](https://github.com/facebookresearch/audioseal) 0.2.1, `audioseal_wm_16bits` / `audioseal_detector_16bits` | Meta | MIT (code and weights since 0.2) | Watermark on every own-voice clip; internal detection tool on `/super-admin/voice`. |
+| [ReDimNet](https://github.com/IDRnD/ReDimNet) b2 / ft_lm / vox2 | ID R&D | MIT (code). The weights are downloaded from the same repository's releases with no separate licence stated; they were trained on VoxCeleb2, whose data is CC BY 4.0 | Speaker verification, model 1 of 2. Internal checks only; nothing derived from it is published. Open item: confirm the weights' terms with ID R&D. |
+| [SpeechBrain spkrec-ecapa-voxceleb](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb) | SpeechBrain | Apache-2.0 | Speaker verification, model 2 of 2. |
+| [whisper.cpp](https://github.com/ggerganov/whisper.cpp) with Whisper small.en | ggml / OpenAI | MIT | Live-check transcripts (already installed for voice transcription). |
+| `core/voice-clone/prompts.json` | Sentences from Project Gutenberg public-domain books | Public domain | No Project Gutenberg trademark text is included. |
+| LibriSpeech dev-clean (calibration only, not shipped) | Panayotov, Chen, Povey, Khudanpur ([openslr.org/12](https://www.openslr.org/12)) | CC BY 4.0 | `services/voice-sidecar/calibrate.py`; results in `core/voice-clone/thresholds.json`. |
+
+No zero-shot voice-cloning model is used (owner decision 2026-11-20).
+
 ## Not published in this repository
 
 These are used by the hosted service but are left out of the public repo because CertiFried has no

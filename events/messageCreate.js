@@ -764,6 +764,10 @@ export default {
             });
           }
         }
+
+        // AI moderation (core/ai-moderation.js): messages every filter above let through. Cheap signals run here and
+        // a model is asked only when they are ambiguous. Not awaited, so the AI never delays the rest of this handler.
+        import('../core/ai-moderation.js').then(m => m.screenMessage(message)).catch(() => {});
       }
 
       // Award XP for messages (leveling system) - only if enabled for this guild

@@ -240,11 +240,12 @@ test('mapper: plain replies go to channel commands, the rest to automations; bui
     assert.equal(t1.target.system, 'bot_timer');
     assert.deepEqual(t1.target.timer, { name: 'Discord', intervalMin: 15, onlyLive: false, minChatLines: 0, platforms: 'twitch', rotation: 'rotate', messages: ['Join the grove on Discord'], automationRef: null });
     assert.deepEqual(by('Dice').target.timer.messages, ['You rolled {random:1-6}']);
-    // power-ups: matched by Bits cost through the Firebot power-up definition with the same id
+    // custom power-ups (Streamer.bot 496): matched by the power-up's id (EventSub custom_power_up.reward_id, 2026-11-20)
     const confetti = by('Confetti thanks', 'streamerbot');
     assert.equal(confetti.target.draft.trigger_type, 'bits.used');
-    assert.equal(confetti.target.draft.trigger_config.bitsKind, 'power_up');
-    assert.deepEqual(confetti.target.draft.conditions, [{ type: 'amount', min: 500, max: 500, currency: 'bits' }]);
+    assert.equal(confetti.target.draft.trigger_config.bitsKind, 'custom_power_up');
+    assert.deepEqual(confetti.target.draft.conditions, [{ type: 'metadata', path: 'powerUpId', op: 'eq', value: 'p1' }]);
+    assert.ok(confetti.why.some((w) => /"Confetti" \(500 Bits\)/.test(w)));
     assert.deepEqual(confetti.target.draft.actions, [{ type: 'stream.announce', text: 'Confetti for {user.name}!', color: 'purple' }]);
     // counter update effects: "Counter or variable changed" on the counter's key
     const deaths = by('Counter Deaths changed');
@@ -341,4 +342,92 @@ test('Firebot Hue and Elgato effects and Streamer.bot Lumia sub-actions become l
     assert.ok(sb.gaps.every((g) => /Streamer\.bot sub-action LumiaStream/.test(g.detail)));
     assert.equal(validateActions(sb.actions).ok, true);
     for (const k of ['light.effect', 'light.hue_scene', 'lumia.command', 'lumia.default']) assert.ok(GAPS[k], k);
+});
+
+// Streamer.bot state numbers (2026-11-20). The owner's "Go Live" ({"type":33,"state":1}) reads "Start Streaming" in Streamer.bot's
+// UI; the importer had it as Stop. Evidence for every number is in convertSubActions (core/stream-bot/import/streamerbot.js).
+test('Streamer.bot "Go Live": message, clear chat, START streaming, scene START (type 33 state 1 is Start)', async () => {
+    const { convertSubActions } = await import('../core/stream-bot/import/streamerbot.js');
+    const { validateActions } = await import('../core/stream-bot/actions.js');
+    const { attentionFor } = await import('../core/stream-bot/switchover.js');
+    // The owner's sub-actions, in their order (listed out of order to check they are sorted by index).
+    const out = convertSubActions([
+        { type: 33, index: 2, state: 1, enabled: true },
+        { type: 10, index: 0, text: '!reset', useBot: true, enabled: true },
+        { type: 34, index: 3, sceneName: 'START', enabled: true },
+        { type: 510, index: 1, enabled: true },
+    ]);
+    assert.deepEqual(out.actions, [
+        { type: 'chat.send', platform: 'twitch', text: '!reset', _commandText: '!reset' },
+        { type: 'chat.clear' },
+        { type: 'obs.stream', state: 'start' },
+        { type: 'obs.scene', scene: 'START' },
+    ]);
+    assert.deepEqual(out.gaps, []);
+    assert.equal(out.notes.some((n) => /stop/i.test(n)), false, 'no "Stop streaming" note');
+    const { _commandText, ...send } = out.actions[0];
+    assert.equal(validateActions([send, ...out.actions.slice(1)]).ok, true);
+    // Nothing about it holds it back at the switchover.
+    assert.deepEqual(attentionFor({ actions: out.actions }, { notes: out.notes }), []);
+});
+
+test('Streamer.bot streaming state: 0 is Stop (held at the switchover), other numbers are not guessed', async () => {
+    const { convertSubActions, SB_STREAMING } = await import('../core/stream-bot/import/streamerbot.js');
+    const { attentionFor } = await import('../core/stream-bot/switchover.js');
+    assert.deepEqual({ ...SB_STREAMING }, { 0: 'stop', 1: 'start' });
+    const stop = convertSubActions([{ type: 33, index: 0, state: 0 }]);
+    assert.deepEqual(stop.actions, [{ type: 'obs.stream', state: 'stop' }]);
+    assert.ok(stop.notes.some((n) => /Stop streaming; check that is what you want/.test(n)));
+    assert.ok(attentionFor({ actions: stop.actions }, { notes: stop.notes }).includes('It stops your stream.'));
+    for (const state of [2, 7, undefined, 'x']) {
+        const odd = convertSubActions([{ type: 33, index: 0, state }]);
+        assert.deepEqual(odd.actions, [], `state ${state}`);
+        assert.equal(odd.gaps.length, 1);
+        assert.match(odd.gaps[0].detail, /ObsStreaming \(33\) \(state /);
+    }
+});
+
+test('Streamer.bot source visibility: 0 show, 1 hide, 2 toggle ("Kill Counters" / "Lets Have Counters")', async () => {
+    const { convertSubActions } = await import('../core/stream-bot/import/streamerbot.js');
+    const kill = convertSubActions([{ type: 401, index: 0, sceneName: 'IN-GAME', sourceName: 'Firebot', state: 1, display: '' }]);
+    const have = convertSubActions([{ type: 401, index: 0, sceneName: 'IN-GAME', sourceName: 'Firebot', state: 0, display: '' }]);
+    const flip = convertSubActions([{ type: 30, index: 0, sceneName: 'IN-GAME', sourceName: 'Cam', state: 2 }]);
+    assert.deepEqual(kill.actions, [{ type: 'obs.source', scene: 'IN-GAME', source: 'Firebot', visible: 'hide' }]);
+    assert.deepEqual(have.actions, [{ type: 'obs.source', scene: 'IN-GAME', source: 'Firebot', visible: 'show' }]);
+    assert.deepEqual(flip.actions, [{ type: 'obs.source', scene: 'IN-GAME', source: 'Cam', visible: 'toggle' }]);
+});
+
+test('Streamer.bot mute: 0 mute, 1 unmute, 2 toggle ("I\'m HERE" unmutes with 1, the "Toggle" actions use 2)', async () => {
+    const { convertSubActions } = await import('../core/stream-bot/import/streamerbot.js');
+    const st = (type, state) => convertSubActions([{ type, index: 0, sceneName: 'IN-GAME', sourceName: 'Base Mic', state }]).actions[0]?.state;
+    for (const type of [42, 413]) {
+        assert.equal(st(type, 0), 'mute');
+        assert.equal(st(type, 1), 'unmute');
+        assert.equal(st(type, 2), 'toggle');
+    }
+});
+
+test('Streamer.bot replay buffer: 0 start, 1 stop, 2 save; filters: 0 on, 1 off, 2 toggle; recording stays a gap', async () => {
+    const { convertSubActions, SB_REPLAY } = await import('../core/stream-bot/import/streamerbot.js');
+    const { validateActions } = await import('../core/stream-bot/actions.js');
+    assert.deepEqual({ ...SB_REPLAY }, { 0: 'start', 1: 'stop', 2: 'save' });
+    const rb = convertSubActions([0, 1, 2, 9].map((state, index) => ({ type: 321, index, state })));
+    assert.deepEqual(rb.actions, [{ type: 'obs.replay', state: 'start' }, { type: 'obs.replay', state: 'stop' }, { type: 'obs.replay', state: 'save' }]);
+    assert.equal(rb.gaps.length, 1, 'an unknown replay buffer state is not guessed');
+    const f = convertSubActions([
+        { type: 35, index: 0, sceneName: 'IN-GAME', sourceName: 'Cam', filterName: 'Blur', state: 0 },
+        { type: 35, index: 1, sceneName: 'IN-GAME', sourceName: 'Cam', filterName: 'Blur', state: 1 },
+        { type: 47, index: 2, sceneName: 'BRB', filterName: 'Fade', state: 2 },
+        { type: 35, index: 3, sceneName: 'IN-GAME', state: 0 },
+    ]);
+    assert.deepEqual(f.actions, [
+        { type: 'obs.filter', source: 'Cam', filter: 'Blur', state: 'enable' },
+        { type: 'obs.filter', source: 'Cam', filter: 'Blur', state: 'disable' },
+        { type: 'obs.filter', source: 'BRB', filter: 'Fade', state: 'toggle' },
+    ]);
+    assert.equal(f.gaps.length, 1, 'a filter step without source and filter names is a gap');
+    assert.equal(validateActions([...rb.actions, ...f.actions]).ok, true);
+    const rec = convertSubActions([{ type: 45, index: 0, state: 1 }, { type: 415, index: 1, state: 0 }]);
+    assert.deepEqual(rec.actions, []);
+    assert.deepEqual(rec.gaps.map((g) => g.gap), ['unknown.effect', 'unknown.effect']);
 });

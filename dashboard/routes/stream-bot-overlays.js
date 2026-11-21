@@ -12,8 +12,10 @@
  *          DELETE /stream/bot/api/overlays/media/:fileId
  *          PUT    /stream/bot/api/overlays/:id               { name, config } (open pages restyle at once)
  *          POST   /stream/bot/api/overlays/:id/key           a new URL; the old one stops at once
- *          POST   /stream/bot/api/overlays/:id/test          { alert, amount } an alert box Test button
+ *          POST   /stream/bot/api/overlays/:id/test          { alert, amount } an alert box Test button; any other type: invented frames
  *          POST   /stream/bot/api/overlays/:id/goal          { mode: add|set, value } a goal's progress
+ *          POST   /stream/bot/api/overlays/:id/chat-poll     { action: start|end, title, options, durationSec } a chat poll (Poll widget)
+ *          POST   /stream/bot/api/overlays/:id/tipjar        { mode: 'reset' } empty a tip jar
  *          DELETE /stream/bot/api/overlays/:id
  *   Overlay (no session: the overlay key in the path is the credential; CSRF-exempt per type in server.js; rate limited per IP)
  *          GET  /stream/bot/overlay/:type/:key               the page for OBS (?preview=1 on the dashboard)
@@ -23,7 +25,9 @@
  *          GET  /stream/bot/overlay/:type/:key/sound/:id     a sound from the stream bot sound library
  *          GET  /stream/bot/overlay/:type/:key/media/:id     an image or video from the overlay media
  *          GET  /stream/bot/overlay/:type/:key/tts/:id       a message read aloud (WAV)
- *          GET  /stream/bot/overlay/chat/:key/img/:kind/:a/:b?  an emote or badge, through this server
+ *          GET  /stream/bot/overlay/chat|emotewall/:key/img/:kind/:a/:b?  an emote or badge, through this server
+ *          GET  /stream/bot/overlay/labels/:key/text/:label  one stream label as plain text (latest_follower, latest_sub, latest_tip,
+ *                                                            top_cheer), for tools that read a text address into an OBS text source
  *
  * /stream/bot/overlay/music/<key> belongs to dashboard/routes/stream-bot-music.js: these routes pass any type that is not
  * an overlay type on with next(). Literal paths come before /:param paths.
@@ -36,6 +40,7 @@ import {
     OVERLAY_TYPES, ALERT_KINDS, ALERT_KEYS, POSITIONS, POSITION_LABEL, FONTS, LAYOUTS, LAYOUT_LABEL, ANIMATIONS, ANIMATION_LABEL, PLATES, PLATE_LABEL,
     GOAL_METRICS, GOAL_LABEL, EVENT_LIST_TYPES, LIMITS, overlayType, isOverlayType, validateConfig,
     TITLE_STYLES, TITLE_STYLE_LABEL, GLOW_STYLES, GLOW_STYLE_LABEL, SCENE_LIMITS, NOWPLAYING_BACKGROUNDS, NOWPLAYING_BACKGROUND_LABEL,
+    LABEL_KEYS, LABEL_TITLE, TIPJAR_SOURCES, TIPJAR_SOURCE_LABEL, CREDIT_SECTIONS, CREDIT_TITLE, WIDGET_LIMITS,
 } from '../../core/stream-bot/overlays/config.js';
 import { isOverlayKeyShape, keyHash, setOverlayHeaders, openSse } from '../../core/stream-bot/overlays/http.js';
 import { MEDIA_LIMITS } from '../../core/stream-bot/overlays/media.js';
@@ -93,15 +98,25 @@ function summaryOf(o) {
     const c = o.config || {};
     switch (o.type) {
         case 'alerts': return `${ALERT_KEYS.filter((k) => c.alerts?.[k]?.enabled).length} of ${ALERT_KEYS.length} alerts on`;
-        case 'chat': return `${(c.platforms || []).map((p) => (p === 'kick' ? 'Kick' : 'Twitch')).join(' and ')}, up to ${c.maxMessages} lines`;
+        case 'chat': return `${andList((c.platforms || []).map(platformName))}, up to ${c.maxMessages} lines`;
         case 'events': return `The last ${c.max} events`;
         case 'goal': return `${c.title}: ${Number(o.state?.current) || 0} of ${c.target}`;
         case 'counter': return `${c.label || c.key} ({sdb:get:${c.key}})`;
         case 'nowplaying': return 'The song request playing now';
         case 'scene': return [c.title, c.countdown?.enabled ? `a ${c.countdown.minutes}-minute countdown` : '', c.background ? 'your artwork' : ''].filter(Boolean).join(', ') || 'A full-screen scene';
+        case 'train': return andList([c.showHype ? 'Hype train' : '', c.showSubTrain ? `sub train (${c.subTrainSec} s between subs)` : ''].filter(Boolean)) || 'Nothing ticked';
+        case 'tipjar': return `${c.title || 'Tip jar'}: ${Number(o.state?.total) || 0} of ${c.target}`;
+        case 'credits': return `${c.sections.length} sections, ${c.durationSec} s`;
+        case 'emotewall': return `${andList((c.platforms || []).map(platformName))}${c.thirdParty ? ', with 7TV, BTTV and FFZ' : ''}`;
+        case 'poll': return andList([c.twitchPolls ? 'Twitch polls' : '', c.predictions ? 'predictions' : '', c.chatPolls ? 'chat polls' : ''].filter(Boolean)).replace(/^./, (x) => x.toUpperCase()) || 'Nothing ticked';
+        case 'labels': return andList(c.items.map((k) => LABEL_TITLE[k].toLowerCase())).replace(/^./, (x) => x.toUpperCase());
+        case 'viewers': return `${c.mode === 'each' ? 'One by one' : 'Added up'}: ${andList((c.platforms || []).map(platformName))}`;
+        case 'heartrate': return andList(['the number', c.showHeart ? 'a beating heart' : '', c.showGraph ? `a ${c.graphSec}-second graph` : '', c.showStats ? "this stream's low, average and high" : ''].filter(Boolean)).replace(/^./, (x) => x.toUpperCase());
         default: return 'Text and images from automations';
     }
 }
+const platformName = (p) => ({ twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' }[p] || p);
+function andList(list) { return list.length < 2 ? (list[0] || '') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`; }
 export const mediaView = (m) => ({ id: m.id, name: m.name, kind: m.kind, mime: m.mime, size: m.size, createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : null });
 
 /** What the settings forms offer (static lists). */
@@ -114,12 +129,17 @@ export const FORM = Object.freeze({
     animations: ANIMATIONS.map((v) => ({ value: v, label: ANIMATION_LABEL[v] })),
     plates: PLATES.map((v) => ({ value: v, label: PLATE_LABEL[v] })),
     goalMetrics: GOAL_METRICS.map((v) => ({ value: v, label: GOAL_LABEL[v] })),
-    eventTypes: EVENT_LIST_TYPES.map((t) => ({ value: t, label: eventType(t)?.label || t })),
+    // kicks.gifted is registered by core/stream-bot/control after this file loads, so it has its label here.
+    eventTypes: EVENT_LIST_TYPES.map((t) => ({ value: t, label: eventType(t)?.label || ({ 'kicks.gifted': 'Kicks gifted' })[t] || t })),
     titleStyles: TITLE_STYLES.map((v) => ({ value: v, label: TITLE_STYLE_LABEL[v] })),
     glowStyles: GLOW_STYLES.map((v) => ({ value: v, label: GLOW_STYLE_LABEL[v] })),
     npBackgrounds: NOWPLAYING_BACKGROUNDS.map((v) => ({ value: v, label: NOWPLAYING_BACKGROUND_LABEL[v] })),
     limits: LIMITS,
     sceneLimits: SCENE_LIMITS,
+    labelKeys: LABEL_KEYS.map((v) => ({ value: v, label: LABEL_TITLE[v] })),
+    jarSources: TIPJAR_SOURCES.map((v) => ({ value: v, label: TIPJAR_SOURCE_LABEL[v] })),
+    creditSections: CREDIT_SECTIONS.map((v) => ({ value: v, label: CREDIT_TITLE[v] })),
+    widgetLimits: WIDGET_LIMITS,
 });
 
 /** FORM for this server: the YouTube alerts and the YouTube chat choice only once YouTube is set up (§13.1, §13.10). */
@@ -129,12 +149,22 @@ export function formFor(env = process.env) {
 }
 
 /** The English Piper voices installed on this server (the ones the read-aloud option offers). */
-async function ttsVoices() {
+async function ttsVoices(profileOwnerId = null) {
     try {
         const m = await import('../../utils/piper-tts.js');
+        const { ownVoiceViewerText } = await import('../../core/stream-bot/community/speech.js');
         const groups = (m.getVoiceOptions?.() || []).filter((g) => g?.engine === 'piper' && /English/.test(String(g.label)));
-        return groups.flatMap((g) => (g.voices || []).map((v) => ({ value: String(v.value), label: `${v.label} · ${String(g.label).replace(/^Piper · /, '')}` })))
-            .filter((v) => /^[a-z0-9_-]{1,50}$/i.test(v.value)).slice(0, 60);
+        const list = groups.flatMap((g) => (g.voices || []).map((v) => ({ value: String(v.value), label: `${v.label} · ${String(g.label).replace(/^Piper · /, '')}` })))
+            .filter((v) => /^[a-z0-9_-]{1,50}$/i.test(v.value))
+            .slice(0, 80);
+        const out = [];
+        for (const v of list) {
+            const owner = m.getVoiceInfo?.(v.value)?.ownerId;
+            // alert messages are other people's text: a voice trained from a real person only in its owner's profile, opted in
+            if (owner && !(await ownVoiceViewerText(v.value, owner, profileOwnerId))) continue;
+            out.push(v);
+        }
+        return out.slice(0, 60);
     } catch { return []; }
 }
 
@@ -157,7 +187,7 @@ router.get('/stream/bot/overlays/:id', needPage, pageRoute(async (req, res) => {
     if (!ov) return res.redirect('/stream/bot/overlays');
     const o = id ? await ov.ostore.get(profile.id, id) : null;
     if (!o) return res.status(404).render('error-tailwind', { user: req.user, error: 'That overlay does not exist. It may have been deleted.' });
-    const [key, mediaList, soundList, voices] = await Promise.all([ov.ostore.keyOf(profile.id, o.id), ov.media.list(profile.id), sb.sounds.list(profile.id).catch(() => []), o.type === 'alerts' ? ttsVoices() : []]);
+    const [key, mediaList, soundList, voices] = await Promise.all([ov.ostore.keyOf(profile.id, o.id), ov.media.list(profile.id), sb.sounds.list(profile.id).catch(() => []), o.type === 'alerts' ? ttsVoices(profile.ownerDiscordId) : []]);
     const status = ov.service.status(profile.id);
     res.render('stream-bot/overlay-edit', {
         user: req.user, profile, overlay: overlayView(o, status), config: o.config, state: o.state || {}, url: key ? overlayUrl(o.type, key) : null, form: formFor(),
@@ -262,7 +292,11 @@ router.post('/stream/bot/api/overlays/:id/test', needApi, apiRoute(async (req, r
     const { profile, ov } = await load(req);
     if (!ov) return notReady(res);
     const o = await ov.ostore.get(profile.id, idOf(req.params.id) || 0);
-    if (!o || o.type !== 'alerts') return res.status(404).json({ ok: false, error: 'That alert box does not exist.' });
+    if (!o) return res.status(404).json({ ok: false, error: 'That overlay does not exist.' });
+    if (o.type !== 'alerts') {
+        const r = await ov.service.testWidget(profile.id, o.id);
+        return res.json({ ok: true, sent: r.sent, message: r.sent ? 'Sent to the open overlay. Nothing was stored or counted.' : 'Nothing is showing this overlay right now. Open it in OBS or open the preview, then test again.' });
+    }
     const key = String(req.body?.alert || '');
     if (!ALERT_KINDS[key]) return res.status(400).json({ ok: false, error: 'Unknown alert.' });
     const amount = req.body?.amount === '' || req.body?.amount == null ? null : Number(req.body.amount);
@@ -279,6 +313,27 @@ router.post('/stream/bot/api/overlays/:id/goal', needApi, apiRoute(async (req, r
     if (!Number.isFinite(n) || (n < 0 && req.body?.mode !== 'add')) return res.status(400).json({ ok: false, error: 'Enter a number of 0 or more.' });
     const r = await ov.service.changeGoal(profile.id, o.id, req.body?.mode === 'add' ? 'add' : 'set', n);
     res.status(r.ok ? 200 : 400).json(r.ok ? { ok: true, current: r.current, target: r.target } : { ok: false, error: r.error });
+}));
+
+router.post('/stream/bot/api/overlays/:id/chat-poll', needApi, apiRoute(async (req, res) => {
+    const { profile, ov } = await load(req);
+    if (!ov) return notReady(res);
+    const o = await ov.ostore.get(profile.id, idOf(req.params.id) || 0);
+    if (!o || o.type !== 'poll') return res.status(404).json({ ok: false, error: 'That poll overlay does not exist.' });
+    const action = req.body?.action === 'end' ? 'end' : 'start';
+    const r = await ov.service.chatPoll(profile.id, { action, title: req.body?.title, options: req.body?.options, durationSec: req.body?.durationSec });
+    if (r.ok) logger.info(`${LOG} chat poll ${action}`, { profileId: profile.id, overlayId: o.id });
+    res.status(r.ok ? 200 : 400).json(r.ok ? { ok: true } : { ok: false, error: r.error });
+}));
+
+router.post('/stream/bot/api/overlays/:id/tipjar', needApi, apiRoute(async (req, res) => {
+    const { profile, ov } = await load(req);
+    if (!ov) return notReady(res);
+    const o = await ov.ostore.get(profile.id, idOf(req.params.id) || 0);
+    if (!o || o.type !== 'tipjar') return res.status(404).json({ ok: false, error: 'That tip jar does not exist.' });
+    if (req.body?.mode !== 'reset') return res.status(400).json({ ok: false, error: 'Unknown change.' });
+    const r = await ov.service.resetJar(profile.id, o.id);
+    res.status(r.ok ? 200 : 400).json(r.ok ? { ok: true, total: r.total } : { ok: false, error: r.error });
 }));
 
 router.delete('/stream/bot/api/overlays/:id', needApi, apiRoute(async (req, res) => {
@@ -330,7 +385,8 @@ router.get('/stream/bot/overlay/:type/:key', skipOther, pageLimiter, async (req,
         setOverlayHeaders(res);
         res.status(hit ? 200 : 404).render('stream-bot/overlay', {
             ok: !!hit, type: req.params.type,
-            pageData: hit ? JSON.stringify({ type: hit.overlay.type, base: `/stream/bot/overlay/${hit.overlay.type}/${req.params.key}`, preview: req.query.preview === '1', sound: req.query.preview !== '1' || req.query.sound === '1' }).replace(/</g, '\\u003c') : null,
+            pageData: hit ? JSON.stringify({ type: hit.overlay.type, base: `/stream/bot/overlay/${hit.overlay.type}/${req.params.key}`, preview: req.query.preview === '1', sound: req.query.preview !== '1' || req.query.sound === '1',
+                only: hit.overlay.type === 'labels' && LABEL_KEYS.includes(String(req.query.label || '')) ? String(req.query.label) : null }).replace(/</g, '\\u003c') : null,
         });
     } catch (err) {
         logger.error(`${LOG} overlay page failed`, { error: err?.message });
@@ -413,9 +469,24 @@ router.get('/stream/bot/overlay/:type/:key/tts/:id', skipOther, ttsLimiter, asyn
     }
 });
 
+router.get('/stream/bot/overlay/:type/:key/text/:label', skipOther, fileLimiter, async (req, res) => {
+    try {
+        if (req.params.type !== 'labels' || !LABEL_KEYS.includes(String(req.params.label))) return res.status(404).type('text/plain').send('');
+        const hit = await overlayFor(req);
+        if (!hit) return res.status(404).type('text/plain').send('');
+        const text = await hit.ov.service.labelText(hit.overlay, String(req.params.label));
+        setOverlayHeaders(res);
+        res.setHeader('Cache-Control', 'no-store');
+        res.type('text/plain; charset=utf-8').send(text || '');
+    } catch (err) {
+        logger.warn(`${LOG} label text failed`, { error: err?.message });
+        if (!res.headersSent) res.status(500).type('text/plain').send('');
+    }
+});
+
 router.get('/stream/bot/overlay/:type/:key/img/:kind/:a/:b?', skipOther, imgLimiter, async (req, res) => {
     try {
-        if (req.params.type !== 'chat') return res.status(404).end();
+        if (req.params.type !== 'chat' && req.params.type !== 'emotewall') return res.status(404).end();
         const hit = await overlayFor(req);
         if (!hit) return res.status(404).end();
         let channelId = null;

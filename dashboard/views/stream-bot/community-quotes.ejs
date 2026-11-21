@@ -1,0 +1,75 @@
+<%#
+  GET /stream/bot/community/quotes (dashboard/routes/stream-bot-community.js). Locals: ready, q (search), quotes (with line), counts { total, off },
+  commands. Add, Edit, Delete, On/off and "Turn on imported quotes" run in /js/stream-bot-community.js.
+%>
+<%- include('_head', { pageTitle: 'Quotes', active: 'community', sbPage: 'community-quotes' }) %>
+<link rel="stylesheet" href="/css/stream-bot-community.css">
+<% const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c'); %>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Quotes</h1>
+        <p class="cf-page-sub">Memorable lines from your streams. <code>!quote</code> shows one at random, <code>!quote 12</code> a numbered one and <code>!quote word</code> one that mentions the word. The game is filled in from your stream's category.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'community' }) %>
+<%- include('_community-nav', { section: 'quotes' }) %>
+
+<div class="cf-notice" id="sbc-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbc-msg-text"></div></div>
+<% if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Quotes start after the next CertiFried update.</div></div>
+<% } else if (counts.off) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body"><%= counts.off %> quote<%= counts.off === 1 ? ' is' : 's are' %> switched off, so chat does not see <%= counts.off === 1 ? 'it' : 'them' %>. Quotes imported from Firebot or Streamer.bot arrive switched off. <button type="button" class="btn btn-secondary btn-sm" id="sbc-quotes-enable">Turn on imported quotes</button></div></div>
+<% } %>
+
+<form id="sbc-quote-form" novalidate>
+<section class="cf-section" aria-labelledby="sbc-qadd-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-qadd-title">Add a quote</h2>
+        <p class="cf-section-desc">In chat, moderators and VIPs use <code>!addquote @name what they said</code>. Quotes from Firebot or Streamer.bot come in on the <a href="/stream/bot/import">Import</a> page.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-notice is-bad" id="sbc-errors" role="alert" tabindex="-1" hidden><div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sbc-errors-list"></ul></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-quote-text">Quote</label></div><div class="cf-row-control"><textarea id="sbc-quote-text" rows="2" maxlength="500" required></textarea></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-quote-by">Said by</label></div><div class="cf-row-control"><input type="text" id="sbc-quote-by" maxlength="100" autocomplete="off"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-quote-game">Game</label></div><div class="cf-row-control"><input type="text" id="sbc-quote-game" maxlength="100" autocomplete="off"></div></div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbc-quote-status" role="status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-primary btn-sm"<%= ready ? '' : ' disabled' %>>Add the quote</button>
+        </div>
+    </div>
+</section>
+</form>
+
+<section class="cf-section" aria-labelledby="sbc-qlist-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-qlist-title">All quotes</h2>
+        <p class="cf-section-desc"><%= counts.total %> in total<%= q ? `; showing the ones that mention "${q}"` : '' %>. Up to 5,000.</p></div></header>
+    <div class="cf-rows">
+        <form class="sb-filters" method="get" action="/stream/bot/community/quotes" role="search">
+            <label class="sr-only" for="sbc-q">Search quotes</label><input type="search" id="sbc-q" name="q" maxlength="100" value="<%= q %>" placeholder="Search text, name or game">
+            <button type="submit" class="btn btn-secondary btn-sm">Search</button><% if (q) { %> <a class="btn btn-secondary btn-sm" href="/stream/bot/community/quotes">Show all</a><% } %>
+        </form>
+        <% if (!quotes.length) { %><p class="cf-muted"><%= q ? 'No quote mentions that.' : 'No quotes yet.' %></p><% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">#</th><th scope="col">Quote</th><th scope="col">Said by</th><th scope="col">Game</th><th scope="col">State</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    <% quotes.forEach((x) => { %>
+                    <tr data-quote="<%= x.id %>">
+                        <td data-label="#"><%= x.number %></td>
+                        <td data-label="Quote"><%= x.text %><% if (x.importedFrom) { %><br><span class="cf-cell-muted">Imported from <%= x.importedFrom === 'firebot' ? 'Firebot' : x.importedFrom === 'streamerbot' ? 'Streamer.bot' : x.importedFrom %></span><% } %></td>
+                        <td data-label="Said by"><%= x.saidBy || '' %></td>
+                        <td data-label="Game"><%= x.game || '' %></td>
+                        <td data-label="State"><%= x.enabled ? 'On' : 'Off' %></td>
+                        <td><button type="button" class="btn btn-secondary btn-sm" data-quote-edit="<%= x.id %>">Edit</button> <button type="button" class="btn btn-secondary btn-sm" data-quote-toggle="<%= x.id %>"><%= x.enabled ? 'Turn off' : 'Turn on' %></button> <button type="button" class="btn btn-secondary btn-sm" data-quote-delete="<%= x.id %>" data-number="<%= x.number %>">Delete</button></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('_community-commands', { commands, group: 'quotes', title: 'Chat commands' }) %>
+
+<script type="application/json" id="sbc-data"><%- _js({ page: 'quotes', quotes: quotes.map((x) => ({ id: x.id, number: x.number, text: x.text, saidBy: x.saidBy, game: x.game, enabled: x.enabled })) }) %></script>
+<script src="/js/stream-bot-community.js" defer></script>
+<%- include('_foot') %>

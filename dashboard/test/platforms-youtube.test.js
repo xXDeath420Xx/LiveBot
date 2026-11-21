@@ -2,12 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { getAuthUrl, resolveAtGoLive } from '../services/platforms/youtube.js';
 
-test('getAuthUrl requests offline access + youtube scope', () => {
+test('getAuthUrl requests offline access + youtube.force-ssl only (never the broad youtube scope)', () => {
   const url = getAuthUrl('s1');
   assert.ok(url.startsWith('https://accounts.google.com/o/oauth2/v2/auth'));
   assert.ok(url.includes('access_type=offline'));
-  assert.ok(url.includes('youtube'));
+  assert.strictEqual(new URL(url).searchParams.get('scope'), 'https://www.googleapis.com/auth/youtube.force-ssl');
   assert.ok(url.includes('state=s1'));
+  assert.throws(() => getAuthUrl('s2', { scope: 'https://www.googleapis.com/auth/youtube' }), /not allowed/);
+  assert.throws(() => getAuthUrl('s3', { scope: 'openid email' }), /not allowed/);
 });
 
 test('resolveAtGoLive creates stream+broadcast and returns ingestion key', async () => {

@@ -38,6 +38,11 @@ import {
 
 // message-threats imports this module; importing it back lazily keeps the cycle out of module load.
 const messageThreats = () => import('./message-threats.js');
+// Local models first (core/ai-moderation.js), and the server's cloud opt-out (phishing_config.ai_mod_cloud = 'deny').
+const aiModeration = () => import('./ai-moderation.js');
+async function cloudDenied(guildId) {
+    try { return (await (await aiModeration()).getConfig(guildId)).cloudSetting === 'deny'; } catch { return false; }
+}
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const apiKey = () => process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_KEY;
@@ -164,6 +169,7 @@ function remember(key, verdict) {
 async function ask(guildId, surface, { system, parts, cacheKey }) {
     if (!isConfigured()) return { verdict: null, status: 'not_configured' };
     const key = `${surface}:${cacheKey}`;
+    if (await cloudDenied(guildId)) return { verdict: null, status: 'not_configured' };
     const m = await meterFor(guildId);
     const hit = cached(key);
     if (hit) { count(m, 'ai_cached'); return { verdict: hit, status: 'cached' }; }
@@ -234,6 +240,13 @@ export async function judgeAvatar(guildId, { memberImage, protectedImage, cacheK
 export async function judgeScamText(guildId, { text, authorName = null, detector = null, signals = [], context = [] }) {
     if (!String(text ?? '').trim()) return { verdict: null, status: 'failed' };
     const payload = buildTextPayload({ text, authorName, detector, signals, context });
+    // The owner's GPUs answer first; Gemini is only asked when neither local model gives a verdict.
+    // (No key configured still means the feature is off, as before: no request of any kind.)
+    if (!isConfigured()) return { verdict: null, status: 'not_configured' };
+    try {
+        const local = await (await aiModeration()).classifyScam(guildId, { text, context: (context || []).map(c => ({ author: !!c.author, text: c.text })), signals });
+        if (local) return { verdict: local, status: 'ok' };
+    } catch (err) { logger.debug(`[AIJudge] local check failed: ${err.message}`); }
     logger.debug(`[AIJudge] text check in ${guildId}: ${payload.slice(0, 500)}`);
     // Cached on the flagged text alone: the same scam pasted in a new channel gets the same answer.
     return ask(guildId, 'text', { system: TEXT_PROMPT, parts: [{ text: payload }], cacheKey: textKey(text) });

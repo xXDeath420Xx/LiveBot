@@ -66,6 +66,10 @@ export default {
       // One audit-log read for everything below (anti-nuke, the network, the ban log).
       const entry = await findBanEntry(guild, ban.user.id);
 
+      // AI moderation learning loop (core/ai-moderation.js): a moderator's ban confirms the member's open AI catches
+      // and marks their recent uncaught messages as misses. Bans made by this bot are skipped there.
+      import('../core/ai-moderation.js').then(m => m.onMemberBanned(guild, ban.user.id, entry?.executor?.id ?? null)).catch(() => {});
+
       // Check anti-nuke
       if (entry && ban.client.antiNukeManager) {
         await ban.client.antiNukeManager.trackBan(guild, ban.user, entry.executor);

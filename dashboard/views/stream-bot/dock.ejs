@@ -2,6 +2,9 @@
   OBS docks (dashboard/routes/stream-bot-dock.js). Locals: theme ('dark' | 'light' | 'sand'), page ('activity' |
   'controls' | 'chat' | 'denied' | 'error'), title, data. No site header or footer: this runs inside an OBS dock.
   /js/stream-bot-dock.js reads the key from the address, opens the live feed and wires the Run buttons.
+  data.chat (chat page): { enabled, platforms[], mod: { delete, ban, connected }, reconnect }; enabled only when the dock key has
+  the 'chat' capability. data.channel (controls page): { enabled, channels: [{ platform, label, title, category }] }; enabled
+  only with the 'channel' capability. Both are switched on per key on the Devices page.
 %>
 <!DOCTYPE html>
 <html lang="en" data-theme="<%= theme %>">
@@ -37,6 +40,28 @@
         <% } %>
         <p class="dock-status" id="dock-status" role="status" aria-live="polite"></p>
     </section>
+    <% const _ch = (data.channel && data.channel.channels) || []; %>
+    <% if (_ch.length) { %>
+    <section aria-labelledby="dock-chan-title">
+        <h2 class="dock-title" id="dock-chan-title">Title and category</h2>
+        <% if (!data.channel.enabled) { %>
+        <p class="dock-empty">Editing is off for this dock key. Turn it on for this key on the Devices page.</p>
+        <% } %>
+        <% _ch.forEach((c, i) => { %>
+        <form class="dock-form" data-channel-form="<%= c.platform %>" novalidate<% if (!data.channel.enabled) { %> hidden<% } %>>
+            <p class="dock-meta"><%= c.label %></p>
+            <label class="dock-label" for="dock-title-<%= i %>">Title</label>
+            <input class="dock-input" id="dock-title-<%= i %>" name="title" type="text" maxlength="140" value="<%= c.title %>" autocomplete="off">
+            <label class="dock-label" for="dock-cat-<%= i %>">Category</label>
+            <input class="dock-input" id="dock-cat-<%= i %>" name="category" type="text" maxlength="100" value="<%= c.category %>" autocomplete="off" list="dock-cats-<%= i %>" data-category-input>
+            <datalist id="dock-cats-<%= i %>"></datalist>
+            <button type="submit" class="dock-btn">Save</button>
+        </form>
+        <% if (!data.channel.enabled) { %><p class="dock-text"><span class="dock-meta"><%= c.label %></span> <%= c.title || 'No title' %><% if (c.category) { %>, <%= c.category %><% } %></p><% } %>
+        <% }) %>
+        <p class="dock-status" id="dock-channel-status" role="status" aria-live="polite"></p>
+    </section>
+    <% } %>
     <section aria-labelledby="dock-count-title">
         <h2 class="dock-title" id="dock-count-title">Counters</h2>
         <% if (!data.counters.length) { %>
@@ -54,9 +79,30 @@
     <% } else if (!data.events.length) { %>
     <p class="dock-empty" id="dock-hint">Nothing yet. New events show here as they happen.</p>
     <% } %>
+    <% const _chat = page === 'chat' && data.chat && data.chat.enabled ? data.chat : null; %>
+    <% if (_chat) { %>
+    <form class="dock-send" id="dock-send" novalidate data-chat="<%= JSON.stringify({ mod: _chat.mod, platforms: _chat.platforms }) %>">
+        <% if (!_chat.platforms.length) { %>
+        <p class="dock-empty">Link a Twitch or Kick channel on the Connections page to send chat from here.</p>
+        <% } else { %>
+        <label class="dock-label" for="dock-send-text">Send a message as you</label>
+        <div class="dock-send-row">
+            <% if (_chat.platforms.length > 1) { %>
+            <select class="dock-input dock-select" id="dock-send-platform" aria-label="Send to">
+                <% _chat.platforms.forEach((p) => { %><option value="<%= p %>"><%= p === 'kick' ? 'Kick' : 'Twitch' %></option><% }) %>
+            </select>
+            <% } else { %><input type="hidden" id="dock-send-platform" value="<%= _chat.platforms[0] %>"><% } %>
+            <input class="dock-input" id="dock-send-text" type="text" maxlength="500" autocomplete="off" placeholder="Message">
+            <button type="submit" class="dock-btn">Send</button>
+        </div>
+        <% } %>
+        <% if (_chat.mod && _chat.platforms.indexOf('twitch') !== -1 && (!_chat.mod.delete || !_chat.mod.ban)) { %><p class="dock-meta"><%= _chat.reconnect %></p><% } %>
+        <p class="dock-status" id="dock-send-status" role="status" aria-live="polite"></p>
+    </form>
+    <% } %>
     <ol class="dock-feed" id="dock-feed" data-kind="<%= page %>">
         <% data.events.forEach((e) => { %>
-        <li class="dock-item">
+        <li class="dock-item"<% if (_chat) { %> data-platform="<%= e.platform %>" data-message-id="<%= e.messageId || '' %>" data-user-id="<%= e.userId || '' %>"<% } %>>
             <% if (page === 'chat') { %>
             <span class="dock-meta"><%= e.platformLabel %></span> <span class="dock-name"><%= e.user || 'Someone' %></span> <span class="dock-text"><%= e.message || '' %></span>
             <% } else { %>

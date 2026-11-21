@@ -14,6 +14,9 @@ export default {
 
       await logMessageDelete(message);
 
+      // AI moderation learning loop: a moderator deleting a screened message (core/ai-moderation.js; not awaited).
+      import('../core/ai-moderation.js').then(m => m.onMessageDeleted(message)).catch(() => {});
+
       // Handle starboard message deletion
       if (message.client.starboardManager) {
         await message.client.starboardManager.handleMessageDelete(message);

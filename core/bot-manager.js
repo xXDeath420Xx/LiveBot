@@ -233,6 +233,14 @@ class BotManager {
 
         this.setupReconnectionHandler(client);
 
+        // Staging (/srv/staging/certifried): CF_OFFLINE_MODE=1 boots managers, schedulers and the dashboard
+        // without ever logging in to Discord (staging has no bot token and an egress guard).
+        if (process.env.CF_OFFLINE_MODE === '1') {
+            this.clients.set(this.defaultBotId, client);
+            logger.warn('[BotManager] CF_OFFLINE_MODE=1: default bot NOT logged in (staging)');
+            return client;
+        }
+
         try {
             await client.login(token);
         } catch (loginError) {

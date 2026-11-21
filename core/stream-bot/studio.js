@@ -10,7 +10,21 @@
  *                         keeps OBS VOD-safe for music only then)
  *                                        → result (throws RequestError)
  *       docks.key       a new OBS dock key for this Studio (core/stream-bot/dock.js); the previous one is revoked. 5 per 10 min.
- *       voice.phrases   the phrases of enabled 'voice.phrase' automations: [{ text, automationId, automationName }]
+ *       voice.phrases   the phrases of enabled 'voice.phrase' automations: [{ text, automationId, automationName, confidence,
+ *                       cooldownSec }] (confidence: the command's own setting or null; cooldownSec: default 10; Studio 0.2.10)
+ *       voice.log       Studio 0.2.10's voice log: { entries: [{ t, phrase, confidence, threshold, outcome, automationId, heard }],
+ *                       replace } kept in memory here, newest 200 per profile (voiceLog(profileId) / clearVoiceLog(profileId)).
+ *                       Only the matched phrase, confidence and outcome; `heard` (words that were not a command) only when the
+ *                       streamer turned on both "log all speech" and "show the words on the dashboard" in Studio.
+ *                       0.2.13: also id, closest / closestAutomationId (the command it was closest to, also for "not a
+ *                       command"), via ('phrase' | 'alias') and alias; `heard` on any outcome (Studio still sends it only
+ *                       with both switches on); markVoiceLog(profileId, id, learned) notes what the dashboard taught from it.
+ *       voice.phrases   0.2.13: each phrase also carries its automation's aliases ([{ text, count }], most frequent first),
+ *                       negatives ([text]) and trained ({ at, takes }) when it has any (voice-learn.js)
+ *       voice.learn     0.2.13, Studio only: { automationId, add: { aliases, negatives }, remove: { aliases, negatives },
+ *                       confidence, trained } saved on that voice automation (voice-learn.js learnVoice); 30 a minute
+ *
+ *   attachJobs({ hub, isLive })          one-off Studio jobs (studio-jobs.js), checked whenever a Studio reports its state
  *
  *   studioMusicStatus(hub, profileId)   { vodSafe, reason, deviceId } from the newest connected Studio's `music` report
  *                                        (vodSafe false when no Studio is connected or it has not reported yet)
@@ -24,9 +38,44 @@ import { normaliseStudio } from './events.js';
 import { createDockKeys } from './dock.js';
 import { normalisePhrase } from './conditions.js';
 import { sanitiseDevices } from './devices/state.js';
+import { cleanVoiceExamples, learnVoice, VoiceLearnError } from './voice-learn.js';
 
 export const STATE_LIMITS = Object.freeze({ scenes: 200, perScene: 200, inputs: 500, filterSources: 100, perSource: 50, sounds: 500, name: 200, bytes: 60 * 1024 });
-export const STUDIO_LIMITS = Object.freeze({ eventsPerMinute: 30, runsPer10s: 10, stateWriteMs: 30_000, runWaitMs: 10_000, dockKeysPer10min: 5, voicePhrases: 500 });
+export const STUDIO_LIMITS = Object.freeze({ eventsPerMinute: 30, runsPer10s: 10, stateWriteMs: 30_000, runWaitMs: 10_000, dockKeysPer10min: 5, voicePhrases: 500,
+    voiceLog: 200, voiceLogPer10s: 20, voiceLearnPerMinute: 30 });
+export const VOICE_OUTCOMES = Object.freeze(['fired', 'below', 'cooldown', 'noise', 'disabled']);
+export const VOICE_COOLDOWN_DEFAULT_SEC = 10;
+
+/** One voice log entry from Studio, cleaned: only these fields, capped. Null when it is not usable. */
+export function sanitiseVoiceLogEntry(e, nowMs = Date.now()) {
+    if (!e || typeof e !== 'object' || !VOICE_OUTCOMES.includes(e.outcome)) return null;
+    const t = Number(e.t);
+    const c = Number(e.confidence);
+    const th = e.threshold == null ? null : Number(e.threshold);
+    const id = Number(e.automationId);
+    const clean = (v, n) => (v == null ? null : String(v).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n) || null);
+    const out = {
+        t: Number.isFinite(t) && t > 0 && t <= nowMs + 60_000 ? Math.round(t) : nowMs,
+        phrase: e.outcome === 'noise' ? null : clean(e.phrase, 100),
+        confidence: Number.isFinite(c) ? Math.max(0, Math.min(1, Math.round(c * 1000) / 1000)) : 0,
+        threshold: th != null && Number.isFinite(th) ? Math.max(0, Math.min(1, Math.round(th * 100) / 100)) : null,
+        outcome: e.outcome,
+        automationId: Number.isInteger(id) && id > 0 ? id : null,
+        // 0.2.13: Studio sends the words only when the streamer turned on both switches, now for every outcome (the dashboard
+        // teaches from near misses and undoes wrong runs); older Studios send them only for noise
+        heard: clean(e.heard, 200),
+    };
+    // 0.2.13 fields, only when Studio sent them
+    const lineId = typeof e.id === 'string' && /^[0-9a-z-]{1,40}$/i.test(e.id) ? e.id : null;
+    if (lineId) out.id = lineId;
+    const closest = clean(e.closest, 100);
+    const cid = Number(e.closestAutomationId);
+    if (closest) { out.closest = closest; out.closestAutomationId = Number.isInteger(cid) && cid > 0 ? cid : null; }
+    if (e.via === 'alias' || e.via === 'phrase') out.via = e.via;
+    const alias = e.via === 'alias' ? clean(e.alias, 100) : null;
+    if (alias) out.alias = alias;
+    return out;
+}
 
 export class RequestError extends Error {
     constructor(code, message) { super(message || code); this.code = code; }
@@ -60,6 +109,24 @@ export function studioMusicStatus(hub, profileId) {
     const m = c.state?.music;
     if (!m) return { vodSafe: false, reason: 'CertiFried Studio has not checked the VOD audio track yet.', deviceId: c.deviceId };
     return { vodSafe: !!m.vodSafe, reason: m.vodSafe ? null : (m.reason || 'Music is not VOD-safe yet.'), deviceId: c.deviceId };
+}
+
+/** Studio's voice commands state (0.2.8): on or off, what the recogniser is doing, how many phrases and the confidence setting. */
+export function sanitiseVoice(v) {
+    if (!v || typeof v !== 'object') return null;
+    const th = Number(v.threshold);
+    return {
+        enabled: !!v.enabled,
+        state: ['off', 'starting', 'listening', 'error'].includes(v.state) ? v.state : 'off',
+        error: v.error ? String(v.error).replace(/[\u0000-\u001f]/g, ' ').slice(0, 200) : null,
+        phrases: Math.max(0, Math.min(500, Math.trunc(Number(v.phrases)) || 0)),
+        threshold: Number.isFinite(th) ? Math.max(0.2, Math.min(0.95, th)) : null,
+        // Studio 0.2.10: whether the streamer (or the switchover) ever chose the confidence, the catch-all grammar it loaded,
+        // and that it sends its voice log. Absent from older Studios.
+        ...(v.thresholdSet !== undefined ? { thresholdSet: !!v.thresholdSet } : {}),
+        ...(['garbage', 'dictation', 'none'].includes(v.catchAll) ? { catchAll: v.catchAll } : {}),
+        ...(v.voiceLog ? { voiceLog: true } : {}),
+    };
 }
 
 /** A Studio state report, cleaned and capped. Returns null when it is not an object. */
@@ -103,6 +170,7 @@ export function sanitiseState(raw) {
         music: sanitiseMusic(raw.music),
         // Phase 5: lights, Voicemeeter and the Stream Deck bridge on the PC (no network addresses; core/stream-bot/devices/state.js).
         devices: sanitiseDevices(raw.devices),
+        voice: sanitiseVoice(raw.voice),
     };
     // A last guard on size: give up the least useful parts first until it fits.
     const cuts = [
@@ -139,13 +207,14 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
     function persist(profileId, record) {
         const w = written.get(profileId) || { at: 0, json: null, timer: null };
         written.set(profileId, w);
-        const body = JSON.stringify({ obs: record.obs, sounds: record.sounds, music: record.music, devices: record.devices, deviceId: record.deviceId });
+        // voice is compared too (2026-11-20): a change of the confidence alone used to be left unsaved until something else changed.
+        const body = JSON.stringify({ obs: record.obs, sounds: record.sounds, music: record.music, devices: record.devices, voice: record.voice, deviceId: record.deviceId });
         w.pending = record;
         if (!w.timer && body === w.json) return;
         const write = () => {
             w.timer = null;
             w.at = now();
-            w.json = JSON.stringify({ obs: w.pending.obs, sounds: w.pending.sounds, music: w.pending.music, devices: w.pending.devices, deviceId: w.pending.deviceId });
+            w.json = JSON.stringify({ obs: w.pending.obs, sounds: w.pending.sounds, music: w.pending.music, devices: w.pending.devices, voice: w.pending.voice, deviceId: w.pending.deviceId });
             const rec = w.pending;
             store.setSettingsKey(profileId, 'studio', rec).catch((e) => log('warn', 'state write failed', { error: e.message }));
         };
@@ -169,7 +238,26 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
     }
 
     const lastConnect = new Map();   // deviceId -> ms; a reconnect within a minute (a network blip) is not a new event
+    const voiceLogs = new Map();     // profileId -> entries, oldest first (in memory only; Studio sends its whole list again on connect)
+    let jobs = null;
     return {
+        /** One-off Studio jobs (studio-jobs.js): checked whenever a Studio reports its state. */
+        async attachJobs({ hub, isLive, logger: jl = logger } = {}) {
+            const { createStudioJobs } = await import('./studio-jobs.js');
+            jobs = createStudioJobs({ store, hub, isLive, logger: jl, now });
+            return jobs;
+        },
+        get jobs() { return jobs; },
+        /** The voice log Studio sent, newest first. */
+        voiceLog(profileId) { return [...(voiceLogs.get(profileId) || [])].reverse(); },
+        clearVoiceLog(profileId) { voiceLogs.delete(profileId); },
+        /** 0.2.13: note on a log line what the dashboard learned from it (or null after Undo). */
+        markVoiceLog(profileId, id, learned) {
+            const e = (voiceLogs.get(profileId) || []).find((x) => x.id && x.id === id);
+            if (!e) return false;
+            if (learned) e.learned = learned; else delete e.learned;
+            return true;
+        },
         /** Studio connected (after welcome): raise studio.connected. Overlays do not count. */
         async onConnect(conn) {
             if (conn?.kind !== 'studio' || !ingest?.internal) return false;
@@ -191,6 +279,7 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
                 conn.state = state;
                 persist(conn.profileId, { ...state, deviceId: conn.deviceId, deviceName: conn.name || null, reportedAt: new Date(now()).toISOString() });
             }
+            if (jobs && conn.kind === 'studio') jobs.check(conn.profileId).catch(() => {});
             return true;
         },
 
@@ -244,14 +333,53 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
                     const seen = new Set();
                     const phrases = [];
                     for (const a of list) {
-                        for (const t of Array.isArray(a.trigger_config?.phrases) ? a.trigger_config.phrases : []) {
+                        const cfg = a.trigger_config || {};
+                        const conf = Number(cfg.confidence);
+                        const cd = Number(cfg.cooldownSec);
+                        const confidence = cfg.confidence != null && Number.isFinite(conf) && conf > 0 ? Math.max(0.2, Math.min(0.95, conf)) : null;
+                        const cooldownSec = cfg.cooldownSec != null && Number.isFinite(cd) && cd >= 0 ? Math.min(3600, Math.round(cd)) : VOICE_COOLDOWN_DEFAULT_SEC;
+                        for (const t of Array.isArray(cfg.phrases) ? cfg.phrases : []) {
                             const k = normalisePhrase(t);
                             if (!k || seen.has(k) || phrases.length >= L.voicePhrases) continue;
                             seen.add(k);
-                            phrases.push({ text: String(t).slice(0, 100), automationId: a.id, automationName: a.name });
+                            const row = { text: String(t).slice(0, 100), automationId: a.id, automationName: a.name, confidence, cooldownSec };
+                            // 0.2.13: what Studio learned about how the streamer says it (text only), when there is any
+                            const ex = cleanVoiceExamples(cfg);
+                            if (ex.aliases.length) row.aliases = ex.aliases.map((x) => ({ text: x.text, count: x.count })).sort((p, q) => q.count - p.count);
+                            if (ex.negatives.length) row.negatives = ex.negatives.map((x) => x.text);
+                            if (ex.trained) row.trained = ex.trained;
+                            phrases.push(row);
                         }
                     }
                     return { phrases };
+                }
+                case 'voice.log': {
+                    if (conn.kind !== 'studio') throw new RequestError('bad_params', 'Only CertiFried Studio sends a voice log');
+                    if (!within(conn, '_voiceLog', L.voiceLogPer10s, 10_000)) throw new RequestError('rate', 'Too many voice log updates; wait a few seconds');
+                    const t = now();
+                    const add = (Array.isArray(params?.entries) ? params.entries : []).slice(-L.voiceLog).map((e) => sanitiseVoiceLogEntry(e, t)).filter(Boolean);
+                    // what was learned from a line stays on it when Studio sends its whole list again
+                    const before = new Map((voiceLogs.get(conn.profileId) || []).filter((x) => x.id && x.learned).map((x) => [x.id, x.learned]));
+                    for (const e of add) if (e.id && before.has(e.id)) e.learned = before.get(e.id);
+                    const list = params?.replace ? add : [...(voiceLogs.get(conn.profileId) || []), ...add];
+                    if (list.length) voiceLogs.set(conn.profileId, list.slice(-L.voiceLog));
+                    else voiceLogs.delete(conn.profileId);
+                    if (voiceLogs.size > 5000) voiceLogs.clear();
+                    return { kept: (voiceLogs.get(conn.profileId) || []).length };
+                }
+                case 'voice.learn': {
+                    if (conn.kind !== 'studio') throw new RequestError('bad_params', 'Only CertiFried Studio teaches voice commands');
+                    if (!within(conn, '_voiceLearn', L.voiceLearnPerMinute, 60_000)) throw new RequestError('rate', 'Too many changes; wait a minute');
+                    const profile = await profileOf(conn);
+                    try {
+                        const r = await learnVoice(store, profile.id, params?.automationId, {
+                            add: params?.add, remove: params?.remove, confidence: params?.confidence ?? null, trained: params?.trained || null }, now());
+                        log('info', 'voice command taught', { profileId: profile.id, automationId: r.automationId, aliases: r.aliases.length, negatives: r.negatives.length });
+                        return r;
+                    } catch (e) {
+                        if (e instanceof VoiceLearnError) throw new RequestError(e.code, e.message);
+                        throw e;
+                    }
                 }
                 default:
                     throw new RequestError('unknown_method', 'Unknown method');
@@ -261,4 +389,4 @@ export function createStudioServices({ store, engine, ingest, sounds = null, log
     };
 }
 
-export default { createStudioServices, sanitiseState, sanitiseMusic, studioMusicStatus, usesStep, RequestError, STATE_LIMITS, STUDIO_LIMITS };
+export default { createStudioServices, sanitiseState, sanitiseMusic, sanitiseVoiceLogEntry, studioMusicStatus, usesStep, RequestError, STATE_LIMITS, STUDIO_LIMITS, VOICE_OUTCOMES };

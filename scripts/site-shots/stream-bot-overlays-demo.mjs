@@ -62,6 +62,8 @@ export async function overlayDemo({ root, youtube = false }) {
             countdown: { enabled: true, minutes: 5, label: 'Starting in', endText: 'Starting now' }, socials: 'twitch.tv/maplehollow · kick.com/maplehollow',
         }),
         nowplaying: cfg.withDefaults('nowplaying', { position: 'center', width: 450, titleSize: 19, background: 'cover', barColor: '#ffffff', showTimes: true, showArt: false }),
+        viewers: cfg.withDefaults('viewers', { mode: 'each' }),
+        heartrate: cfg.withDefaults('heartrate', { showStats: true }),
     };
     const extra = (type) => {
         if (rows.some((r) => r.type === type)) return rows.find((r) => r.type === type);
@@ -82,6 +84,7 @@ export async function overlayDemo({ root, youtube = false }) {
     const svc = svcMod.createOverlayService({ store: {}, ostore: {}, timers: false });
     const hello = (o, state = {}) => ['hello', { ...svc.pageConfig(o), state, preview: false }];
     const fan = 'MapleFan_88';
+    const soon = (s) => new Date(Date.now() + s * 1000).toISOString();   // timers on the page count down from now
     const frames = (type) => {
         const o = extra(type);
         switch (type) {
@@ -103,6 +106,28 @@ export async function overlayDemo({ root, youtube = false }) {
             case 'canvas': return [hello(o), ['action', { id: 'd_000000000000000000000000', action: 'overlay.text', params: { text: 'Deaths: 13', position: 'top-right', size: 'large', durationMs: 60000, animation: 'pop' } }],
                 ['action', { id: 'd_111111111111111111111111', action: 'overlay.media', params: { media: { kind: 'image', src: 'media/0f1e2d3c4b5a6978' }, position: 'bottom-right', size: 'small', durationMs: 60000, volume: 0, animation: 'fade' } }]];
             case 'scene': return [hello(o, { media: { '0f1e2d3c4b5a6978': 'image' } })];
+            case 'train': return [hello(o, { hype: { level: 2, progress: 1300, goal: 2000, total: 3400, expiresAt: soon(240), active: true }, sub: null, blocked: null }),
+                ['train', { sub: { count: 3, endsAt: soon(60), last: fan } }]];
+            case 'tipjar': return [hello(o, { total: 40, target: 100, title: 'Tip jar', label: '$40', targetLabel: '$100' }),
+                ['tipjar', { total: 45, target: 100, title: 'Tip jar', label: '$45', targetLabel: '$100', add: { amount: 5, label: '$5', name: 'Hazel' } }]];
+            case 'credits': return [hello(o, { title: 'Thanks for watching', sections: [
+                { key: 'followers', title: 'New followers', names: [{ name: 'Wren', note: '' }, { name: 'Hazel', note: '' }] },
+                { key: 'gifters', title: 'Gifted subs', names: [{ name: 'Juniper', note: '5 gifts' }] },
+                { key: 'raiders', title: 'Raiders', names: [{ name: 'BrambleByte_Live', note: '42 viewers' }] },
+                { key: 'mods', title: 'Moderators', names: [{ name: 'Pipsqueak', note: '' }] },
+            ] })];
+            case 'emotewall': return [hello(o), ['emotes', { list: ['img/tw-emote/25', 'img/7tv-emote/01FCY771D800007PQ2DF3GDTN6', 'img/bttv-emote/56e9f494fff3cc5c35e5287e'] }]];
+            case 'poll': return [hello(o, { twitch: null, prediction: null, chat: null, blocked: null }),
+                ['poll', { chat: { kind: 'chat', id: 'cp1', title: 'Which boss next?', options: [{ title: 'The Lantern Witch', votes: 12 }, { title: 'Old Maple', votes: 4 }], endsAt: soon(60), status: 'active', winner: null, voters: 16 } }]];
+            case 'labels': return [hello(o, { values: { latest_follower: { name: 'Wren', detail: '' }, latest_sub: { name: fan, detail: '' }, latest_tip: { name: 'Hazel', detail: '5.00 USD' }, top_cheer: null } }),
+                ['labels', { values: { latest_follower: { name: 'Wren', detail: '' }, latest_sub: { name: fan, detail: '' }, latest_tip: { name: 'Hazel', detail: '5.00 USD' }, top_cheer: { name: fan, detail: '1,000 Bits' } } }]];
+            case 'viewers': return [hello(o, { counts: { live: true, total: 128, platforms: { twitch: { live: true, viewers: 96 }, kick: { live: true, viewers: 32 } } } }),
+                ['viewers', { counts: { live: true, total: 131, platforms: { twitch: { live: true, viewers: 99 }, kick: { live: true, viewers: 32 } } } }]];
+            case 'heartrate': {
+                const history = Array.from({ length: 60 }, (_, i) => 92 + Math.round(i * 0.5));
+                return [hello(o, { heart: { bpm: 118, at: new Date().toISOString(), live: true, source: 'studio', min: 84, max: 131, avg: 104, count: 900, battery: 70, history } }),
+                    ['heart', { heart: { bpm: 124, at: new Date().toISOString(), live: true, source: 'studio', min: 84, max: 131, avg: 104, count: 901, battery: 70, history: [...history.slice(1), 124] } }]];
+            }
             default: return [hello(o)];
         }
     };

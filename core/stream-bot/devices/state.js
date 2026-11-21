@@ -14,7 +14,8 @@
 import { DEVICE_ID } from './catalog.js';
 
 export const DEVICE_STATE_LIMITS = Object.freeze({ lights: 200, name: 100, scenes: 100, scene: 60, profiles: 100, bytes: 24 * 1024 });
-const DRIVERS = new Set(['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra']);
+// goveeble: Govee over Bluetooth (Studio 0.2.11), with cloudId when it is also one of the streamer's Govee cloud lights.
+const DRIVERS = new Set(['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra', 'goveeble']);
 const clean = (v, max) => (typeof v === 'string' || typeof v === 'number' ? String(v).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max) : '');
 const list = (v, max, each) => [...new Set((Array.isArray(v) ? v : []).map((x) => clean(x, each)).filter(Boolean))].slice(0, max);
 const int = (v, lo, hi) => { const n = Number(v); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
@@ -31,6 +32,7 @@ function light(l) {
     return {
         id, driver, name: clean(l.name, DEVICE_STATE_LIMITS.name) || id, model: clean(l.model, 60) || null,
         online: l.online === true, needsPairing: l.needsPairing === true, kind: ['light', 'group', 'bridge'].includes(l.kind) ? l.kind : 'light',
+        ...(driver === 'goveeble' && /^govee-cloud:[A-Za-z0-9:]{1,80}$/.test(String(l.cloudId || '')) ? { cloudId: String(l.cloudId) } : {}),
         caps: { power: c.power !== false, brightness: c.brightness === true, color: c.color === true, white,
             scenes: list(c.scenes, DEVICE_STATE_LIMITS.scenes, DEVICE_STATE_LIMITS.scene), effects: list(c.effects, DEVICE_STATE_LIMITS.scenes, DEVICE_STATE_LIMITS.scene) },
     };

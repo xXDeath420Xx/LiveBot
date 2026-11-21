@@ -5,6 +5,9 @@
 //                                                  destination, and comes back to /stream/bot/connections
 //                                                  (YouTube for the bot asks only youtube.force-ssl and works once
 //                                                  GOOGLE_OAUTH_CLIENT_ID/_SECRET are set, whatever the multicast gate; H-741)
+//                                                  Any YouTube link, bot or multicast, is open only to the owner and listed
+//                                                  reviewers until Google approves the verification (core/stream-bot/youtube/gate.js;
+//                                                  the switch is on /super-admin/youtube-review); others get ?error=youtube_in_review
 //   GET    /stream/connect/:platform/callback   -> exchange code, save account, create destination
 //   GET    /stream/api/connections              -> list current user's connections
 //   DELETE /stream/api/connections/:platform    -> disconnect
@@ -15,6 +18,7 @@ import logger from '../../utils/logger.js';
 import { PLATFORM_META, getAdapter } from '../services/platforms/registry.js';
 import { accountStore } from '../services/platforms/accounts.js';
 import { youtubeBotConfig, BOT_SCOPES as YOUTUBE_BOT_SCOPES } from '../../core/stream-bot/youtube/config.js';
+import { youtubeGate } from '../../core/stream-bot/youtube/gate.js';
 
 const router = express.Router();
 const db = { query };
@@ -25,13 +29,19 @@ function ensureDiscordAuthed(req, res, next) {
   res.redirect('/auth/discord?returnTo=' + encodeURIComponent(req.query.for === 'bot' ? '/stream/bot/connections' : '/stream'));
 }
 
-router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
+/** YouTube while Google reviews the app: the owner and listed reviewers only (fails closed). */
+async function youtubeAllowed(userId) {
+  try { return await (await youtubeGate()).allows(userId); } catch { return false; }
+}
+
+router.get('/stream/connect/:platform', ensureDiscordAuthed, async (req, res) => {
   const meta = PLATFORM_META[req.params.platform];
   const back = req.query.for === 'bot' ? '/stream/bot/connections' : '/stream';
   if (!meta) return res.redirect(back + '?error=unknown_platform');
   const ytBot = req.query.for === 'bot' && meta.platform === 'youtube';
   if (ytBot && !youtubeBotConfig().enabled) return res.redirect(back + '?error=youtube_off');
   if (meta.reviewGated && !ENABLE_GATED && !ytBot) return res.redirect(back + '?error=platform_coming_soon');
+  if (meta.platform === 'youtube' && !(await youtubeAllowed(req.user.id))) return res.redirect(back + '?error=youtube_in_review');
   const state = crypto.randomBytes(16).toString('hex');
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
@@ -55,6 +65,7 @@ router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req
     logger.warn(`[stream-connect] ${platform} provider returned error: ${req.query.error} — ${req.query.error_description || 'no description'}`);
     return res.redirect(back + '?error=oauth_denied');
   }
+  if (platform === 'youtube' && !(await youtubeAllowed(req.user.id))) return res.redirect(back + '?error=youtube_in_review');
   if (!req.query.code || req.query.state !== req.session.streamOAuthState || platform !== req.session.streamOAuthPlatform) {
     logger.warn(`[stream-connect] ${platform} state check failed (hasCode=${!!req.query.code}, stateMatch=${req.query.state === req.session.streamOAuthState}, platformMatch=${platform === req.session.streamOAuthPlatform})`);
     return res.redirect(back + '?error=oauth_state');

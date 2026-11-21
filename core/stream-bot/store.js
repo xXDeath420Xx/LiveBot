@@ -242,6 +242,28 @@ export function createStore({ db, prefix = 'stream_bot_', encryption = null } = 
                               WHERE s.source = 'bmac' AND s.enabled = 1 AND p.enabled = 1`)).map((r) => r.ref);
         },
 
+        // ── heart rate: the optional Pulsoid token (Studio 0.2.14; profile settings key 'heart', the token encrypted) ──
+        /** What the Connections page shows: never the token. */
+        async heartPulsoidView(profileId) {
+            const h = (await store.getSettingsKey(profileId, 'heart'))?.pulsoid || null;
+            return h && h.secret ? { configured: true, status: h.status || 'new', lastError: h.lastError || null, addedAt: h.addedAt || null } : { configured: false, status: null, lastError: null, addedAt: null };
+        },
+        async setHeartPulsoid(profileId, token) {
+            await store.setSettingsKey(profileId, 'heart', { pulsoid: { secret: enc(token), addedAt: new Date().toISOString(), status: 'new', lastError: null } });
+        },
+        async clearHeartPulsoid(profileId) { await store.setSettingsKey(profileId, 'heart', null); },
+        async setHeartPulsoidStatus(profileId, status, error = null) {
+            const h = (await store.getSettingsKey(profileId, 'heart'))?.pulsoid;
+            if (!h || !h.secret) return;
+            await store.setSettingsKey(profileId, 'heart', { pulsoid: { ...h, status: String(status).slice(0, 40), lastError: error ? String(error).slice(0, 255) : null } });
+        },
+        /** Enabled profiles with a Pulsoid token, decrypted (heart/pulsoid.js only). */
+        async heartPulsoidSources() {
+            const rows = await q(`SELECT id, JSON_UNQUOTE(JSON_EXTRACT(settings, '$.heart.pulsoid.secret')) AS secret FROM ${T('profiles')}
+                                  WHERE enabled = 1 AND JSON_EXTRACT(settings, '$.heart.pulsoid.secret') IS NOT NULL`);
+            return rows.map((r) => ({ profileId: Number(r.id), token: dec(r.secret) })).filter((r) => r.token);
+        },
+
         // ── events ──
         /** Store an event. Returns the new id, or null when the dedupe key was seen already. */
         async insertEvent(profileId, ev) {
@@ -365,6 +387,10 @@ export function createStore({ db, prefix = 'stream_bot_', encryption = null } = 
         async getDevice(profileId, id) {
             return deviceRow((await q(`SELECT * FROM ${T('devices')} WHERE profile_id = ? AND id = ?`, [profileId, id]))[0]);
         },
+        /** Replace a device's capability list (the Devices page's per-dock-key switches). False when the device is not this profile's. */
+        async setDeviceCapabilities(profileId, id, capabilities) {
+            return (await q(`UPDATE ${T('devices')} SET capabilities = ? WHERE profile_id = ? AND id = ?`, [json(capabilities || []), profileId, id])).affectedRows > 0;
+        },
         async revokeDevice(profileId, id) {
             return (await q(`UPDATE ${T('devices')} SET revoked_at = NOW() WHERE profile_id = ? AND id = ? AND revoked_at IS NULL`, [profileId, id])).affectedRows > 0;
         },
@@ -471,8 +497,10 @@ export function createStore({ db, prefix = 'stream_bot_', encryption = null } = 
             if (!p) return null;
             const id = p.id;
             const n = Math.max(1, Number(rowLimit) || 1000);
+            const profile = profileRow(p);
+            if (profile.settings?.heart?.pulsoid?.secret) profile.settings.heart.pulsoid = { ...profile.settings.heart.pulsoid, secret: '(saved, not exported)' };   // the Pulsoid token
             return {
-                profile: profileRow(p),
+                profile,
                 channels: await q(`SELECT platform, platform_user_id, login, display_name, verified_via, linked_at FROM ${T('channels')} WHERE profile_id = ?`, [id]),
                 twitch_grant: (await q(`SELECT twitch_user_id, twitch_login, scopes, status, granted_at FROM ${T('twitch_grants')} WHERE profile_id = ?`, [id]))[0] || null,
                 tip_sources: await q(`SELECT source, ref, enabled, status, last_event_at, created_at FROM ${T('tip_sources')} WHERE profile_id = ?`, [id]),

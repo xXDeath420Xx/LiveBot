@@ -23,6 +23,7 @@
     <button class="nav-item" data-tab="hotkeys">Hotkeys</button>
     <button class="nav-item" data-tab="voice">Voice</button>
     <button class="nav-item" data-tab="lights">Lights</button>
+    <button class="nav-item" data-tab="heart">Heart rate</button>
     <button class="nav-item" data-tab="audio">Audio</button>
     <button class="nav-item" data-tab="setup">Set up OBS</button>
     <button class="nav-item" data-tab="settings">Settings</button>
@@ -121,6 +122,13 @@
         <div class="actions"><button class="btn" type="button" id="vod-check">Check again</button><button class="btn" type="button" id="vod-remove" hidden>Remove the CertiFried Music source</button></div>
       </div>
 
+      <div class="card" id="alert-audio-card">
+        <div class="card-head"><h2>Sound Alerts and Blerp</h2><span class="pill" id="alert-audio-pill"></span></div>
+        <p class="muted">Their sounds normally play through Windows, so Desktop Audio carries them into the saved VOD. Studio can set their browser sources to "Control audio via OBS", keep them off the VOD track, and let you still hear them, the same way it handles CertiFried Music. It notes the old settings first, so you can put them back. It does not run while you are streaming or recording.</p>
+        <p class="msg" id="alert-audio-msg" role="status"></p>
+        <div class="actions"><button class="btn" type="button" id="alert-audio-apply">Let CertiFried manage Sound Alerts and Blerp audio</button><button class="btn ghost" type="button" id="alert-audio-undo" hidden>Put them back as they were</button></div>
+      </div>
+
       <div class="card">
         <h2>Recent activity</h2>
         <ul class="log" id="recent-log"></ul>
@@ -133,12 +141,19 @@
       <h1>Lights</h1>
       <div class="card">
         <div class="card-head"><h2>Lights on this PC's network</h2><span class="pill" id="lights-pill"></span></div>
-        <p class="muted">Studio looks for Govee (with LAN control switched on in the Govee Home app), Philips Hue bridges, LIFX, Nanoleaf and Elgato Key Light and Light Strip on your network, and Logitech Litra lights on USB. It only looks after you choose Find lights, and then each time it starts. Pairing tokens stay on this PC. Govee and LIFX cloud lights are added on the dashboard instead.</p>
+        <p class="muted">Studio looks for Govee (with LAN control switched on in the Govee Home app), Philips Hue bridges, LIFX, Nanoleaf and Elgato Key Light and Light Strip on your network, Logitech Litra lights on USB, and Govee lights over Bluetooth (such as light bars with no LAN control). It only looks after you choose Find lights, and then each time it starts. Pairing tokens stay on this PC. Govee and LIFX lights that only work through their app are listed below, under your cloud key.</p>
         <div class="actions tight"><button class="btn primary" type="button" id="lights-find">Find lights</button><button class="btn" type="button" id="lights-off" hidden>Stop using lights</button><button class="btn ghost" data-page="devicesLights">Lights on the dashboard</button></div>
         <p class="msg" id="lights-msg" role="status"></p>
         <ul class="limits" id="lights-notes"></ul>
         <table class="table" id="lights-table"><thead><tr><th>Light</th><th>Type</th><th>State</th><th></th></tr></thead><tbody></tbody></table>
         <p class="empty" id="lights-empty">No lights yet.</p>
+      </div>
+      <div class="card" id="cloud-card">
+        <div class="card-head"><h2>Through your Govee key (cloud)</h2><div class="actions tight"><button class="btn" type="button" id="cloud-refresh">Refresh</button></div></div>
+        <p class="muted">These lights are controlled by the CertiFried server with the Govee or LIFX key you saved on the dashboard, over the internet. They work even when Studio is closed, but are slower than lights on your network, and Govee limits how often each light can change.</p>
+        <p class="msg" id="cloud-msg" role="status"></p>
+        <table class="table" id="cloud-table"><thead><tr><th>Light</th><th>Account</th><th>Model</th><th></th></tr></thead><tbody></tbody></table>
+        <p class="empty" id="cloud-empty">No cloud lights. Add your Govee key on the dashboard, under Devices, Lights.</p>
       </div>
       <div class="card">
         <h2>Add a light by its address</h2>
@@ -154,6 +169,37 @@
         <h2>Kinds of light</h2>
         <p class="muted">Turn a kind off to stop Studio looking for it.</p>
         <div class="check-grid" id="lights-drivers"></div>
+      </div>
+    </section>
+
+    <!-- Heart rate (0.2.14) -->
+    <section class="tab" id="tab-heart" hidden>
+      <h1>Heart rate</h1>
+      <div class="card">
+        <div class="card-head"><h2>Your heart rate</h2><span class="pill" id="heart-pill"></span></div>
+        <div class="hr-live">
+          <div class="hr-reading"><span class="hr-bpm" id="heart-bpm">--</span><span class="hr-unit">BPM</span></div>
+          <canvas class="hr-spark" id="heart-spark" width="480" height="72" aria-label="Heart rate over the last two minutes" role="img"></canvas>
+        </div>
+        <dl class="kv wide" id="heart-facts"><dt>Device</dt><dd id="heart-device">None chosen</dd><dt>Battery</dt><dd id="heart-battery">-</dd><dt>Last reading</dt><dd id="heart-last">-</dd><dt>CertiFried</dt><dd id="heart-sent">-</dd></dl>
+        <label class="check"><input type="checkbox" id="heart-enabled"> Read heart rate from my watch or strap</label>
+        <label class="check"><input type="checkbox" id="heart-share"> Send it to CertiFried, for the heart-rate overlay, automations and <code>{heart.bpm}</code></label>
+        <p class="msg" id="heart-msg" role="status"></p>
+        <div class="actions"><button class="btn primary" type="button" id="heart-scan">Find my watch</button><button class="btn ghost" type="button" id="heart-forget" hidden>Forget this device</button></div>
+        <label class="check"><input type="checkbox" id="heart-all"> Show every Bluetooth device nearby, not only heart-rate ones</label>
+        <table class="table" id="heart-table" hidden><thead><tr><th>Device</th><th>Signal</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h2>Using a Galaxy Watch or another Wear OS watch</h2>
+        <p class="muted">A Wear OS watch cannot send heart rate to a PC by itself. A small app on the watch does it, and then Studio reads it straight from the watch. Nothing goes through Pulsoid or your phone.</p>
+        <ol class="steps">
+          <li>On the watch, open the Play Store and install <strong>Heart for Bluetooth</strong>, or another app that says it works as a Bluetooth heart-rate sensor.</li>
+          <li>Open the app on the watch and start broadcasting. Leave it running while you stream.</li>
+          <li>Turn on Bluetooth on this PC, choose <strong>Find my watch</strong> above, then <strong>Use this one</strong> next to your watch.</li>
+        </ol>
+        <p class="muted">You do not need to pair the watch in Windows Settings. If the watch is not listed, check the app is broadcasting, keep the watch near the PC, and tick Show every Bluetooth device nearby. After that, Studio connects by itself whenever the watch is broadcasting.</p>
+        <p class="muted">A chest strap, or a Garmin with Broadcast heart rate on, works the same way.</p>
+        <p class="muted">If you also use Pulsoid, CertiFried can use it when your watch has sent nothing for 10 seconds. Add your Pulsoid token on the dashboard, under Connections.</p>
       </div>
     </section>
 
@@ -252,29 +298,83 @@
     <!-- Voice -->
     <section class="tab" id="tab-voice" hidden>
       <h1>Voice</h1>
-      <p class="muted">Say a phrase and Studio runs the automation that listens for it. Studio recognises only the phrases you set as Voice command triggers on the dashboard, with Windows' built-in speech recognition on this PC. No audio is recorded or sent anywhere; only the phrase it heard goes to CertiFried.</p>
+      <p class="muted">Say a phrase and Studio runs the automation that listens for it. A voice detector passes on only real speech, so clicks, key presses and game sounds are ignored. Whisper then writes down what you said, on this PC, and Studio compares it with the phrases you set as Voice command triggers on the dashboard. No audio leaves this PC; only the phrase that matched goes to CertiFried.</p>
       <p class="msg bad" id="voice-unavailable" hidden>Voice commands need Windows.</p>
       <div class="card">
         <div class="card-head"><h2>Listening</h2><span class="pill" id="voice-pill">Off</span></div>
         <label class="check"><input type="checkbox" id="voice-enabled"> Listen for voice commands</label>
         <div class="meter" aria-hidden="true"><span id="voice-meter"></span></div>
+        <p class="muted" id="voice-engine-line"></p>
         <p class="muted" id="voice-last"></p>
         <p class="msg bad" id="voice-error" role="status"></p>
-        <div class="form-grid">
-          <label class="field"><span>Microphone</span><select id="voice-device"><option value="default">Windows default</option></select></label>
-          <label class="field"><span>Listen</span>
-            <select id="voice-mode"><option value="always">All the time</option><option value="ptt">Only while I hold a key</option></select>
-          </label>
-          <label class="field" id="voice-ptt-wrap"><span>Key to hold</span><input id="voice-ptt" readonly placeholder="Click, then press a key"></label>
-          <label class="field"><span>How sure before it counts <output id="voice-threshold-out"></output></span><input type="range" id="voice-threshold" min="50" max="95" step="5"></label>
+        <div class="banner warn" id="voice-fallback" role="status" hidden>
+          <p id="voice-fallback-text"></p>
+          <div class="actions tight"><button class="btn small" type="button" id="voice-retry">Try Whisper again</button></div>
         </div>
+        <div class="banner warn" id="voice-input-warn" role="status" hidden>
+          <p id="voice-input-warn-text"></p>
+          <div class="actions tight"><button class="btn small" type="button" id="voice-input-fix" hidden></button></div>
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>Microphone</span><select id="voice-device"></select></label>
+          <label class="field"><span>Listen</span>
+            <select id="voice-mode"><option value="always">All the time</option><option value="wake">After the wake phrase</option><option value="ptt">Only while I hold a key</option></select>
+          </label>
+          <label class="field" id="voice-wake-wrap"><span>Wake phrase</span><input id="voice-wake" maxlength="40" placeholder="hey studio"></label>
+          <label class="field" id="voice-ptt-wrap"><span>Key to hold</span><input id="voice-ptt" readonly placeholder="Click, then press a key"></label>
+          <label class="field" id="voice-match-wrap"><span>How close the words must be <output id="voice-match-out"></output></span><input type="range" id="voice-match" min="50" max="95" step="5"></label>
+          <label class="field" id="voice-threshold-wrap"><span>How sure before it counts <output id="voice-threshold-out"></output></span><input type="range" id="voice-threshold" min="20" max="95" step="5"></label>
+        </div>
+        <p class="muted" id="voice-mode-help"></p>
+        <p class="muted" id="voice-match-help">80% suits most people. 100% means word for word. Lower it a little if a command is missed because Whisper writes it differently (the voice log shows what it wrote). Raise it if a sentence that only sounds like a command sets it off. A command can also have its own setting on the dashboard.</p>
+        <p class="muted" id="voice-windows-note">70% suits most microphones. Studio scores speech differently from Streamer.bot, so a number copied from Streamer.bot (often 20%) is far too low here and makes commands fire when nobody said them. If a command fires when you did not say it, raise this. If one is often missed, lower it a little, or give that command its own setting on the dashboard.</p>
+        <details class="privacy" id="voice-engine-fold">
+          <summary>Speech recognition</summary>
+          <label class="field"><span>Recognise speech with</span>
+            <select id="voice-engine"><option value="auto">Whisper, on the graphics card when there is one</option><option value="cpu">Whisper, on the processor only</option><option value="windows">Windows speech recognition (the old way)</option></select>
+          </label>
+          <p class="muted">On an NVIDIA graphics card Studio uses Whisper large-v3-turbo, which is the most accurate. The first time, it downloads about 1.2 GB once: the model from the Whisper project, NVIDIA's CUDA files from NVIDIA, and the graphics card part of Whisper from CertiFried. Every file is checked before it is used. Without an NVIDIA card it uses a smaller model (about 150 MB) on the processor. Windows speech recognition needs no download, but it cannot tell speech from clicks and game sounds, so it is only used when Whisper cannot run.</p>
+        </details>
         <p class="msg" id="voice-msg" role="status"></p>
       </div>
       <div class="card">
         <div class="card-head"><h2>Your voice commands</h2><div class="actions tight"><button class="btn" type="button" id="voice-refresh">Refresh</button></div></div>
-        <p class="muted">Set these on the dashboard: an automation with the Voice command trigger.</p>
-        <ul class="phrases" id="voice-phrases"></ul>
+        <p class="muted">Set these on the dashboard: an automation with the Voice command trigger. Each command can have its own "how sure" setting and a wait before it can run again (10 seconds unless you change it). If Studio often misses a command, use "Teach Studio how you say it": say it a few times and Studio learns how Whisper writes it when you say it.</p>
+        <table class="table" id="voice-commands"><thead><tr><th>Phrase</th><th>Automation</th><th>How sure</th><th>Wait</th><th>Heard as</th><th></th></tr></thead><tbody></tbody></table>
+        <ul class="phrases" id="voice-phrases" hidden></ul>
         <p class="empty" id="voice-empty">None yet.</p>
+      </div>
+      <div class="card" id="voice-train" hidden>
+        <div class="card-head"><h2 id="voice-train-title">Teach Studio how you say it</h2><span class="pill" id="voice-train-pill"></span></div>
+        <p class="muted" id="voice-train-help"></p>
+        <div class="row-form" id="voice-train-setup">
+          <label class="field"><span>Takes</span><input type="number" id="voice-train-takes" min="3" max="20" step="1"></label>
+          <label class="check"><input type="checkbox" id="voice-train-keep"> Keep recordings on this PC</label>
+        </div>
+        <p class="muted" id="voice-train-keep-help">Off: the audio of each take is never saved; it is gone as soon as Whisper has written it down. On: each take is saved as a WAV file in Studio's folder on this PC, and deleting a take deletes its file. Only the words are saved on your automation.</p>
+        <p class="msg" id="voice-train-note" role="status"></p>
+        <table class="table voice-log" id="voice-train-takes-list" hidden><thead><tr><th>Take</th><th>Heard as</th><th>Against the phrase</th><th>Against your other takes</th><th></th></tr></thead><tbody></tbody></table>
+        <p class="muted" id="voice-train-result"></p>
+        <div class="banner warn" id="voice-train-overlap" role="status" hidden><p id="voice-train-overlap-text"></p></div>
+        <div class="actions">
+          <button class="btn" type="button" id="voice-train-stop">Stop</button>
+          <button class="btn" type="button" id="voice-train-more">Record more</button>
+          <button class="btn primary" type="button" id="voice-train-save">Save</button>
+          <button class="btn ghost" type="button" id="voice-train-cancel">Cancel</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>What Studio heard</h2><div class="actions tight"><button class="btn" type="button" id="voice-log-clear">Clear</button></div></div>
+        <p class="muted">Everything the voice detector picked up, newest first (the last 200): how long the speech was, what Whisper wrote down, the command it was closest to, how close, and what happened. "Ran" also says how long after you stopped speaking. Use it to see why a command did or did not run. This list is kept only while Studio is open. CertiFried gets the same list without your words: only the command it matched, how close it was and what happened.</p>
+        <p class="muted">To teach Studio from this list: on a line that was meant as a command, click "This was ..." and its words are added to how you say that command. On a line that was not a command, click "Not a command" so Studio stops treating words like it as that command. If a command ran by mistake, click "Wrong, undo learning". Teaching from the list needs "Log all speech" on, so Studio has the words.</p>
+        <table class="table voice-log" id="voice-log"><thead><tr><th>Time</th><th>Voice detector</th><th>Heard</th><th>Closest command</th><th>How sure</th><th>What happened</th><th>Teach</th></tr></thead><tbody></tbody></table>
+        <p class="empty" id="voice-log-empty">Nothing heard yet.</p>
+        <details class="privacy" id="voice-privacy">
+          <summary>Log all speech (off)</summary>
+          <p class="muted">Normally, when you say something that is not one of your commands, Studio only notes that it heard something else and throws the words away. Turn this on to see the words, for example to find out what keeps setting off a command. The words stay on this PC unless you also tick the second box. Turning it off also removes the words already in the list. With Windows speech recognition, Studio uses Windows dictation to write the words down, which can make commands a little harder to catch, so turn it off again when you are done.</p>
+          <label class="check"><input type="checkbox" id="voice-logall"> Log all speech, with the words</label>
+          <label class="check"><input type="checkbox" id="voice-share"> Also show those words in the voice log on the dashboard</label>
+        </details>
       </div>
     </section>
 
@@ -328,6 +428,20 @@
     <!-- Settings -->
     <section class="tab" id="tab-settings" hidden>
       <h1>Settings</h1>
+      <div class="card" id="programs-card">
+        <h2>Programs it may run</h2>
+        <p class="muted">An automation's "Run a program on your PC" step can start a program from this list, by its name, and nothing else. CertiFried only sends the name: the file and any arguments are the ones you set here, on this PC. Remove a program to stop automations starting it.</p>
+        <table class="table" id="programs-table"><thead><tr><th>Name</th><th>Program</th><th>Arguments</th><th></th></tr></thead><tbody></tbody></table>
+        <p class="empty" id="programs-empty">No programs yet, so the step is refused.</p>
+        <form id="programs-form" class="row-form">
+          <label class="field"><span>Name automations use</span><input id="programs-name" maxlength="100" spellcheck="false" placeholder="Clip editor"></label>
+          <label class="field grow"><span>Program</span><input id="programs-path" readonly placeholder="Choose a file"></label>
+          <button class="btn" type="button" id="programs-pick">Choose</button>
+          <label class="field grow"><span>Arguments (optional)</span><input id="programs-args" maxlength="1000" spellcheck="false"></label>
+          <button class="btn" type="submit">Add</button>
+        </form>
+        <p class="msg" id="programs-msg" role="status"></p>
+      </div>
       <div class="card">
         <h2>OBS</h2>
         <p class="muted">Use my OBS settings reads the port and password from OBS on this PC. Or in OBS open <strong>Tools → WebSocket Server Settings</strong>, turn on the server, and copy the port and password from <strong>Show Connect Info</strong>.</p>

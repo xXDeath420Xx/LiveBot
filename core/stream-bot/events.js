@@ -30,7 +30,8 @@ const SAMPLE_USER = { id: '100000001', login: 'maplefan_88', name: 'MapleFan_88'
  * for it; `sample` what the Test button fires.
  */
 export const EVENT_TYPES = [   // not frozen: registerEventType() adds feature triggers (core/stream-bot/music)
-    { type: 'follow', label: 'Follow', group: 'Community', platforms: ['twitch', 'kick'], fields: ['user'],
+    // YouTube: a new subscriber to the channel (subscriptions.list myRecentSubscribers while live, youtube/service.js).
+    { type: 'follow', label: 'Follow', group: 'Community', platforms: ['twitch', 'kick', 'youtube'], fields: ['user'],
         sample: sample({ user: SAMPLE_USER }) },
     { type: 'sub', label: 'Subscription', group: 'Support', platforms: ['twitch', 'kick'], fields: ['user', 'tier'],
         sample: sample({ user: SAMPLE_USER, metadata: { tier: '1000', isGift: false } }) },
@@ -44,9 +45,15 @@ export const EVENT_TYPES = [   // not frozen: registerEventType() adds feature t
         sample: sample({ user: { id: '100000002', login: 'bramblebyte_live', name: 'BrambleByte_Live', roles: [] }, amount: 42, currency: 'viewers', metadata: { viewers: 42 } }) },
     { type: 'redemption', label: 'Channel points redemption', group: 'Community', platforms: ['twitch'], fields: ['user', 'reward', 'amount', 'message'],
         sample: sample({ user: SAMPLE_USER, amount: 500, currency: 'points', message: 'Play the sad trombone', metadata: { reward: 'Sound alert', rewardId: 'demo-reward', redemptionId: 'demo-redemption', status: 'unfulfilled' } }) },
-    // channel.bits.use (bits:read): every use of Bits, cheers included, and the power-ups (message effect, celebration, giant emote).
+    // channel.bits.use (bits:read): every use of Bits, cheers included, the power-ups (message effect, celebration, giant emote) and
+    // custom power-ups (metadata kind custom_power_up, powerUpId, powerUpTitle).
     { type: 'bits.used', label: 'Power-up or Bits used', group: 'Support', platforms: ['twitch'], fields: ['user', 'amount', 'message', 'powerup'],
         sample: sample({ user: SAMPLE_USER, amount: 100, currency: 'bits', message: 'Big text for a big win', metadata: { kind: 'power_up', powerUp: 'message_effect', emote: null } }) },
+    // channel.chat.notification (user:read:chat + user:bot, already held for chat): watch streaks and charity donations.
+    { type: 'watch_streak', label: 'Watch streak shared', group: 'Community', platforms: ['twitch'], fields: ['user', 'amount', 'message'],
+        sample: sample({ user: SAMPLE_USER, amount: 5, currency: 'streams', message: 'Five in a row', metadata: { streak: 5, points: 450 } }) },
+    { type: 'charity', label: 'Charity donation', group: 'Support', platforms: ['twitch'], fields: ['user', 'amount', 'currency'],
+        sample: sample({ user: SAMPLE_USER, amount: 10, currency: 'USD', metadata: { charity: 'Maple Hollow Food Bank' } }) },
     { type: 'hype_train.begin', label: 'Hype train started', group: 'Hype train', platforms: ['twitch'], fields: ['level'],
         sample: sample({ amount: 1, currency: 'level', metadata: { level: 1, total: 1200, goal: 1800 } }) },
     { type: 'hype_train.progress', label: 'Hype train progress', group: 'Hype train', platforms: ['twitch'], fields: ['level'],
@@ -114,6 +121,20 @@ export function registerEventType(def) {
     BY_TYPE.set(def.type, def);
     return true;
 }
+/** Converters feature modules add (core/stream-bot/control): tried when the built-in Twitch or Kick converter has no case. */
+const EXTRA_NORMALISERS = { twitch: [], kick: [] };
+export function registerNormaliser(platform, fn) {
+    if (!EXTRA_NORMALISERS[platform] || typeof fn !== 'function' || EXTRA_NORMALISERS[platform].includes(fn)) return false;
+    EXTRA_NORMALISERS[platform].push(fn);
+    return true;
+}
+function extraNormalise(platform, ...args) {
+    for (const fn of EXTRA_NORMALISERS[platform]) { try { const ev = fn(...args); if (ev) return ev; } catch { /* a feature converter never breaks intake */ } }
+    return null;
+}
+/** Feed-line writers for feature event types (describeEvent falls back to them before the plain label). */
+const DESCRIBERS = [];
+export function registerDescriber(fn) { if (typeof fn !== 'function' || DESCRIBERS.includes(fn)) return false; DESCRIBERS.push(fn); return true; }
 
 // ── helpers ────────────────────────────────────────────────────────────────────────────────
 
@@ -221,11 +242,15 @@ export function normaliseTwitch(subType, e, specKey = subType) {
                 dedupeKey: e.id ? `tw:redeem:${e.id}` : null,
                 metadata: { reward: str(e.reward?.title), rewardId: str(e.reward?.id, 64), redemptionId: str(e.id, 64), status: str(e.status, 20) } });
         case 'channel.bits.use': {
-            // type: cheer | power_up | combo; power_up.type: message_effect | celebration | gigantify_an_emote
+            // type: cheer | power_up | custom_power_up (combo until 2025); power_up.type: message_effect | celebration | gigantify_an_emote.
+            // custom_power_up { title, reward_id }: a power-up the streamer made (the owner's Volcano, Back-To-Back …), told apart
+            // by its id (metadata.powerUpId), which is what Firebot's power-ups.json and Streamer.bot's trigger keep (2026-11-20).
             const pu = e.power_up && typeof e.power_up === 'object' ? e.power_up : null;
+            const cpu = e.custom_power_up && typeof e.custom_power_up === 'object' ? e.custom_power_up : null;
             return make('twitch', 'bits.used', { ...base, channelId: bid, user: user(e.user_id, e.user_login, e.user_name),
                 amount: e.bits, currency: 'bits', message: e.message?.text ?? null,
-                metadata: { kind: str(e.type, 20), powerUp: pu ? str(pu.type, 40) : null, emote: pu?.emote?.name ? str(pu.emote.name, 100) : null } });
+                metadata: { kind: str(e.type, 20), powerUp: pu ? str(pu.type, 40) : null, emote: pu?.emote?.name ? str(pu.emote.name, 100) : null,
+                    ...(cpu ? { powerUpId: str(cpu.reward_id, 64), powerUpTitle: str(cpu.title, 100) } : {}) } });
         }
         case 'channel.ad_break.begin':
             return make('twitch', 'ad_break', { ...base, channelId: bid, amount: e.duration_seconds, currency: 'seconds', occurredAt: e.started_at,
@@ -243,13 +268,34 @@ export function normaliseTwitch(subType, e, specKey = subType) {
                 message: e.message?.text ?? '', dedupeKey: e.message_id ? `tw:chat:${e.message_id}` : null,
                 metadata: { messageId: str(e.message_id, 64), bits: num(e.cheer?.bits), rewardId: reward, reply: !!e.reply, color: str(e.color, 10) } });
         }
+        case 'channel.chat.notification': {
+            // Only the notices with no subscription of their own: watch streaks and charity donations. Subs, resubs, gifts and
+            // raids arrive through their own subscriptions. A shared-chat notice from another channel is not this channel's.
+            if (e.source_broadcaster_user_id && String(e.source_broadcaster_user_id) !== String(bid)) return null;
+            const who = e.chatter_is_anonymous ? null : user(e.chatter_user_id, e.chatter_user_login, e.chatter_user_name, twitchRoles(e.badges));
+            const dk = e.message_id ? `tw:notice:${e.message_id}` : null;
+            if (e.notice_type === 'watch_streak' && e.watch_streak) {
+                const n = num(e.watch_streak.streak_count);
+                return make('twitch', 'watch_streak', { ...base, channelId: bid, user: who, amount: n, currency: 'streams', message: e.message?.text || null, dedupeKey: dk,
+                    metadata: { streak: n, points: num(e.watch_streak.channel_points_awarded) } });
+            }
+            if (e.notice_type === 'charity_donation' && e.charity_donation) {
+                const a = e.charity_donation.amount || {};
+                const v = num(a.value);
+                const places = Math.max(0, Math.min(4, num(a.decimal_place) ?? 2));
+                return make('twitch', 'charity', { ...base, channelId: bid, user: who, amount: v == null ? null : v / 10 ** places, currency: str(a.currency, 8), dedupeKey: dk,
+                    metadata: { charity: str(e.charity_donation.charity_name, 200) } });
+            }
+            return null;
+        }
         default:
             break;
     }
     if (HYPE[subType]) {
         const level = num(e.level);
         return make('twitch', HYPE[subType], { ...base, channelId: bid, amount: level, currency: 'level',
-            metadata: { level, total: num(e.total), goal: num(e.goal), progress: num(e.progress), id: str(e.id, 64) } });
+            metadata: { level, total: num(e.total), goal: num(e.goal), progress: num(e.progress), id: str(e.id, 64),
+                expiresAt: str(e.expires_at, 40), endedAt: str(e.ended_at, 40) } });
     }
     if (POLL[subType]) {
         const choices = (e.choices || []).map((c) => ({ title: str(c.title), votes: num(c.votes) ?? 0 }));
@@ -257,16 +303,16 @@ export function normaliseTwitch(subType, e, specKey = subType) {
             ? choices.reduce((a, b) => (b.votes > a.votes ? b : a)).title : null;
         return make('twitch', POLL[subType], { ...base, channelId: bid, message: e.title,
             dedupeKey: e.id && subType !== 'channel.poll.progress' ? `tw:${POLL[subType]}:${e.id}` : null,
-            metadata: { title: str(e.title, 200), choices, winner, status: str(e.status, 20), id: str(e.id, 64) } });
+            metadata: { title: str(e.title, 200), choices, winner, status: str(e.status, 20), id: str(e.id, 64), endsAt: str(e.ends_at, 40) } });
     }
     if (PREDICTION[subType]) {
         const outcomes = (e.outcomes || []).map((o) => ({ id: str(o.id, 64), title: str(o.title), users: num(o.users), points: num(o.channel_points) }));
         const winner = e.winning_outcome_id ? (outcomes.find((o) => o.id === e.winning_outcome_id)?.title || null) : null;
         return make('twitch', PREDICTION[subType], { ...base, channelId: bid, message: e.title,
             dedupeKey: e.id && subType !== 'channel.prediction.progress' ? `tw:${PREDICTION[subType]}:${e.id}` : null,
-            metadata: { title: str(e.title, 200), outcomes, winner, status: str(e.status, 20), id: str(e.id, 64) } });
+            metadata: { title: str(e.title, 200), outcomes, winner, status: str(e.status, 20), id: str(e.id, 64), endsAt: str(e.locks_at, 40) } });
     }
-    return null;
+    return extraNormalise('twitch', subType, e, specKey);
 }
 
 // ── Kick (webhooks) ─────────────────────────────────────────────────────────────────────────
@@ -300,7 +346,7 @@ export function normaliseKick(eventType, e) {
             return make('kick', e.is_live ? 'stream.online' : 'stream.offline', { ...base, occurredAt: e.is_live ? e.started_at : e.ended_at,
                 message: e.title ?? null, metadata: { title: str(e.title, 200) } });
         default:
-            return null;
+            return extraNormalise('kick', eventType, e);
     }
 }
 
@@ -466,7 +512,9 @@ export function describeEvent(ev) {
     const amt = ev.amount != null ? Number(ev.amount).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '';
     const money = ev.currency && /^[A-Z]{3}$/.test(ev.currency) ? `${amt} ${ev.currency}` : amt;
     switch (ev.type) {
-        case 'follow': return `${who} followed`;
+        case 'follow': return ev.platform === 'youtube' ? `${who} subscribed on YouTube` : `${who} followed`;
+        case 'watch_streak': return `${who} is on a ${amt}-stream watch streak`;
+        case 'charity': return `${ev.user ? who : 'Someone'} gave ${money} to ${ev.metadata?.charity || 'charity'}`.trim();
         case 'sub': return ev.metadata?.isGift ? `${who} received a gift sub` : `${who} subscribed`;
         case 'resub': return amt ? `${who} resubscribed (${amt} months)` : `${who} resubscribed`;
         case 'gift_sub': return `${ev.user ? who : 'An anonymous viewer'} gifted ${amt} ${ev.platform === 'youtube' ? 'membership' : 'sub'}${ev.amount === 1 ? '' : 's'}`;
@@ -495,13 +543,20 @@ export function describeEvent(ev) {
         case 'ad_break': return `Ad break (${amt} s)`;
         case 'obs.scene_changed': return `OBS switched to ${ev.metadata?.scene || 'another scene'}`;
         case 'bits.used': {
-            const pu = { message_effect: 'a message effect', celebration: 'a celebration', gigantify_an_emote: 'a giant emote' }[ev.metadata?.powerUp];
+            const pu = { message_effect: 'a message effect', celebration: 'a celebration', gigantify_an_emote: 'a giant emote' }[ev.metadata?.powerUp]
+                || (ev.metadata?.kind === 'custom_power_up' ? `the ${String(ev.metadata?.powerUpTitle || 'custom').slice(0, 60)} power-up` : '');
             return `${ev.user ? who : 'Someone'} used ${amt} bits${pu ? ` on ${pu}` : ev.metadata?.kind === 'cheer' ? ' (cheer)' : ''}`;
         }
         case 'variable.changed': return `${ev.metadata?.key || 'A value'} is now ${String(ev.metadata?.value ?? '').slice(0, 60) || 'empty'}${ev.metadata?.oldValue !== undefined && ev.metadata?.oldValue !== '' ? ` (was ${String(ev.metadata.oldValue).slice(0, 40)})` : ''}`;
         case 'studio.connected': return `CertiFried Studio connected${ev.metadata?.device ? ` on ${ev.metadata.device}` : ''}`;
-        default: return eventType(ev.type)?.label || ev.type;
+        default: {
+            for (const fn of DESCRIBERS) { try { const t = fn(ev); if (t) return t; } catch { /* next */ } }
+            return eventType(ev.type)?.label || ev.type;
+        }
     }
 }
+
+/** The event builders, for feature converters (core/stream-bot/control/events.js). */
+export { make as makeEvent, user as eventUser };
 
 export default { EVENT_TYPES, ROLES, PLATFORMS, TIP_SOURCES, eventType, isEventType, normaliseTwitch, normaliseKick, normaliseTip, normaliseStudio, STUDIO_EVENT_TYPES, sampleEvent, publicEvent, describeEvent, twitchRoles, kickRoles };

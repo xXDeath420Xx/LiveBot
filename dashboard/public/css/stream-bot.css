@@ -127,3 +127,11 @@ fieldset.sb-field { border: 0; margin: 0; padding: 0; min-width: 0; }
 /* The filter row (Events, Viewers) inside .cf-rows: the kit makes a form there a block with a rule between children. */
 .cf-rows > form.sb-filters { display: flex; }
 .cf-section .cf-rows > form.sb-filters > * ~ * { border-top: 0; }   /* outranks the kit rule (0,2,2) */
+
+/* Studio 0.2.13: teaching voice commands from the voice log, and the "Heard as" list in the editor */
+.sb-voice-teach { min-width: 12rem; }
+.sb-voice-teach .btn, .sb-voice-teach .sb-voice-pick { margin: 0 4px 4px 0; }
+.sb-voice-pick { max-width: 14rem; font-size: var(--cf-text-sm, 0.85rem); }
+.sb-heard-as { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--cf-border, rgba(127,127,127,.25)); }
+.sb-heard-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sb-heard-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

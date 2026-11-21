@@ -34,6 +34,20 @@ import { getConfig as getTtsConfig } from './tts-config.js';
 import { displayNameFor } from '../utils/display-name.js';
 import { acquireVoice, getGuildConnection, isConnectionBusy } from './voice-connection-share.js';
 import { getSession as getTranscriptionSession, isOptedOut } from './voice-transcription-manager.js';
+import { readerVoiceAllowed } from './voice-clone/policy.js';
+
+/**
+ * Own-voice rules for a voice trained from a real person (its .onnx.json "certifried".ownerId; core/voice-clone/legacy.js):
+ * { ownerUserId, status, viewerText, iSaid } from its voice_clone record, or null when it has none (then: the owner's
+ * own messages only, and "I said" as before). Tests replace this with setOwnVoiceRulesForTests.
+ */
+let ownVoiceRules = async (voice) => {
+    try {
+        const vc = await (await import('./voice-clone/index.js')).getVoiceClone();
+        return vc?.legacy ? await vc.legacy.rulesFor(voice) : null;
+    } catch { return null; }
+};
+export function setOwnVoiceRulesForTests(fn) { ownVoiceRules = fn; }
 
 const CONFIG_TTL_MS = 60_000;
 const MAX_QUEUE = 8;
@@ -272,7 +286,34 @@ async function drain(guildId) {
 async function pickVoice(message, config) {
     const tts = await getTtsConfig(message.guild.id).catch(() => ({}));
     const candidates = [await getUserVoice(message.author.id), config.voice, tts.default_voice, 'ryan'];
-    return candidates.find(v => v && getVoiceInfo(v));
+    for (const v of candidates) {
+        if (!v || !getVoiceInfo(v)) continue;
+        if (await ownVoiceUsable(message, v)) return v;
+    }
+    return 'ryan';
+}
+
+/**
+ * A voice trained from a real person reads that person's own messages; other people's messages only if its owner
+ * opted in (features.viewerText) and this is the owner's own server (they own it or can manage it). Owner decision
+ * 2026-11-21. A suspended or withdrawn voice reads nothing.
+ */
+export async function ownVoiceUsable(message, voice) {
+    const ownerId = getVoiceInfo(voice)?.ownerId;
+    if (!ownerId) return true;
+    const rules = await ownVoiceRules(voice);
+    if (rules && ['suspended', 'deleted'].includes(rules.status)) return false;
+    if (String(message.author.id) === String(ownerId)) return true;
+    if (!rules?.viewerText) return false;
+    // the owner's own servers, or ones the CertiFried owner added for this voice (features.readerGuilds, audited)
+    let manages = String(message.guild?.ownerId || '') === String(ownerId) || (rules.readerGuilds || []).includes(String(message.guild?.id));
+    if (!manages) {
+        try {
+            const m = message.guild?.members?.cache?.get(ownerId) || await message.guild?.members?.fetch?.(ownerId);
+            manages = !!m?.permissions?.has?.('ManageGuild');
+        } catch { manages = false; }
+    }
+    return readerVoiceAllowed({ voiceOwnerId: ownerId, authorId: message.author.id, viewerTextAllowed: true, ownerManagesGuild: manages });
 }
 
 /**
@@ -281,7 +322,9 @@ async function pickVoice(message, config) {
  */
 export async function introFor(message, voice) {
     const ownerId = voice ? getVoiceInfo(voice)?.ownerId : null;
-    if (ownerId && ownerId === message.author.id) return 'I said';
+    // "I said" is a per-voice toggle (features.iSaid, set by the voice owner or the CertiFried owner); a voice without a
+    // record keeps the earlier behaviour (on).
+    if (ownerId && ownerId === message.author.id && ((await ownVoiceRules(voice))?.iSaid ?? true)) return 'I said';
     return `${await spokenNameFor(message)} says`;
 }
 

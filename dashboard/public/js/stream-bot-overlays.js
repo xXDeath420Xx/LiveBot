@@ -1,7 +1,7 @@
 /*
  * The Overlays tab (views/stream-bot/overlays.ejs and overlay-edit.ejs): add and delete overlays, upload media, save an
- * overlay's settings (every control with data-cfg="<path>"), variations, Test alerts, goal progress, copy and new address,
- * and the scaled live preview. Elements are built with createElement / cloneNode and filled with textContent only.
+ * overlay's settings (every control with data-cfg="<path>"), variations, Test alerts, widget tests, chat polls, emptying a
+ * tip jar, goal progress, copy and new address, and the scaled live preview. Elements are built with createElement / cloneNode and filled with textContent only.
  */
 (function () {
     'use strict';
@@ -133,6 +133,39 @@
                 say('sbo-test-status', r.ok ? r.data.message : errorOf(r, 'Could not send the test.'), r.ok && r.data.sent ? 'ok' : (r.ok ? 'warn' : 'bad'));
             });
         });
+    });
+
+    // widget Test button (invented frames; nothing stored)
+    document.querySelectorAll('[data-test-widget]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            say('sbo-test-status', 'Sending…');
+            call('POST', api + '/test', {}).then(function (r) {
+                say('sbo-test-status', r.ok ? r.data.message : errorOf(r, 'Could not send the test.'), r.ok && r.data.sent ? 'ok' : (r.ok ? 'warn' : 'bad'));
+            });
+        });
+    });
+
+    // chat polls (Poll widget)
+    function chatPoll(body) {
+        say('sbo-cpoll-status', body.action === 'end' ? 'Ending…' : 'Starting…');
+        call('POST', api + '/chat-poll', body).then(function (r) {
+            if (!r.ok) { say('sbo-cpoll-status', errorOf(r, 'Could not do that.'), 'bad'); return; }
+            say('sbo-cpoll-status', body.action === 'end' ? 'Ended. The result stays up for a while.' : 'Running. Chat can vote now.', 'ok');
+        });
+    }
+    var cps = document.getElementById('sbo-cpoll-start');
+    if (cps) cps.addEventListener('click', function () {
+        chatPoll({ action: 'start', title: document.getElementById('sbo-cpoll-q').value, options: document.getElementById('sbo-cpoll-opts').value.split(/\r?\n/), durationSec: Number(document.getElementById('sbo-cpoll-sec').value) || 60 });
+    });
+    var cpe = document.getElementById('sbo-cpoll-end');
+    if (cpe) cpe.addEventListener('click', function () { chatPoll({ action: 'end' }); });
+
+    // tip jar
+    var jr = document.getElementById('sbo-jar-reset');
+    if (jr) jr.addEventListener('click', function () {
+        if (!window.confirm('Empty the tip jar? It starts again at 0.')) return;
+        say('sbo-jar-status', 'Emptying…');
+        call('POST', api + '/tipjar', { mode: 'reset' }).then(function (r) { say('sbo-jar-status', r.ok ? 'Empty.' : errorOf(r, 'Could not empty it.'), r.ok ? 'ok' : 'bad'); });
     });
 
     // goal progress

@@ -1,0 +1,127 @@
+<%#
+  GET /stream/bot/community/games (dashboard/routes/stream-bot-community.js). Locals: ready (the games loaded), pointsReady, settings
+  (gamesWithDefaults), heistTargets [{ value, label }], limits, currency, commands, live { lineup, raffle, heist } | null.
+  Save, the raffle and line-up buttons run in /js/stream-bot-community.js (createElement and textContent only).
+%>
+<%- include('_head', { pageTitle: 'Chat games', active: 'community', sbPage: 'community-games' }) %>
+<link rel="stylesheet" href="/css/stream-bot-community.css">
+<%
+  const _on = (v) => v ? ' checked' : '';
+  const _sel = (a, b) => String(a) === String(b) ? ' selected' : '';
+  const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
+  const _cur = currency;
+  const _num = (id, value, lo, hi, step) => `<input type="number" id="${id}" min="${lo}" max="${hi}" step="${step || 1}" inputmode="numeric" value="${value}">`;
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Chat games</h1>
+        <p class="cf-page-sub">Games viewers play with their <%= _cur %>. Bets are checked when they are made and settled when the game ends, so a game cut short charges nobody. <%= _cur.charAt(0).toUpperCase() + _cur.slice(1) %> are free and have no money value. Points games and raffles are for Twitch and Kick, because YouTube's API rules do not allow rewards for YouTube viewers; the line-up is open on YouTube too.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'community' }) %>
+<%- include('_community-nav', { section: 'games' }) %>
+
+<div class="cf-notice" id="sbc-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbc-msg-text"></div></div>
+<% if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Chat games start after the next CertiFried update.</div></div>
+<% } else if (!pointsReady) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Games use viewer points, which start after the next CertiFried update. The line-up works without them.</div></div>
+<% } %>
+
+<form id="sbc-games" novalidate>
+<div class="cf-notice is-bad" id="sbc-errors" role="alert" tabindex="-1" hidden><div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sbc-errors-list"></ul></div></div>
+
+<section class="cf-section" aria-labelledby="sbc-slots-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-slots-title">Slots</h2>
+        <p class="cf-section-desc"><code>!slots 100</code> spins three reels. Three matching symbols pay the bet times the first number, two matching pay times the second; anything else loses the bet.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbc-slots-on">Slots</label></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-slots-on"<%= _on(settings.slots.enabled) %>></div>
+        </div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-slots-min">Smallest bet</label></div><div class="cf-row-control"><%- _num('sbc-slots-min', settings.slots.min, 1, limits.bet[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-slots-max">Largest bet</label></div><div class="cf-row-control"><%- _num('sbc-slots-max', settings.slots.max, 1, limits.bet[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-slots-p3">Three matching pay (times the bet)</label></div><div class="cf-row-control"><%- _num('sbc-slots-p3', settings.slots.payout3, 1, 100, 0.1) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-slots-p2">Two matching pay (times the bet)</label><p class="cf-row-desc">1 gives the bet back.</p></div><div class="cf-row-control"><%- _num('sbc-slots-p2', settings.slots.payout2, 1, 100, 0.1) %></div></div>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbc-slots-symbols">Symbols</label><p class="cf-row-desc" id="sbc-slots-symbols-desc">Emote names, one per line, 3 to 10. Chat shows them as emotes when your channel has them.</p></div>
+            <div class="cf-row-control"><textarea id="sbc-slots-symbols" rows="5" maxlength="400" aria-describedby="sbc-slots-symbols-desc"><%= settings.slots.symbols.join('\n') %></textarea></div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbc-duel-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-duel-title">Duels</h2>
+        <p class="cf-section-desc"><code>!duel @name 100</code> challenges someone on the same platform; they answer with <code>!accept</code> or <code>!decline</code>. The winner, picked at random, takes the bet from the other.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-duel-on">Duels</label></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-duel-on"<%= _on(settings.duel.enabled) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-duel-min">Smallest bet</label></div><div class="cf-row-control"><%- _num('sbc-duel-min', settings.duel.min, 1, limits.bet[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-duel-max">Largest bet</label></div><div class="cf-row-control"><%- _num('sbc-duel-max', settings.duel.max, 1, limits.bet[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-duel-exp">Time to accept (seconds)</label></div><div class="cf-row-control"><%- _num('sbc-duel-exp', settings.duel.expirySec, limits.duelSec[0], limits.duelSec[1]) %></div></div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbc-heist-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-heist-title">Heists</h2>
+        <p class="cf-section-desc">The first <code>!heist 100</code> starts one; others join with their own bet until the time runs out. Each member escapes or is caught on their own roll: a bigger crew has better odds. An escape pays the bet times the target's multiplier.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-heist-on">Heists</label></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-heist-on"<%= _on(settings.heist.enabled) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-heist-target">Target</label><p class="cf-row-desc">Harder targets pay more and succeed less often.</p></div>
+            <div class="cf-row-control"><select id="sbc-heist-target"><% heistTargets.forEach((t) => { %><option value="<%= t.value %>"<%= _sel(t.value, settings.heist.target) %>><%= t.label %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-heist-min">Smallest bet</label></div><div class="cf-row-control"><%- _num('sbc-heist-min', settings.heist.min, 1, limits.bet[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-heist-max">Largest bet</label></div><div class="cf-row-control"><%- _num('sbc-heist-max', settings.heist.max, 1, limits.bet[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-heist-join">Time to join (seconds)</label></div><div class="cf-row-control"><%- _num('sbc-heist-join', settings.heist.joinSec, limits.heistJoin[0], limits.heistJoin[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-heist-cool">Wait between heists (minutes)</label></div><div class="cf-row-control"><%- _num('sbc-heist-cool', settings.heist.cooldownMin, 0, limits.heistCooldown[1]) %></div></div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbc-raffle-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-raffle-title">Raffles and the line-up</h2>
+        <p class="cf-section-desc">Defaults for a raffle opened in chat with <code>!raffle open</code> or below. Viewers buy tickets with <code>!ticket</code> or <code>!ticket 3</code>; tickets are paid when the winners are drawn, and each ticket is one chance.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-raffle-cost">Ticket price (<%= _cur %>)</label><p class="cf-row-desc">0 makes tickets free.</p></div><div class="cf-row-control"><%- _num('sbc-raffle-cost', settings.raffle.ticketCost, 0, limits.ticketCost[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-raffle-max">Most tickets each</label></div><div class="cf-row-control"><%- _num('sbc-raffle-max', settings.raffle.maxTickets, 1, limits.tickets[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-raffle-winners">Winners</label></div><div class="cf-row-control"><%- _num('sbc-raffle-winners', settings.raffle.winners, 1, limits.winners[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-raffle-auto">Draw by itself after (seconds)</label><p class="cf-row-desc">0: a moderator draws with <code>!raffle draw</code>.</p></div><div class="cf-row-control"><%- _num('sbc-raffle-auto', settings.raffle.autoDrawSec, 0, limits.raffleSec[1]) %></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-lineup-max">Line-up size</label><p class="cf-row-desc">Viewers join with <code>!join</code>; moderators use <code>!lineup open</code>, <code>!lineup next</code>, <code>!lineup close</code> and <code>!lineup clear</code>.</p></div><div class="cf-row-control"><%- _num('sbc-lineup-max', settings.lineup.max, 1, limits.lineupMax[1]) %></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-lineup-subs">Subscribers go ahead of everyone else</label></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-lineup-subs"<%= _on(settings.lineup.subsFirst) %>></div></div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbc-save-status" role="status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-primary btn-sm"<%= ready ? '' : ' disabled' %>>Save</button>
+        </div>
+    </div>
+</section>
+</form>
+
+<section class="cf-section" aria-labelledby="sbc-live-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-live-title">Running now</h2>
+        <p class="cf-section-desc">The raffle and the line-up, as chat sees them. Results are announced in your Twitch and Kick chats.</p></div>
+        <div class="cf-section-actions"><button type="button" class="btn btn-secondary btn-sm" id="sbc-live-refresh"<%= ready ? '' : ' disabled' %>>Refresh</button></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--stack">
+            <div class="cf-row-text"><p class="cf-row-label">Raffle</p><p class="cf-row-desc" id="sbc-raffle-state">No raffle is open.</p></div>
+            <div class="cf-row-control sbc-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-raffle="open"<%= ready ? '' : ' disabled' %>>Open a raffle</button>
+                <button type="button" class="btn btn-primary btn-sm" data-raffle="draw" hidden>Draw the winners</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-raffle="cancel" hidden>Cancel it</button>
+            </div>
+        </div>
+        <div class="cf-row cf-row--stack">
+            <div class="cf-row-text"><p class="cf-row-label">Line-up</p><p class="cf-row-desc" id="sbc-lineup-state">Closed.</p></div>
+            <div class="cf-row-control sbc-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-lineup="open"<%= ready ? '' : ' disabled' %>>Open</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-lineup="close" hidden>Close</button>
+                <button type="button" class="btn btn-primary btn-sm" data-lineup="next"<%= ready ? '' : ' disabled' %>>Take the next one</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-lineup="clear"<%= ready ? '' : ' disabled' %>>Empty it</button>
+            </div>
+        </div>
+        <ol class="sbc-lineup" id="sbc-lineup-list" aria-label="People in the line-up"></ol>
+        <p class="cf-status-line" id="sbc-live-status" role="status" aria-live="polite"></p>
+    </div>
+</section>
+
+<%- include('_community-commands', { commands, group: 'games', title: 'Chat commands' }) %>
+
+<script type="application/json" id="sbc-data"><%- _js({ page: 'games', live, currency: _cur }) %></script>
+<script src="/js/stream-bot-community.js" defer></script>
+<%- include('_foot') %>

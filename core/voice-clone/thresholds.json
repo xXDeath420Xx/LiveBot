@@ -1,0 +1,10 @@
+{
+  "version": "cal-2026-11-20-ls-devclean-40x12",
+  "about": "Speaker-verification thresholds, from services/voice-sidecar/calibrate.py on 2026-11-20. tLo: one recording against the 3-clip consent voiceprint at a false-accept rate of 1% per model; tHi: the recordings' centroid against the consent voiceprint, above every impostor centroid (target FAR 0.1%). Both models must pass.",
+  "dataset": "LibriSpeech dev-clean (CC BY 4.0), 40 speakers x 12 utterances, each clean, Opus 32 kbps, 24 kbps headset band (200-3400 Hz) and room noise at 15 dB SNR",
+  "trials_sha256": "f817bfa1840809ccf704d33f5e50b663ff4b670c9ae929afdd9227fe1405918a",
+  "redimnet": { "tHi": 0.6142, "tLo": 0.3717, "clipFrrAtTLo": 0.0069, "clipFarAtTLo": 0.01, "centroidGenuineMin": 0.6801, "centroidImpostorMax": 0.5942 },
+  "ecapa": { "tHi": 0.5652, "tLo": 0.3613, "clipFrrAtTLo": 0.0076, "clipFarAtTLo": 0.01, "centroidGenuineMin": 0.6723, "centroidImpostorMax": 0.5452 },
+  "joint": { "clipFrr": 0.0097, "clipFar": 0.00493, "centroidFrr": 0.0, "centroidFar": 0.0 },
+  "limits": "40 speakers is a small impostor set: tHi has no measured false accepts but its true 0.1% point is not resolved. Not tested: zero-shot clones of a person spoken into the live check (red team R3); real webcam and phone mics. Re-run after the owner's own beta recordings."
+}

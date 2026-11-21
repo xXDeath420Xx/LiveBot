@@ -17,6 +17,8 @@ import cron from 'node-cron';
 import { XMLParser } from 'fast-xml-parser';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { resolveFeedTarget } from '../core/feed-target.js';
+import { buildFeedContent } from '../core/feed-message.js';
 import { findDuplicate } from '../utils/content-similarity.js';
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
@@ -171,9 +173,10 @@ async function runFeed(client) {
         // No bot of ours is in that server (H-315): nothing to post to and nothing to warn about.
         // The feed is picked up again as soon as a bot is back.
         if (!guild) continue;
-        const channel = guild.channels?.cache?.get(feed.channel_id);
+        // Through the client that has the guild, so a thread (even an archived one) resolves too.
+        const { channel, problem } = await resolveFeedTarget(guild.client || client, feed.channel_id, { guildId: feed.guild_id });
         if (!channel) {
-            logger.warn(`[FortniteFeed] channel ${feed.channel_id} unavailable`, { category: 'fortnite' });
+            logger.warn(`[FortniteFeed] feed ${feed.id}: ${problem}`, { category: 'fortnite' });
             continue;
         }
 
@@ -199,6 +202,8 @@ async function runFeed(client) {
             logger.warn(`[FortniteFeed] could not read recent history: ${e.message}`, { category: 'fortnite' });
         }
 
+        // The feed's ping role (Social feeds page, migration 480), in front of each post.
+        const ping = buildFeedContent({ template: null, vars: {}, pingRoleId: feed.ping_role_id });
         let posted = 0;
         for (const key of wanted) {
             const src = SOURCES[key];
@@ -279,7 +284,7 @@ async function runFeed(client) {
                 }
 
                 try {
-                    await channel.send({ embeds: [embed] });
+                    await channel.send({ content: ping.content, allowedMentions: ping.allowedMentions, embeds: [embed] });
                     // Our own post counts against the next item in this same cycle.
                     recent.push({ text: `${item.title || ''} ${item.blurb || ''}`, url: item.url || null, who: 'us' });
                 } catch (e) {

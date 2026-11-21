@@ -67,6 +67,9 @@ export function personView(person, settings, history = []) {
         })),
         linkable: person.rows.length < 2,
         otherPlatform: person.primary.platform === 'twitch' ? 'kick' : 'twitch',
+        // YouTube viewers hold no points (YouTube API policy III.F.3.c; core/stream-bot/youtube/policy.js).
+        youtube: person.primary.platform === 'youtube',
+        pointsAllowed: person.primary.platform !== 'youtube',
         support: [
             ['Followed', t.follows ? `Yes${person.rows.find((r) => r.followedAt)?.followedAt ? `, ${whenText(person.rows.find((r) => r.followedAt).followedAt)}` : ''}` : 'No'],
             ['Subs and resubs', formatPoints(t.subs) + (t.subMonths ? ` (${formatPoints(t.subMonths)} months)` : '')],

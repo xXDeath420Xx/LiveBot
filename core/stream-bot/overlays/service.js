@@ -18,6 +18,18 @@
  *     onStudioRequest(conn, method)     'overlays.list' → { overlays: [{ id, type, name, sourceName, url, width, height, audio }] }
  *     ttsAudio(overlay, id) → Buffer | null   a tip or cheer message read aloud (Piper on this server, see below)
  *     status(profileId) → { [overlayId]: { online, previews } }
+ *     testWidget(profileId, overlayId) → { sent }   a widget's Test button (invented frames, nothing stored or counted)
+ *     chatPoll(profileId, { action: 'start'|'end', title, options, durationSec }) → { ok, id | error }   starts or ends a chat poll
+ *                                       through core/stream-bot/control/chat-polls.js (its poll.* events reach the Poll widget)
+ *     labelValues(overlay) / labelText(overlay, key)   stream labels, also as plain text for OBS text sources
+ *     onHeart(profileId, view)          Studio 0.2.14: a heart-rate reading (core/stream-bot/heart, at most once a second) to
+ *                                       the profile's Heart rate overlays; heartView(profileId) gives a page its first state
+ *
+ * Widgets (widgets.js holds their rules): train (Twitch hype train bar and a sub train across Twitch, Kick and YouTube),
+ * tipjar (a running total kept in the overlay's state like a goal, reset when the stream goes live), credits (this stream's
+ * supporters from the event log, plus moderators seen in chat), emotewall (emotes from chat, 7TV / BTTV / FFZ through
+ * emotes.js), poll (Twitch polls, predictions and CertiFried chat polls, all from their poll.* / prediction.* events), labels (latest follower, sub, tip, top cheer from the event log) and viewers (stream-info.js, every 30 seconds).
+ * A widget whose Twitch part needs a scope the streamer has not granted shows "Reconnect Twitch to enable" there instead.
  *
  * Alerts are queued on the page, one at a time, never overlapping; sounds and read-aloud messages play inside the
  * browser source, so OBS's own audio tracks decide whether they reach the VOD.
@@ -28,20 +40,31 @@
  * (utils/piper-tts.js, offline on this server) and played by the page like an alert sound.
  */
 import crypto from 'node:crypto';
-import { overlayType, typesFor, alertKeyFor, alertAmount, pickVariation, sampleFor, goalIncrement, withDefaults, ALERT_KINDS, LIMITS, FONTS } from './config.js';
+import { overlayType, typesFor, alertKeyFor, alertAmount, pickVariation, sampleFor, goalIncrement, withDefaults, ALERT_KINDS, LIMITS, FONTS, LABEL_KEYS } from './config.js';
 import { visibleFor } from './chat.js';
+import { splitEmotes } from './emotes.js';
+import {
+    jarAmount, trainIncrement, hypeView, twitchPollView, predictionView, chatPollView, creditsFrom, labelLine, labelText as labelTextOf,
+    blockedText, sampleFrames, money,
+} from './widgets.js';
 import { describeEvent, publicEvent } from '../events.js';
 import { TEXT_SIZES, MEDIA_SIZES } from './actions.js';
 
 export const SERVICE_LIMITS = Object.freeze({
     clientsPerOverlay: 6, chatRing: 60, ttsPending: 6, ttsCache: 40, ttsTtlMs: 10 * 60_000, ttsWaitMs: 20_000, channelCacheMs: 60_000,
     goalWriteMs: 2_000, counterRefreshMs: 30_000, nowPlayingMs: 5_000, goalCacheMs: 60_000,
+    viewersMs: 30_000, labelsCacheMs: 15_000, featuresMs: 5 * 60_000, pollOptions: 6, pollTitle: 120, pollOption: 60, pollSec: [10, 3600], modsSeen: 300,
+    creditsLookbackMs: 36 * 3600_000, creditsFallbackMs: 12 * 3600_000,
 });
 const GOAL_TYPES = new Set(['follow', 'sub', 'resub', 'gift_sub', 'cheer', 'bits.used', 'tip']);
+const JAR_TYPES = new Set(['tip', 'cheer', 'bits.used', 'kicks.gifted']);
+const LABEL_TYPES = new Set(['follow', 'sub', 'resub', 'gift_sub', 'membership', 'tip', 'cheer', 'stream.online']);
+const THIRD_PARTY = /^img\/(7tv|bttv|ffz)-emote\//;
 
 export function createOverlayService({
     store, ostore, sounds = null, media = null, render = null, nowPlaying = () => null, synthesize = null, images = null,
     logger = null, now = () => Date.now(), baseUrl = 'https://certifriedmultitool.com', limits = {}, timers = true,
+    twitchFeatures = null, viewerCounts = null, emotes = null, chatPolls = () => null, heartView = null,
 } = {}) {
     const L = { ...SERVICE_LIMITS, ...limits };
     const log = (level, msg, meta) => { try { logger?.[level]?.(`[StreamBotOverlay] ${msg}`, meta); } catch { /* ignore */ } };
@@ -52,6 +75,16 @@ export function createOverlayService({
     const goalWrites = new Map();     // overlayId -> timer
     const tts = new Map();            // ttsId -> { overlayId, at, promise, buffer }
     const lastNow = new Map();        // overlayId -> now playing signature
+    const jars = new Map();           // profileId -> { at, list: [{ id, config, total }] }
+    const trains = new Map();         // overlayId -> { count, lastAt, last }
+    const hype = new Map();           // profileId -> hypeView
+    const polls = new Map();          // profileId -> { twitch, prediction, chat } views
+    const chatEnds = new Map();       // chat poll id -> when it ends (polls started from the dashboard)
+    const labelCache = new Map();     // profileId -> { at, values: { [key]: { name, detail } | null }, scope }
+    const mods = new Map();           // profileId -> Map(login -> name), moderators seen in chat since the stream went live
+    const features = new Map();       // profileId -> { at, set: Set | null }
+    const twitchIds = new Map();      // profileId -> { at, id }
+    const lastViewers = new Map();    // overlayId -> signature
     const base = String(baseUrl || '').replace(/\/+$/, '');
 
     const forProfile = (profileId) => [...entries.values()].filter((e) => e.overlay.profileId === Number(profileId) && e.clients.size);
@@ -86,12 +119,199 @@ export function createOverlayService({
                 case 'nowplaying': return { now: nowCard(o) };
                 case 'chat': return { messages: (chatRing.get(o.profileId) || []).filter((m) => visibleFor(m, o.config)).slice(-o.config.maxMessages) };
                 case 'scene': return { media: await sceneMedia(o) };
+                case 'train': return { hype: hype.get(o.profileId) || null, sub: trainView(o), blocked: await blockedFor(o) };
+                case 'tipjar': { const j = (await jarsFor(o.profileId)).find((x) => x.id === o.id); return jarView(o, j ? j.total : Number(o.state?.total) || 0); }
+                case 'credits': return { sections: await creditsFor(o), title: o.config.title };
+                case 'poll': return { ...pollState(o.profileId), blocked: await blockedFor(o) };
+                case 'labels': return { values: await labelValues(o) };
+                case 'viewers': return { counts: await countsFor(o.profileId) };
+                case 'heartrate': return { heart: heartOf(o.profileId) };
                 default: return {};
             }
         } catch (err) {
             log('warn', 'initial state failed', { overlayId: o.id, error: err?.message });
             return {};
         }
+    }
+
+    // ── widgets ──
+    const cachedEntry = (map, key, ms) => { const h = map.get(key); return h && now() - h.at < ms ? h : null; };
+    async function featuresFor(profileId) {
+        if (!twitchFeatures) return null;
+        const hit = cachedEntry(features, profileId, L.featuresMs);
+        if (hit) return hit.set;
+        let set = null;
+        try { set = await twitchFeatures(profileId); } catch (err) { log('debug', 'twitch features failed', { error: err?.message }); set = null; }
+        features.set(profileId, { at: now(), set });
+        return set;
+    }
+    async function blockedFor(o) { return blockedText(o.type, o.config, await featuresFor(o.profileId)); }
+    async function twitchIdOf(profileId) {
+        const hit = cachedEntry(twitchIds, profileId, L.featuresMs);
+        if (hit) return hit.id;
+        let id = null;
+        try { id = (await store.listChannels(profileId)).find((c) => c.platform === 'twitch')?.platform_user_id ?? null; } catch { id = null; }
+        twitchIds.set(profileId, { at: now(), id: id == null ? null : String(id) });
+        return id == null ? null : String(id);
+    }
+
+    // sub train (per overlay, its own time window) and hype train (per profile, from Twitch)
+    function trainView(o) {
+        const t = trains.get(o.id);
+        if (!t || !o.config.showSubTrain) return null;
+        const endsAt = t.lastAt + o.config.subTrainSec * 1000;
+        if (endsAt <= now() || t.count < o.config.subTrainMin) return null;
+        return { count: t.count, endsAt: new Date(endsAt).toISOString(), last: t.last };
+    }
+    function bumpTrain(o, ev, inc) {
+        const t = trains.get(o.id);
+        const fresh = !t || now() - t.lastAt > o.config.subTrainSec * 1000;
+        const next = { count: (fresh ? 0 : t.count) + inc, lastAt: now(), last: ev.user?.name ? String(ev.user.name).slice(0, 40) : (t?.last || null) };
+        trains.set(o.id, next);
+        return trainView(o);
+    }
+
+    // tip jar: a running total per overlay, kept like a goal's progress
+    async function jarsFor(profileId) {
+        const hit = jars.get(profileId);
+        if (hit && now() - hit.at < L.goalCacheMs) return hit.list;
+        const pending = new Map((hit?.list || []).filter((g) => goalWrites.has(g.id)).map((g) => [g.id, g.total]));
+        const list = (await ostore.list(profileId)).filter((o) => o.type === 'tipjar')
+            .map((o) => ({ id: o.id, config: o.config, total: pending.has(o.id) ? pending.get(o.id) : Number(o.state?.total) || 0 }));
+        jars.set(profileId, { at: now(), list });
+        return list;
+    }
+    const jarView = (o, total) => ({ total: Math.round(total * 100) / 100, target: o.config.target, title: o.config.title, label: money(total, null, o.config.symbol), targetLabel: money(o.config.target, null, o.config.symbol) });
+    function persistState(profileId, id, state) {
+        if (goalWrites.has(id)) clearTimeout(goalWrites.get(id));
+        const t = setTimeout(() => {
+            goalWrites.delete(id);
+            ostore.setState(profileId, id, { ...state, updatedAt: new Date(now()).toISOString() }).catch((err) => log('warn', 'state write failed', { error: err?.message }));
+        }, L.goalWriteMs);
+        t.unref?.();
+        goalWrites.set(id, t);
+    }
+    async function addToJar(profileId, j, amount, ev) {
+        j.total = Math.max(0, Math.round((j.total + amount) * 100) / 100);
+        persistState(profileId, j.id, { total: j.total });
+        const e = entries.get(j.id);
+        if (!e) return;
+        e.overlay = { ...e.overlay, state: { ...(e.overlay.state || {}), total: j.total } };
+        const add = amount > 0 ? { amount, label: money(amount, null, e.overlay.config.symbol), name: ev?.user?.name ? String(ev.user.name).slice(0, 40) : null } : null;
+        sendAll(e, 'tipjar', { ...jarView(e.overlay, j.total), add });
+    }
+    async function resetJar(profileId, overlayId) {
+        const j = (await jarsFor(Number(profileId))).find((x) => x.id === Number(overlayId));
+        if (!j) return { ok: false, error: 'that tip jar no longer exists' };
+        j.total = 0;
+        await addToJar(Number(profileId), j, 0, null);
+        return { ok: true, total: 0 };
+    }
+
+    // credits: this stream's supporters from the event log, and moderators seen in chat
+    async function creditsFor(o) {
+        const pid = o.profileId;
+        const start = await ostore.lastStreamStart(pid, new Date(now() - L.creditsLookbackMs)).catch(() => null);
+        const since = start || new Date(now() - L.creditsFallbackMs);
+        const rows = await ostore.eventsSince(pid, since, ['follow', 'sub', 'resub', 'gift_sub', 'membership', 'raid', 'cheer', 'bits.used', 'tip', 'kicks.gifted', 'charity']).catch(() => []);
+        const modNames = [...(mods.get(pid)?.values() || [])];
+        try { for (const n of await ostore.moderatorsSince?.(pid, since) || []) if (!modNames.some((m) => m.toLowerCase() === n.toLowerCase())) modNames.push(n); } catch { /* chat may not be kept */ }
+        return creditsFrom(rows, modNames, o.config.sections);
+    }
+
+    // polls and predictions (Twitch's own, and CertiFried chat polls from core/stream-bot/control/chat-polls.js)
+    function pollState(profileId) {
+        const p = polls.get(profileId) || {};
+        return { twitch: p.twitch || null, prediction: p.prediction || null, chat: p.chat || null };
+    }
+    function notePoll(pid, ev) {
+        const p = polls.get(pid) || {};
+        if (ev.type.startsWith('prediction.')) p.prediction = predictionView(ev);
+        else if (ev.metadata?.chat) {
+            p.chat = chatPollView(ev, chatEnds.get(ev.metadata.id) || null);
+            if (ev.type === 'poll.end') chatEnds.delete(ev.metadata.id);
+        } else p.twitch = twitchPollView(ev);
+        polls.set(pid, p);
+    }
+    const clean = (v, max) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+    async function chatPoll(profileId, { action, title, options, durationSec } = {}) {
+        const pid = Number(profileId);
+        const cp = chatPolls();
+        if (!cp) return { ok: false, error: 'Chat polls start after the next CertiFried restart.' };
+        if (action === 'end') {
+            const r = await cp.end(pid, 'completed');
+            return r.ok ? { ok: true } : { ok: false, error: 'No chat poll is running.' };
+        }
+        const t = clean(title, L.pollTitle);
+        const opts = (Array.isArray(options) ? options : String(options ?? '').split(/\r?\n/)).map((x) => clean(x, L.pollOption)).filter(Boolean);
+        if (!t) return { ok: false, error: 'Give the poll a question.' };
+        if (opts.length < 2 || opts.length > L.pollOptions) return { ok: false, error: `A chat poll needs 2 to ${L.pollOptions} answers, one per line.` };
+        const secs = Math.min(L.pollSec[1], Math.max(L.pollSec[0], Math.round(Number(durationSec) || 60)));
+        const r = await cp.start(pid, { title: t, choices: opts, seconds: secs, platforms: ['twitch', 'kick', 'youtube'] });
+        if (!r.ok) return { ok: false, error: String(r.error || 'The chat poll did not start.').replace(/^./, (c) => c.toUpperCase()) + (/\.$/.test(r.error || '') ? '' : '.') };
+        chatEnds.set(r.id, now() + secs * 1000);
+        if (chatEnds.size > 200) chatEnds.delete(chatEnds.keys().next().value);
+        const p = polls.get(pid);
+        if (p?.chat?.id === r.id && p.chat.status === 'active') p.chat.endsAt = new Date(now() + secs * 1000).toISOString();
+        pushPolls(pid);
+        return { ok: true, id: r.id };
+    }
+    function pushPolls(profileId) {
+        for (const e of forProfile(profileId)) if (e.overlay.type === 'poll') sendAll(e, 'poll', pollState(profileId));
+    }
+
+    // stream labels
+    async function labelValues(o) {
+        const pid = o.profileId;
+        const scope = o.config?.topCheerScope || 'stream';
+        const hit = labelCache.get(pid);
+        if (hit && hit.scope === scope && now() - hit.at < L.labelsCacheMs) return pick(hit.values, o);
+        const start = scope === 'stream' ? (await ostore.lastStreamStart(pid, new Date(now() - L.creditsLookbackMs)).catch(() => null)) || new Date(now() - L.creditsFallbackMs) : null;
+        const [f, s, t, c] = await Promise.all([
+            ostore.latestEvent(pid, ['follow']).catch(() => null),
+            ostore.latestEvent(pid, ['sub', 'resub', 'gift_sub', 'membership'], { where: (e) => !(e.type === 'sub' && e.metadata?.isGift) && !(e.type === 'membership' && (e.platform !== 'youtube' || e.metadata?.kind === 'gift')) }).catch(() => null),
+            ostore.latestEvent(pid, ['tip'], { where: (e) => e.metadata?.kind !== 'jewels' }).catch(() => null),
+            ostore.biggestEvent(pid, 'cheer', start).catch(() => null),
+        ]);
+        const values = { latest_follower: labelLine('latest_follower', f), latest_sub: labelLine('latest_sub', s), latest_tip: labelLine('latest_tip', t), top_cheer: labelLine('top_cheer', c) };
+        labelCache.set(pid, { at: now(), values, scope });
+        return pick(values, o);
+    }
+    function pick(values, o) {
+        const items = o.config?.items || LABEL_KEYS;
+        return Object.fromEntries(LABEL_KEYS.filter((k) => items.includes(k)).map((k) => [k, values[k] || null]));
+    }
+    async function labelText(o, key) {
+        if (!LABEL_KEYS.includes(key)) return null;
+        const v = await labelValues({ ...o, config: { ...o.config, items: LABEL_KEYS } });
+        return labelTextOf(v[key], o.config?.empty || '');
+    }
+
+    // viewer count
+    async function countsFor(profileId) {
+        if (!viewerCounts) return { live: false, total: 0, platforms: {} };
+        try { return await viewerCounts(profileId); } catch { return { live: false, total: 0, platforms: {} }; }
+    }
+
+    // heart rate (Studio 0.2.14): kept in memory by core/stream-bot/heart, never stored
+    const NO_HEART = Object.freeze({ bpm: null, at: null, live: false, source: null, min: null, max: null, avg: null, count: 0, battery: null, history: [] });
+    function heartOf(profileId) {
+        if (!heartView) return NO_HEART;
+        try { return heartView(profileId) || NO_HEART; } catch { return NO_HEART; }
+    }
+    function onHeart(profileId, view) {
+        let n = 0;
+        for (const e of forProfile(profileId)) if (e.overlay.type === 'heartrate') n += sendAll(e, 'heart', { heart: view });
+        return n;
+    }
+
+    // the Test button of a widget: invented frames to its open pages, nothing stored or counted
+    async function testWidget(profileId, overlayId) {
+        const e = entries.get(Number(overlayId));
+        if (!e || e.overlay.profileId !== Number(profileId)) return { sent: 0 };
+        let n = 0;
+        for (const [name, data] of sampleFrames(e.overlay.type, e.overlay.config, now())) n = Math.max(n, sendAll(e, name, data));
+        return { sent: n };
     }
     /** The kinds of a scene screen's media ({ [id]: 'image' | 'video' }), so the page knows what element to draw. */
     async function sceneMedia(o) {
@@ -257,7 +477,9 @@ export function createOverlayService({
         while (tts.size >= L.ttsCache) tts.delete(tts.keys().next().value);
         const id = crypto.randomBytes(9).toString('base64url');
         const item = { overlayId: o.id, at: t, buffer: null, promise: null };
-        item.promise = Promise.resolve().then(() => synthesize(text, o.config.general.ttsVoice || null)).then((buf) => {
+        // the profile's owner: a voice trained from a real person reads alert messages only in its owner's profile (opt-in)
+        item.promise = Promise.resolve().then(async () => synthesize(text, o.config.general.ttsVoice || null,
+            { profileOwnerId: (await store?.getProfile?.(o.profileId).catch(() => null))?.ownerDiscordId || null })).then((buf) => {
             item.buffer = Buffer.isBuffer(buf) && buf.length ? buf : null;
             return item.buffer;
         }).catch((err) => { log('warn', 'read aloud failed', { error: err?.message }); return null; });
@@ -367,6 +589,19 @@ export function createOverlayService({
                 }
             } catch (err) { log('warn', 'goal update failed', { error: err?.message }); }
         }
+        // Widget state that lives whether or not a page is open: tip jars, the hype train, polls, labels, moderators.
+        if (!ev.test) {
+            try {
+                if (JAR_TYPES.has(ev.type)) for (const j of await jarsFor(pid)) { const amt = jarAmount(j.config, ev); if (amt) await addToJar(pid, j, amt, ev); }
+                if (ev.type === 'stream.online') {
+                    for (const j of await jarsFor(pid)) if (j.config.resetOnLive && j.total) { j.total = 0; await addToJar(pid, j, 0, null); }
+                    mods.delete(pid);
+                }
+                if (ev.type.startsWith('hype_train.')) hype.set(pid, hypeView(ev));
+                if (ev.type.startsWith('poll.') || ev.type.startsWith('prediction.')) notePoll(pid, ev);
+                if (LABEL_TYPES.has(ev.type)) labelCache.delete(pid);
+            } catch (err) { log('warn', 'widget update failed', { type: ev.type, error: err?.message }); }
+        }
         const open = forProfile(pid);
         if (!open.length) return;
         for (const e of open) {
@@ -389,6 +624,19 @@ export function createOverlayService({
                     case 'nowplaying':
                         if (ev.type === 'music.song_changed') { const c = nowCard(o); lastNow.set(o.id, nowSig(c)); sendAll(e, 'nowplaying', { now: c }); }
                         break;
+                    case 'train': {
+                        if (ev.test) break;
+                        const inc = o.config.showSubTrain ? trainIncrement(ev) : 0;
+                        if (inc) { const sub = bumpTrain(o, ev, inc); if (sub) sendAll(e, 'train', { sub }); }
+                        if (o.config.showHype && ev.type.startsWith('hype_train.')) sendAll(e, 'train', { hype: hype.get(pid) });
+                        break;
+                    }
+                    case 'poll':
+                        if (!ev.test && (ev.type.startsWith('poll.') || ev.type.startsWith('prediction.'))) sendAll(e, 'poll', pollState(pid));
+                        break;
+                    case 'labels':
+                        if (!ev.test && LABEL_TYPES.has(ev.type)) sendAll(e, 'labels', { values: await labelValues(o) });
+                        break;
                     default: break;
                 }
             } catch (err) { log('warn', 'overlay event failed', { overlayId: o.id, type: ev.type, error: err?.message }); }
@@ -405,19 +653,44 @@ export function createOverlayService({
         channelCache.set(k, { at: now(), profiles });
         return profiles;
     }
-    const anyChat = () => [...entries.values()].some((e) => e.overlay.type === 'chat' && e.clients.size);
+    const CHAT_USERS = new Set(['chat', 'emotewall']);
+    const anyChat = () => [...entries.values()].some((e) => CHAT_USERS.has(e.overlay.type) && e.clients.size);
+    const anyModWatch = () => [...entries.values()].some((e) => e.overlay.type === 'credits');
 
     async function onChat(platform, r) {
-        if (!r || !anyChat()) return 0;
+        if (!r || !(anyChat() || (r.kind === 'message' && anyModWatch()))) return 0;
         let n = 0;
         for (const pid of await profilesFor(platform, r.channelId)) {
-            const open = forProfile(pid).filter((e) => e.overlay.type === 'chat');
+            if (r.kind === 'message') {
+                const m0 = r.message;
+                if (m0.badges?.some((b) => b.role === 'moderator' || b.role === 'broadcaster') && m0.name) {
+                    const seen = mods.get(pid) || new Map();
+                    if (seen.size < L.modsSeen && !m0.badges.some((b) => b.role === 'broadcaster')) seen.set(String(m0.login || m0.name).toLowerCase(), String(m0.name).slice(0, 40));
+                    mods.set(pid, seen);
+                }
+            }
+            const open = forProfile(pid).filter((e) => CHAT_USERS.has(e.overlay.type));
             if (!open.length) continue;
             let ring = chatRing.get(pid) || [];
             if (r.kind === 'message') {
-                ring.push(r.message);
+                // 7TV, BTTV and FFZ emotes of the profile's Twitch channel, read on this server (emotes.js), on every platform's lines.
+                let message = r.message;
+                if (emotes && open.some((e) => e.overlay.config.thirdParty !== false)) {
+                    try { message = { ...message, parts: splitEmotes(message.parts, await emotes.forChannel(await twitchIdOf(pid))) }; } catch { /* plain text then */ }
+                }
+                ring.push(message);
                 if (ring.length > L.chatRing) ring = ring.slice(-L.chatRing);
-                for (const e of open) if (visibleFor(r.message, e.overlay.config)) { sendAll(e, 'chat', r.message); n++; }
+                for (const e of open) {
+                    const c = e.overlay.config;
+                    if (e.overlay.type === 'chat') {
+                        if (!visibleFor(message, c)) continue;
+                        sendAll(e, 'chat', c.thirdParty === false ? r.message : message);
+                        n++;
+                    } else if (e.overlay.type === 'emotewall' && c.platforms.includes(message.platform)) {
+                        const list = message.parts.filter((p) => p.t === 'emote' && p.src && (c.thirdParty || !THIRD_PARTY.test(p.src))).slice(0, c.perMessage).map((p) => p.src);
+                        if (list.length) { sendAll(e, 'emotes', { list }); n++; }
+                    }
+                }
             } else if (r.kind === 'delete') {
                 ring = ring.filter((m) => m.id !== r.id);
                 for (const e of open) sendAll(e, 'chat_remove', { id: r.id });
@@ -434,7 +707,7 @@ export function createOverlayService({
     }
 
     // ── settings changed, key regenerated ──
-    const staleGoals = (pid) => { const hit = goals.get(Number(pid)); if (hit) hit.at = 0; };
+    const staleGoals = (pid) => { for (const m of [goals, jars]) { const hit = m.get(Number(pid)); if (hit) hit.at = 0; } labelCache.delete(Number(pid)); features.delete(Number(pid)); };
     async function invalidate(overlayId, { closeAll = false, profileId = null } = {}) {
         if (profileId) staleGoals(profileId);
         const e = entries.get(Number(overlayId));
@@ -475,6 +748,7 @@ export function createOverlayService({
     // ── timers: counters that changed without an event (depth guard), now playing that stopped ──
     let ticker = null;
     let counterAt = 0;
+    let viewersAt = 0;
     if (timers) {
         ticker = setInterval(() => {
             const t = now();
@@ -484,6 +758,19 @@ export function createOverlayService({
                     const c = nowCard(e.overlay);
                     const sig = nowSig(c);
                     if (sig !== lastNow.get(e.overlay.id)) { lastNow.set(e.overlay.id, sig); sendAll(e, 'nowplaying', { now: c }); }
+                }
+            }
+            if (t - viewersAt >= L.viewersMs) {
+                viewersAt = t;
+                const pids = new Set([...entries.values()].filter((e) => e.clients.size && e.overlay.type === 'viewers').map((e) => e.overlay.profileId));
+                for (const pid of pids) {
+                    countsFor(pid).then((counts) => {
+                        for (const e of entries.values()) {
+                            if (e.overlay.profileId !== pid || e.overlay.type !== 'viewers' || !e.clients.size) continue;
+                            const sig = JSON.stringify(counts);
+                            if (sig !== lastViewers.get(e.overlay.id)) { lastViewers.set(e.overlay.id, sig); sendAll(e, 'viewers', { counts }); }
+                        }
+                    }).catch(() => {});
                 }
             }
             if (t - counterAt >= L.counterRefreshMs) {
@@ -496,9 +783,16 @@ export function createOverlayService({
 
     return {
         attach, isConnected, dispatch, report, onEvent, onChat, testAlert, changeGoal, invalidate, onStudioRequest, ttsAudio, status,
+        testWidget, chatPoll, resetJar, labelValues, labelText, pollState, onHeart,
         pageConfig, buildAlert, images,
-        close() { if (ticker) clearInterval(ticker); for (const t of goalWrites.values()) clearTimeout(t); goalWrites.clear(); for (const e of entries.values()) for (const c of e.clients) { try { c.close(); } catch { /* gone */ } } entries.clear(); },
-        _state: { entries, chatRing, tts, goals },
+        close() {
+            if (ticker) clearInterval(ticker);
+            for (const t of goalWrites.values()) clearTimeout(t);
+            goalWrites.clear();
+            for (const e of entries.values()) for (const c of e.clients) { try { c.close(); } catch { /* gone */ } }
+            entries.clear();
+        },
+        _state: { entries, chatRing, tts, goals, jars, trains, hype, polls, mods },
     };
 }
 

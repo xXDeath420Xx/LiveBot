@@ -56,7 +56,15 @@ test('Studio facts on the pages match the app', () => {
 test('no telemetry: dependencies, source, window policy and the OBS report are what /studio/privacy says', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(studio, 'package.json'), 'utf8'));
     // 0.2.6 (Phase 5): multicast-dns (finding lights), node-hid (Logitech Litra over USB), koffi (Voicemeeter's Remote API).
-    const allowed = ['electron-updater', 'obs-websocket-js', 'uiohook-napi', 'ws', 'multicast-dns', 'node-hid', 'koffi'];
+    // 0.2.12: onnxruntime-node (the voice detector); its official build has Microsoft's 1DS telemetry, which Studio 0.2.13
+    // switches off (ORT_DISABLE_TELEMETRY) before onnxruntime loads, and the privacy page says so.
+    const allowed = ['electron-updater', 'obs-websocket-js', 'uiohook-napi', 'ws', 'multicast-dns', 'node-hid', 'koffi', 'onnxruntime-node'];
+    if (pkg.dependencies?.['onnxruntime-node']) {
+        const mainSrc = fs.readFileSync(path.join(studio, 'src/main/main.js'), 'utf8');
+        assert.ok(mainSrc.indexOf("process.env.ORT_DISABLE_TELEMETRY = '1';") > 0 && mainSrc.indexOf("process.env.ORT_DISABLE_TELEMETRY = '1';") < mainSrc.indexOf('require('), 'onnxruntime telemetry off before anything is loaded');
+        const vadSrc = fs.readFileSync(path.join(studio, 'src/main/voice-vad.js'), 'utf8');
+        assert.ok(vadSrc.indexOf("process.env.ORT_DISABLE_TELEMETRY = '1';") > 0 && vadSrc.indexOf("process.env.ORT_DISABLE_TELEMETRY = '1';") < vadSrc.indexOf("require('onnxruntime-node')"), 'and again just before onnxruntime loads');
+    }
     for (const dep of Object.keys(pkg.dependencies || {})) {
         assert.ok(allowed.includes(dep), `new Studio dependency ${dep}: review it and update /studio/privacy ("No telemetry") first`);
     }
@@ -105,7 +113,7 @@ test('no telemetry: dependencies, source, window policy and the OBS report are w
 
 test('stream bot retention on /legal/data equals the migrations, and every table row has a fallback', async () => {
     const rows = new Map();
-    for (const m of ['454_stream_bot.js', '455_stream_bot_imports.js', '457_stream_bot_music.js', '462_stream_bot_device_retention.js', '464_stream_bot_viewers.js', '470_stream_bot_youtube.js']) {
+    for (const m of ['454_stream_bot.js', '455_stream_bot_imports.js', '457_stream_bot_music.js', '462_stream_bot_device_retention.js', '464_stream_bot_viewers.js', '470_stream_bot_youtube.js', '475_stream_bot_community.js', '480_youtube_google_verification.js']) {
         for (const [table, , days] of (await import(`../migrations/${m}`)).RETENTION_ROWS) rows.set(table, days);
     }
     let checked = 0;
@@ -120,7 +128,7 @@ test('stream bot retention on /legal/data equals the migrations, and every table
     }
     assert.ok(checked >= 8, `${checked} stream bot rows checked`);
     const privacy = read('dashboard/views/privacy-tailwind.ejs');
-    for (const [label, table] of [['Stream bot event log', 'stream_bot_events'], ['Stream bot run history', 'stream_bot_runs'], ['Stream bot actions sent to CertiFried Studio', 'stream_bot_dispatch_queue'], ['Stream bot pairing codes', 'stream_bot_pairing_codes'], ['Song requests (who asked', 'stream_bot_music_requests'], ['Song likes', 'stream_bot_music_likes'], ['Firebot and Streamer.bot import reports', 'stream_bot_imports'], ['Revoked stream bot devices', 'stream_bot_devices'], ['Stream bot viewer records', 'stream_bot_viewers'], ['Stream bot viewer point history', 'stream_bot_viewer_history'], ['Stream bot YouTube quota use', 'stream_bot_youtube_quota']]) {
+    for (const [label, table] of [['Stream bot event log', 'stream_bot_events'], ['Stream bot run history', 'stream_bot_runs'], ['Stream bot actions sent to CertiFried Studio', 'stream_bot_dispatch_queue'], ['Stream bot pairing codes', 'stream_bot_pairing_codes'], ['Song requests (who asked', 'stream_bot_music_requests'], ['Song likes', 'stream_bot_music_likes'], ['Firebot and Streamer.bot import reports', 'stream_bot_imports'], ['Revoked stream bot devices', 'stream_bot_devices'], ['Stream bot viewer records', 'stream_bot_viewers'], ['Stream bot viewer point history', 'stream_bot_viewer_history'], ['Stream bot YouTube quota use', 'stream_bot_youtube_quota'], ['Stream bot loyalty store redemptions', 'stream_bot_store_redemptions'], ['Stream bot media share requests', 'stream_bot_media_requests'], ['Data from YouTube in the stream bot', 'stream_bot_events__youtube'], ['YouTube viewer records and their history', 'stream_bot_viewers__youtube'], ['Live state of a linked YouTube channel', 'stream_bot_youtube_live']]) {
         const i = privacy.indexOf(label);
         assert.ok(i > 0, `/privacy lists ${label}`);
         const days = rows.get(table);
@@ -198,7 +206,7 @@ test('the legal documents cover the stream bot, Studio and song requests, keep t
     const privacy = render('privacy-tailwind', { user: null });
     const eula = render('eula-tailwind', { user: null });
     for (const [name, html] of [['terms', terms], ['privacy', privacy], ['eula', eula]]) {
-        assert.match(html, /Last updated November (19|20), 2026/, `${name}: last updated`);   // privacy and terms: November 20 (YouTube, H-741)
+        assert.match(html, /Last updated November (19|20|21), 2026/, `${name}: last updated`);   // terms: November 20 (YouTube, H-741); privacy: November 21 (Google user data)
         assert.ok(html.includes('id="changelog"'), `${name}: changelog`);
         assert.ok(!/\bMIT\b/.test(html), `${name}: no MIT wording`);
     }

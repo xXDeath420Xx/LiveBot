@@ -3,6 +3,12 @@
   accounts, posted to a Discord channel. One add form and one list per source (POST
   add-*-feed / remove-*-feed). Built on the settings-row kit (cf-settings.css); field names and
   ids are unchanged.
+
+  "Post to" lists text / announcement channels and their active threads ("#channel › thread", from
+  core/feed-target.js loadFeedTargets, as feedTargets). Its last option opens a small form that makes a
+  public thread for the feed (POST <api>/threads, one-week auto-archive). A ping that cannot notify anyone
+  (role not mentionable, bot without Mention @everyone, @here and All Roles) is flagged on the row and in
+  the edit panel (feedPingWarning).
 %>
 <%
 const rFeeds = redditFeeds || [];
@@ -10,8 +16,24 @@ const yFeeds = youtubeFeeds || [];
 const tFeeds = twitterFeeds || [];
 const bFeeds = (typeof blueskyFeeds !== 'undefined') ? blueskyFeeds : [];
 const sFeeds = (typeof rssFeeds !== 'undefined' && Array.isArray(rssFeeds)) ? rssFeeds : [];
+// The Fortnite feed (jobs/fortnite-feed-checker.js). Shown only where one is set up; channel and ping are edited here.
+const fnFeeds = (typeof fortniteFeeds !== 'undefined' && Array.isArray(fortniteFeeds)) ? fortniteFeeds : [];
+const FN_SOURCES = { vice: 'Vice', epic_news: 'Epic news', epic_status: 'Epic status', cosmetics: 'New cosmetics', shop: 'Item shop' };
+const fnSources = (f) => { try { return JSON.parse(f.sources || '[]').map(k => FN_SOURCES[k] || k).join(', '); } catch (e) { return ''; } };
 const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length + bFeeds.length + sFeeds.length;
-const feedChannel = (id) => { const c = channels.find(ch => ch.id === id); return c ? '#' + c.name : 'Deleted channel'; };
+// Post-to choices: feedTargets from the manage route; without it (the thread lookup failed), the text and
+// announcement channels as before.
+const fdTargets = (typeof feedTargets !== 'undefined' && Array.isArray(feedTargets))
+    ? feedTargets
+    : (channels || []).filter(c => c.type === 0 || c.type === 5).map(c => ({ id: String(c.id), name: '#' + c.name, label: '#' + c.name, type: c.type, parentId: null, thread: false }));
+const feedChannel = (id) => {
+    const t = fdTargets.find(x => String(x.id) === String(id));
+    if (t) return t.label;
+    const c = channels.find(ch => ch.id === id);
+    return c ? (c.parent && c.isThread && c.isThread() ? '#' + c.parent.name + ' › ' + c.name : '#' + c.name) : 'Deleted channel or archived thread';
+};
+const fdCanMentionAll = (typeof feedCanMentionAll !== 'undefined') ? !!feedCanMentionAll : true;
+const fdPingWarn = (channelId, roleId) => (typeof feedPingWarning === 'function' && roleId) ? (feedPingWarning(channelId, roleId) || null) : null;
 // Each feed's message, ping and filters are edited in the panel under its row (partials/manage/feeds-edit.ejs).
 const fdRoles = (typeof roles !== 'undefined' && Array.isArray(roles)) ? roles : [];
 const fdOn = (v, dflt) => (v === undefined || v === null) ? dflt : Number(v) !== 0;
@@ -60,9 +82,16 @@ const fdSummary = (kind, f) => {
     .fd-ico { width: 1.15em; text-align: center; margin-right: 4px; color: var(--cf-text-2); }
     .fd-preview { display: grid; gap: 6px; }
     .fd-preview-label { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .fd-warn { display: flex; margin-top: 4px; font-size: var(--cf-text-xs); }
+    .fd-thread-new { display: grid; gap: var(--cf-2); margin-top: var(--cf-2); padding: var(--cf-3); border: 1px solid var(--cf-border); border-radius: var(--cf-radius, 8px); }
+    .fd-thread-new[hidden] { display: none; }
+    .fd-thread-new .fd-thread-title { margin: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .fd-thread-new .fd-thread-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--cf-2); }
+    @media (max-width: 640px) { .fd-thread-new .fd-thread-row { grid-template-columns: 1fr; } }
+    .fd-thread-new .fd-thread-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
 </style>
 
-<div class="page-section" data-fd-api="/api/guilds/<%= guild.id %>/feeds">
+<div class="page-section" data-fd-api="/api/guilds/<%= guild.id %>/feeds" data-fd-mention-all="<%= fdCanMentionAll ? '1' : '0' %>">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
@@ -101,7 +130,7 @@ const fdSummary = (kind, f) => {
                         <tr>
                             <td data-label="Subreddit"><span class="fd-source">r/<%= feed.subreddit %></span></td>
                             <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
-                            <td data-label="Options"><span class="fd-options"><%= fdSummary('reddit', feed) %></span></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('reddit', feed) %></span><% const _w = fdPingWarn(feed.channel_id, feed.ping_role_id); if (_w) { %><span class="cf-status-line is-warn fd-warn"><%= _w %></span><% } %></td>
                             <td class="cf-cell-end">
                                 <div class="fd-actions">
                                     <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="reddit" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
@@ -113,7 +142,7 @@ const fdSummary = (kind, f) => {
                             </td>
                         </tr>
                         <tr class="fd-edit-row" hidden data-feed-kind="reddit" data-feed-id="<%= feed.id %>">
-                            <td colspan="4"><%- include('feeds-edit', { kind: 'reddit', feed, channels, roles: fdRoles }) %></td>
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'reddit', feed, channels: fdTargets, roles: fdRoles, pingWarning: fdPingWarn(feed.channel_id, feed.ping_role_id) }) %></td>
                         </tr>
                         <% }); %>
                     </tbody>
@@ -137,7 +166,7 @@ const fdSummary = (kind, f) => {
                         <div class="cf-field">
                             <label for="f-feeds-channel_id">Post to</label>
                             <select id="f-feeds-channel_id" name="channel_id" class="form-select" required>
-                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                                <%- include('../kit/_options', { items: fdTargets, selected: null, prefix: '', empty: 'Choose a channel or thread' }) %>
                             </select>
                         </div>
                     </div>
@@ -169,7 +198,7 @@ const fdSummary = (kind, f) => {
                         <tr>
                             <td data-label="YouTube channel"><span class="fd-source"><% if (feed.channel_name) { %><%= feed.channel_name %> <% } %><code><%= feed.youtube_channel_id %></code></span></td>
                             <td data-label="Channel"><%= feedChannel(feed.discord_channel_id) %></td>
-                            <td data-label="Options"><span class="fd-options"><%= fdSummary('youtube', feed) %></span></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('youtube', feed) %></span><% const _w = fdPingWarn(feed.discord_channel_id, feed.ping_role_id); if (_w) { %><span class="cf-status-line is-warn fd-warn"><%= _w %></span><% } %></td>
                             <td class="cf-cell-end">
                                 <div class="fd-actions">
                                     <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="youtube" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
@@ -181,7 +210,7 @@ const fdSummary = (kind, f) => {
                             </td>
                         </tr>
                         <tr class="fd-edit-row" hidden data-feed-kind="youtube" data-feed-id="<%= feed.id %>">
-                            <td colspan="4"><%- include('feeds-edit', { kind: 'youtube', feed, channels, roles: fdRoles }) %></td>
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'youtube', feed, channels: fdTargets, roles: fdRoles, pingWarning: fdPingWarn(feed.discord_channel_id, feed.ping_role_id) }) %></td>
                         </tr>
                         <% }); %>
                     </tbody>
@@ -202,7 +231,7 @@ const fdSummary = (kind, f) => {
                         <div class="cf-field">
                             <label for="f-feeds-discord_channel_id">Post to</label>
                             <select id="f-feeds-discord_channel_id" name="discord_channel_id" class="form-select" required>
-                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                                <%- include('../kit/_options', { items: fdTargets, selected: null, prefix: '', empty: 'Choose a channel or thread' }) %>
                             </select>
                         </div>
                     </div>
@@ -233,7 +262,7 @@ const fdSummary = (kind, f) => {
                         <tr>
                             <td data-label="Account"><span class="fd-source">@<%= feed.twitter_username %></span></td>
                             <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
-                            <td data-label="Options"><span class="fd-options"><%= fdSummary('twitter', feed) %></span></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('twitter', feed) %></span><% const _w = fdPingWarn(feed.channel_id, feed.ping_role_id); if (_w) { %><span class="cf-status-line is-warn fd-warn"><%= _w %></span><% } %></td>
                             <td class="cf-cell-end">
                                 <div class="fd-actions">
                                     <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="twitter" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
@@ -245,7 +274,7 @@ const fdSummary = (kind, f) => {
                             </td>
                         </tr>
                         <tr class="fd-edit-row" hidden data-feed-kind="twitter" data-feed-id="<%= feed.id %>">
-                            <td colspan="4"><%- include('feeds-edit', { kind: 'twitter', feed, channels, roles: fdRoles }) %></td>
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'twitter', feed, channels: fdTargets, roles: fdRoles, pingWarning: fdPingWarn(feed.channel_id, feed.ping_role_id) }) %></td>
                         </tr>
                         <% }); %>
                     </tbody>
@@ -266,7 +295,7 @@ const fdSummary = (kind, f) => {
                         <div class="cf-field">
                             <label for="f-feeds-channel_id-2">Post to</label>
                             <select id="f-feeds-channel_id-2" name="channel_id" class="form-select" required>
-                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                                <%- include('../kit/_options', { items: fdTargets, selected: null, prefix: '', empty: 'Choose a channel or thread' }) %>
                             </select>
                         </div>
                     </div>
@@ -297,7 +326,7 @@ const fdSummary = (kind, f) => {
                         <tr>
                             <td data-label="Handle"><span class="fd-source">@<%= feed.bluesky_handle %></span></td>
                             <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
-                            <td data-label="Options"><span class="fd-options"><%= fdSummary('bluesky', feed) %></span></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('bluesky', feed) %></span><% const _w = fdPingWarn(feed.channel_id, feed.ping_role_id); if (_w) { %><span class="cf-status-line is-warn fd-warn"><%= _w %></span><% } %></td>
                             <td class="cf-cell-end">
                                 <div class="fd-actions">
                                     <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="bluesky" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
@@ -309,7 +338,7 @@ const fdSummary = (kind, f) => {
                             </td>
                         </tr>
                         <tr class="fd-edit-row" hidden data-feed-kind="bluesky" data-feed-id="<%= feed.id %>">
-                            <td colspan="4"><%- include('feeds-edit', { kind: 'bluesky', feed, channels, roles: fdRoles }) %></td>
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'bluesky', feed, channels: fdTargets, roles: fdRoles, pingWarning: fdPingWarn(feed.channel_id, feed.ping_role_id) }) %></td>
                         </tr>
                         <% }); %>
                     </tbody>
@@ -330,7 +359,7 @@ const fdSummary = (kind, f) => {
                         <div class="cf-field">
                             <label for="f-feeds-channel_id-3">Post to</label>
                             <select id="f-feeds-channel_id-3" name="channel_id" class="form-select" required>
-                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                                <%- include('../kit/_options', { items: fdTargets, selected: null, prefix: '', empty: 'Choose a channel or thread' }) %>
                             </select>
                         </div>
                     </div>
@@ -341,6 +370,43 @@ const fdSummary = (kind, f) => {
             </form>
         </div>
     </section>
+
+    <% if (fnFeeds.length > 0) { %>
+    <section class="cf-section" aria-labelledby="fd-fortnite-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="fd-fortnite-title"><i class="fas fa-gamepad fd-ico" aria-hidden="true"></i>Fortnite <span class="cf-tab-count"><%= fnFeeds.length %></span></h2>
+                <p class="cf-section-desc">News, server status, new cosmetics and the item shop. Checked every 20 minutes.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Sources</th><th scope="col">Channel</th><th scope="col">Options</th><th scope="col"><span class="visually-hidden">Edit</span></th></tr>
+                    </thead>
+                    <tbody>
+                        <% fnFeeds.forEach(feed => { %>
+                        <tr>
+                            <td data-label="Sources"><span class="fd-source"><%= fnSources(feed) || 'None' %></span><% if (!feed.enabled) { %><span class="fd-url">Off</span><% } %></td>
+                            <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('fortnite', feed) %></span><% const _w = fdPingWarn(feed.channel_id, feed.ping_role_id); if (_w) { %><span class="cf-status-line is-warn fd-warn"><%= _w %></span><% } %></td>
+                            <td class="cf-cell-end">
+                                <div class="fd-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="fortnite" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr class="fd-edit-row" hidden data-feed-kind="fortnite" data-feed-id="<%= feed.id %>">
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'fortnite', feed, channels: fdTargets, roles: fdRoles, pingWarning: fdPingWarn(feed.channel_id, feed.ping_role_id) }) %></td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    <% } %>
 
     <section class="cf-section" aria-labelledby="fd-rss-title">
         <header class="cf-section-head">
@@ -365,7 +431,7 @@ const fdSummary = (kind, f) => {
                                 <% if (feed.suspended_until && new Date(feed.suspended_until) > new Date()) { %><span class="fd-url is-bad">Paused after repeated errors: <%= feed.last_error || 'no answer' %></span><% } %>
                             </td>
                             <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
-                            <td data-label="Options"><span class="fd-options"><%= fdSummary('rss', feed) %></span></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('rss', feed) %></span><% const _w = fdPingWarn(feed.channel_id, feed.ping_role_id); if (_w) { %><span class="cf-status-line is-warn fd-warn"><%= _w %></span><% } %></td>
                             <td class="cf-cell-end">
                                 <div class="fd-actions">
                                     <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="rss" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
@@ -374,7 +440,7 @@ const fdSummary = (kind, f) => {
                             </td>
                         </tr>
                         <tr class="fd-edit-row" hidden data-feed-kind="rss" data-feed-id="<%= feed.id %>">
-                            <td colspan="4"><%- include('feeds-edit', { kind: 'rss', feed, channels, roles: fdRoles }) %></td>
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'rss', feed, channels: fdTargets, roles: fdRoles, pingWarning: fdPingWarn(feed.channel_id, feed.ping_role_id) }) %></td>
                         </tr>
                         <% }); %>
                     </tbody>
@@ -396,7 +462,7 @@ const fdSummary = (kind, f) => {
                         <div class="cf-field">
                             <label class="fd-ctl"><span>Post to</span>
                                 <select class="form-select" data-rss-add="channel_id">
-                                    <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                                    <%- include('../kit/_options', { items: fdTargets, selected: null, prefix: '', empty: 'Choose a channel or thread' }) %>
                                 </select>
                             </label>
                         </div>
@@ -446,7 +512,7 @@ const fdSummary = (kind, f) => {
     // twitter-feed.js, bluesky-feed.js, rss-feed.js and buildFeedContent in core/feed-message.js),
     // with sample post values.
     var FD_CTX = <%- JSON.stringify({
-        channels: (channels || []).map(c => ({ id: String(c.id), name: c.name })),
+        channels: fdTargets.map(c => ({ id: String(c.id), name: String(c.label || c.name).replace(/^#/, '') })),
         roles: fdRoles.map(r => ({ id: String(r.id), name: r.name, color: r.hexColor || null })),
     }).replace(/</g, '\\u003c') %>;
     var FD_BOT = <%- JSON.stringify({ name: (guild.members && guild.members.me && guild.members.me.displayName) || 'CertiFried', avatar: (guild.members && guild.members.me && guild.members.me.displayAvatarURL ? guild.members.me.displayAvatarURL({ size: 64 }) : null) }).replace(/</g, '\\u003c') %>;
@@ -502,6 +568,13 @@ const fdSummary = (kind, f) => {
                 buttons: [{ label: 'View on X' }],
             };
         }
+        if (kind === 'fortnite') {
+            return {
+                content: fdContent('', {}, ping),
+                embeds: [{ color: '#751F1F', author: { name: 'Fortnite news' }, title: 'An example headline', url: 'https://www.fortnite.com/news',
+                    description: 'The first line of the story.', image: { placeholder: 'Story image' }, timestamp: true }],
+            };
+        }
         if (kind === 'bluesky') {
             return {
                 content: fdContent(tpl, { handle: source, name: source, url: 'https://bsky.app/profile/' + source }, ping),
@@ -523,6 +596,149 @@ const fdSummary = (kind, f) => {
         msg.avatarUrl = FD_BOT.avatar;
         CFMsgPreview.render(target, msg, FD_CTX);
     }
+    // ---- "Post to": threads, and making a thread for a feed (POST <api>/threads) ------------------------
+    var NEW_THREAD = '__new_thread';
+    var FD_PARENTS = <%- JSON.stringify(fdTargets.filter(t => !t.thread).map(t => ({ id: t.id, label: t.label }))).replace(/</g, '\\u003c') %>;
+    var FD_THREAD_PARENT = <%- JSON.stringify(Object.fromEntries(fdTargets.filter(t => t.thread).map(t => [t.id, t.parentId]))).replace(/</g, '\\u003c') %>;
+    var TARGET_SEL = 'select[name="channel_id"], select[name="discord_channel_id"], select[data-rss-add="channel_id"], select[data-f="channel_id"]';
+    var THREAD_NAMES = { youtube: 'YouTube', twitter: 'X', bluesky: 'Bluesky', reddit: 'Reddit', rss: 'News', fortnite: 'Fortnite' };
+    function kindOf(sel) {
+        var p = sel.closest('[data-feed-kind]');
+        if (p) return p.getAttribute('data-feed-kind');
+        var sec = sel.closest('section');
+        var h = sec && sec.querySelector('.cf-section-title');
+        return h ? h.id.replace(/^fd-/, '').replace(/-title$/, '') : '';
+    }
+    function el(tag, attrs, kids) {
+        var n = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) { if (k === 'text') n.textContent = attrs[k]; else n.setAttribute(k, attrs[k]); });
+        (kids || []).forEach(function (k) { n.appendChild(k); });
+        return n;
+    }
+    page.querySelectorAll(TARGET_SEL).forEach(function (sel) {
+        sel.setAttribute('data-fd-prev', sel.value);
+        sel.appendChild(el('option', { value: NEW_THREAD, text: 'Create a thread for this feed…' }));
+    });
+    function threadBox(sel) {
+        var field = sel.closest('.cf-field') || sel.parentNode;
+        var box = field.querySelector('.fd-thread-new');
+        if (box) return box;
+        var parentSel = el('select', { 'class': 'form-select', 'data-thread': 'parent' },
+            FD_PARENTS.map(function (p) { return el('option', { value: p.id, text: p.label }); }));
+        box = el('div', { 'class': 'fd-thread-new', role: 'group', 'aria-label': 'New thread' }, [
+            el('p', { 'class': 'fd-thread-title', text: 'New thread' }),
+            el('div', { 'class': 'fd-thread-row' }, [
+                el('label', { 'class': 'fd-ctl' }, [el('span', { text: 'In channel' }), parentSel]),
+                el('label', { 'class': 'fd-ctl' }, [el('span', { text: 'Thread name' }), el('input', { type: 'text', 'class': 'form-control', maxlength: '100', 'data-thread': 'name' })]),
+            ]),
+            el('span', { 'class': 'cf-field-hint', text: 'The bot makes a public thread that archives after a week without posts; the feed reopens it when it posts. If a thread with this name already exists in that channel, it is used instead.' }),
+            el('div', { 'class': 'fd-thread-foot' }, [
+                el('button', { type: 'button', 'class': 'btn btn-sm btn-primary', 'data-thread': 'create', text: 'Create thread' }),
+                el('button', { type: 'button', 'class': 'btn btn-sm btn-secondary', 'data-thread': 'cancel', text: 'Cancel' }),
+                el('span', { 'class': 'cf-status-line', role: 'status', 'aria-live': 'polite', 'data-thread': 'status' }),
+            ]),
+        ]);
+        field.appendChild(box);
+        box.__select = sel;
+        return box;
+    }
+    function addTargetOption(t) {
+        FD_THREAD_PARENT[t.id] = t.parentId;
+        page.querySelectorAll(TARGET_SEL).forEach(function (sel) {
+            if (sel.querySelector('option[value="' + t.id + '"]')) return;
+            var o = el('option', { value: t.id, text: t.label });
+            // After the parent channel and its threads, before the next channel.
+            var opts = Array.prototype.slice.call(sel.options);
+            var at = opts.findIndex(function (x) { return x.value === t.parentId; });
+            var before = sel.querySelector('option[value="' + NEW_THREAD + '"]');
+            if (at >= 0) {
+                for (var i = at + 1; i < opts.length; i++) {
+                    if (!FD_THREAD_PARENT[opts[i].value] || opts[i].value === NEW_THREAD) { before = opts[i]; break; }
+                }
+            }
+            sel.insertBefore(o, before);
+        });
+    }
+    page.addEventListener('change', function (e) {
+        var sel = e.target;
+        if (!sel.matches || !sel.matches(TARGET_SEL)) return;
+        var field = sel.closest('.cf-field') || sel.parentNode;
+        if (sel.value !== NEW_THREAD) {
+            sel.setAttribute('data-fd-prev', sel.value);
+            var open = field.querySelector('.fd-thread-new');
+            if (open) open.hidden = true;
+            return;
+        }
+        var box = threadBox(sel);
+        box.hidden = false;
+        var prev = sel.getAttribute('data-fd-prev') || '';
+        var parent = FD_THREAD_PARENT[prev] || prev;
+        var ps = box.querySelector('[data-thread="parent"]');
+        if (parent && ps.querySelector('option[value="' + parent + '"]')) ps.value = parent;
+        var nm = box.querySelector('[data-thread="name"]');
+        if (!nm.value) nm.value = THREAD_NAMES[kindOf(sel)] || '';
+        nm.focus();
+    });
+    page.addEventListener('click', async function (e) {
+        var b = e.target.closest('button[data-thread]');
+        if (!b) return;
+        var box = b.closest('.fd-thread-new');
+        var sel = box.__select;
+        var status = box.querySelector('[data-thread="status"]');
+        if (b.getAttribute('data-thread') === 'cancel') {
+            box.hidden = true;
+            sel.value = sel.getAttribute('data-fd-prev') || '';
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            sel.focus();
+            return;
+        }
+        var body = { channel_id: box.querySelector('[data-thread="parent"]').value, name: box.querySelector('[data-thread="name"]').value.trim() };
+        if (!body.channel_id) { status.textContent = 'Choose a channel for the thread.'; status.className = 'cf-status-line is-bad'; return; }
+        if (!body.name) { status.textContent = 'Give the thread a name.'; status.className = 'cf-status-line is-bad'; return; }
+        b.disabled = true;
+        status.textContent = 'Creating the thread';
+        status.className = 'cf-status-line is-busy';
+        try {
+            var made = await send('POST', apiBase + '/threads', body);
+            addTargetOption(made.thread);
+            sel.value = made.thread.id;
+            box.hidden = true;
+            status.textContent = '';
+            var row = sel.closest('tr.fd-edit-row');
+            var msg = (made.reused ? 'Using the existing thread ' : 'Created ') + made.thread.label + (row ? '. Save to post there.' : '. Add the feed to post there.');
+            if (row) setStatus(row, msg, 'is-ok');
+            else (sel.closest('.cf-field') || sel.parentNode).appendChild(el('span', { 'class': 'cf-status-line is-ok', role: 'status', text: msg }));
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (err) {
+            status.textContent = err.message;
+            status.className = 'cf-status-line is-bad';
+        } finally {
+            b.disabled = false;
+        }
+    });
+    // A form must never send the "create a thread" choice as its channel.
+    page.addEventListener('submit', function (e) {
+        var bad = Array.prototype.find.call(e.target.querySelectorAll(TARGET_SEL), function (s) { return s.value === NEW_THREAD; });
+        if (bad) { e.preventDefault(); bad.focus(); }
+    });
+
+    // ---- Ping check while choosing a role (the saved state is checked on the server) -------------------------
+    var MENTION_ALL = page.getAttribute('data-fd-mention-all') === '1';
+    page.addEventListener('change', function (e) {
+        var sel = e.target;
+        if (!sel.matches || !sel.matches('[data-f="ping_role_id"]')) return;
+        var out = (sel.closest('.cf-field') || sel.parentNode).querySelector('[data-fd-ping-warn]');
+        if (!out) return;
+        var o = sel.options[sel.selectedIndex];
+        var text = '';
+        if (sel.value === 'everyone' && !MENTION_ALL) text = 'The bot cannot ping @everyone here: give it Mention @everyone, @here and All Roles.';
+        else if (sel.value && sel.value !== 'everyone' && o && o.getAttribute('data-mentionable') === '0' && !MENTION_ALL) {
+            text = o.textContent.trim() + ' is not mentionable, so the ping will not notify anyone. Turn on "Allow anyone to @mention this role" for it, or give the bot Mention @everyone, @here and All Roles.';
+        }
+        out.textContent = text;
+        out.hidden = !text;
+    });
+
     page.addEventListener('input', function (e) { var p = e.target.closest('tr.fd-edit-row'); if (p) fdPreview(p); });
     page.addEventListener('change', function (e) { var p = e.target.closest('tr.fd-edit-row'); if (p) fdPreview(p); });
 
@@ -587,7 +803,7 @@ const fdSummary = (kind, f) => {
         panel.querySelectorAll('[data-f]').forEach(function (el) {
             var key = el.getAttribute('data-f');
             if (el.type === 'checkbox') body[key] = el.checked;
-            else if (key === 'channel_id' && !el.value) return; // a deleted channel: leave it until one is chosen
+            else if (key === 'channel_id' && (!el.value || el.value === NEW_THREAD)) return; // a deleted channel, or a thread not made yet: leave it
             else body[key] = el.value;
         });
         btn.disabled = true;

@@ -38,7 +38,10 @@ function createRouter({ obs, sound, library, keys, screenshotDir, logger = null,
         handles: (t) => handlers.has(t),
         // Phase 5: light and voicemeeter once those handlers are given (main.js passes them through `extra`).
         // 0.2.7: 'apps' once studio.close_apps is given (closing Firebot / Streamer.bot for the switchover).
-        capabilities: () => ['obs', 'sound', 'hotkey', ...(handlers.has('light.set') ? ['light'] : []), ...(handlers.has('voicemeeter.mute') ? ['voicemeeter'] : []), ...(handlers.has('studio.close_apps') ? ['apps'] : [])],
+        // 0.2.8: 'voice' once voice.enable is given (the switchover turns voice commands on).
+        // 0.2.10: 'alertaudio' once obs.alert_audio is given (Sound Alerts and Blerp audio kept off the VOD track).
+        // 0.2.11: 'run' once system.run is given (a program from Studio's own list, programs.js).
+        capabilities: () => ['obs', 'sound', 'hotkey', ...(handlers.has('light.set') ? ['light'] : []), ...(handlers.has('voicemeeter.mute') ? ['voicemeeter'] : []), ...(handlers.has('studio.close_apps') ? ['apps'] : []), ...(handlers.has('voice.enable') ? ['voice'] : []), ...(handlers.has('obs.alert_audio') ? ['alertaudio'] : []), ...(handlers.has('system.run') ? ['run'] : [])],
         async run(action, params = {}) {
             const fn = handlers.get(action);
             if (!fn) return { ok: false, error: LATER.has(action) ? 'not_supported_yet' : 'unsupported_action' };

@@ -21,12 +21,16 @@
  * logins on the settings' "Not counted" list never count.
  * YouTube (H-741) counts like Kick: the YouTube API has no list of who is watching, so people who chatted in the last 10
  * minutes. Super Chats, Super Stickers and Jewels are tallied as tips (per currency); memberships count as subs.
+ * YouTube viewers never earn points (YouTube API Services Developer Policies III.F.3.c, no rewards for engaging with
+ * YouTube; youtube/policy.js): their watch time, messages, subscriptions and memberships are counted, the points are not,
+ * and the points commands answer in YouTube chat that points are Twitch and Kick only.
  *
  * Points are a tally kept for fun: earned for watch time while live, bonuses for follows, subs, gifts, Bits and raids.
  * Nothing can be bought with money, and CertiFried never handles a payment.
  */
 import { withDefaults, watchAward, rankFor, rankCrossed, currencyCommand, formatWatch, formatPoints, SAMPLE_MINUTES } from './settings.js';
 import { TIP_SOURCES } from '../events.js';
+import { noRewards, YT_POINTS_REPLY } from '../youtube/policy.js';
 
 export const ACTIVE_MINUTES = 10;
 const MAX_CHATTER_PAGES = 25;
@@ -133,7 +137,7 @@ export function createViewerService({
     }
 
     async function bonus(profileId, s, row, n, note) {
-        if (!row || !(n > 0)) return;
+        if (!row || !(n > 0) || noRewards(row.platform)) return;
         await changePoints(profileId, row.id, n, { kind: 'bonus', note, actor: 'stream bot' });
     }
 
@@ -159,6 +163,7 @@ export function createViewerService({
                     return;
                 case 'follow': {
                     const row = await vstore.addStats(profileId, p, u, { follows: 1 }, { when, followedAt: when });
+                    if (noRewards(p)) return;   // a YouTube subscriber is counted, never rewarded (III.F.3.c)
                     return bonus(profileId, s, row, s.earn.follow, 'Follow bonus');
                 }
                 case 'sub':
@@ -171,6 +176,7 @@ export function createViewerService({
                 case 'gift_sub': {
                     const count = Math.max(1, Math.round(Number(m.count ?? amt) || 1));
                     const row = await vstore.addStats(profileId, p, u, { gifts: 1, giftedSubs: count }, { when });
+                    if (noRewards(p)) return;   // gifted YouTube memberships: counted, never rewarded
                     return bonus(profileId, s, row, s.earn.giftPerSub * count, `Gift bonus (${count} sub${count === 1 ? '' : 's'})`);
                 }
                 case 'cheer':
@@ -188,9 +194,9 @@ export function createViewerService({
                 case 'membership': {
                     // YouTube memberships (new, milestone, gifted to them): counted as subs, like Twitch and Kick subs.
                     if (p !== 'youtube') return;
-                    const row = await vstore.addStats(profileId, p, { ...u, roles: [...new Set([...(u.roles || []), 'subscriber'])] }, { subs: 1 }, { when, subMonths: m.months ?? null });
-                    if (m.isGift) return;   // the gifter's bonus covers a gifted membership
-                    return bonus(profileId, s, row, s.earn.sub, m.kind === 'milestone' ? 'Membership milestone bonus' : 'Membership bonus');
+                    await vstore.addStats(profileId, p, { ...u, roles: [...new Set([...(u.roles || []), 'subscriber'])] }, { subs: 1 }, { when, subMonths: m.months ?? null });
+                    // No membership bonus: YouTube memberships are counted on the record and never rewarded (III.F.3.c).
+                    return;
                 }
                 case 'tip': {
                     // YouTube Super Chats, Super Stickers and Jewels: tallied per currency; CertiFried never handles money.
@@ -242,7 +248,8 @@ export function createViewerService({
         for (const o of res) {
             const pid = pidOf(o.row);
             added.set(pid, (added.get(pid) || 0) + minutes);
-            const n = watchAward(s, o.beforeMinutes, minutes, o.row.roles.includes('subscriber'));
+            // YouTube: the minutes are counted, no points (III.F.3.c).
+            const n = noRewards(ch.platform) || noRewards(o.row.platform) ? 0 : watchAward(s, o.beforeMinutes, minutes, o.row.roles.includes('subscriber'));
             if (n) awards.set(pid, (awards.get(pid) || 0) + n);
         }
         await vstore.addPointsBulk(profileId, awards);
@@ -346,6 +353,8 @@ export function createViewerService({
         const s = await settingsFor(profileId);
         const cur = s.currency;
         const args = firstArg(input);
+        // Points are Twitch and Kick only: YouTube chat is told so, and nothing is read or changed (III.F.3.c).
+        if (noRewards(ev?.platform)) return { reply: YT_POINTS_REPLY, detail: 'points are Twitch and Kick only' };
         const me = await ensureViewer(profileId, ev);
         const who = ev?.user?.name || ev?.user?.login || 'You';
         switch (command) {
@@ -422,7 +431,7 @@ export function createViewerService({
         const row = await vstore.byAccount(profileId, ev.platform, ev.user.id);
         if (!row) return out;
         const person = await vstore.person(profileId, row.id);
-        out['user.points'] = formatPoints(person.points);
+        out['user.points'] = formatPoints(noRewards(ev.platform) ? 0 : person.points);   // no points on YouTube
         out['user.watchtime'] = formatWatch(person.totals.watchMinutes);
         out['user.messages'] = formatPoints(person.totals.messages);
         out['user.rank'] = rankFor(s, { watchMinutes: person.totals.watchMinutes, points: person.points })?.name || '';
@@ -434,7 +443,7 @@ export function createViewerService({
         const row = await vstore.byAccount(profileId, ev.platform, ev.user.id);
         if (!row) return zero;
         const person = await vstore.person(profileId, row.id);
-        return { found: true, points: person.points, watchMinutes: person.totals.watchMinutes, messages: person.totals.messages };
+        return { found: true, points: noRewards(ev.platform) ? 0 : person.points, watchMinutes: person.totals.watchMinutes, messages: person.totals.messages };
     }
 
     return {

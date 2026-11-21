@@ -117,9 +117,12 @@ function pruneBackups(dir) {
 export function backupEnv(envPath = DEFAULT_ENV_PATH, backupDir = DEFAULT_BACKUP_DIR) {
     ensureBackupDir(backupDir);
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const dest = path.join(backupDir, `.env.${stamp}`);
     const data = fs.readFileSync(envPath);
-    fs.writeFileSync(dest, data, { mode: 0o600 });
+    // Two writes in the same millisecond used to share one name, so the second backup overwrote the first
+    // (flaky tests/env-file.test.js). "-1", "-2"... keep them apart and still sort after the plain name.
+    let dest = path.join(backupDir, `.env.${stamp}`);
+    for (let n = 1; fs.existsSync(dest); n++) dest = path.join(backupDir, `.env.${stamp}-${n}`);
+    fs.writeFileSync(dest, data, { mode: 0o600, flag: "wx" });
     try { fs.chmodSync(dest, 0o600); } catch { /* best effort */ }
     pruneBackups(backupDir);
     return dest;
@@ -130,6 +133,9 @@ export function backupEnv(envPath = DEFAULT_ENV_PATH, backupDir = DEFAULT_BACKUP
  * The temp file is created in the same directory and fchmod'd to 600 before the rename.
  */
 function atomicWrite(envPath, newText) {
+    // .env may be a symlink (production: .env -> .secrets/.env, so the app user needs write access only to
+    // .secrets/, not to the repo root). Write next to the real file and rename over it, keeping the link.
+    try { envPath = fs.realpathSync(envPath); } catch { /* no file yet: write where asked */ }
     const dir = path.dirname(envPath);
     let origMode = 0o600;
     let origUid = null;

@@ -4,6 +4,7 @@ import logger from '../utils/logger.js';
 import { fetchSubredditPosts } from '../utils/reddit.js';
 import { buildFeedContent, titlePasses, parseList } from './feed-message.js';
 import { pollsGuild } from './guild-presence-logic.js';
+import { resolveFeedTarget } from './feed-target.js';
 
 /**
  * A feed's filters (all optional; empty means off, so older rows post everything as before):
@@ -70,8 +71,11 @@ async function processFeed(feed, client) {
       const guild = client.guilds.cache.get(feed.guild_id);
       if (!guild) return;
 
-      const channel = await guild.channels.fetch(feed.channel_id).catch(() => null);
-      if (!channel) return;
+      const { channel, problem } = await resolveFeedTarget(client, feed.channel_id, { guildId: feed.guild_id });
+      if (!channel) {
+        logger.warn(`[RedditFeed] Feed ${feed.id}: ${problem}`);
+        return;
+      }
 
       for (const post of newPosts) {
         // Filtered-out posts are skipped but still move the cursor (latestPostId), so they are

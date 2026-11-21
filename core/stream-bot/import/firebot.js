@@ -99,6 +99,14 @@ export function convertEffects(effects, ctx, depth = 0) {
                 if (/^\s*\/(ban|timeout|unban|untimeout|mod|vip|unvip|slow|followers|subscribers|emoteonly|uniquechat|shoutout|raid|commercial|marker|announce\w*)\b/i.test(msg)) { gap('chat.slash', type); break; }
                 const text = tr(msg.replace(/^\s*\/me\s+/i, ''));
                 if (!text.trim()) break;
+                // Firebot sends as the Streamer unless "Bot" is picked. A line another bot acts on (!pokecatch, !roll …), and a
+                // line of only emotes (the streamer's sub emotes, which CertiFried's bot cannot use), must come from the streamer's
+                // account: "Send a chat message as you" (stream.say, 2026-11-20). Other replies stay with CertiFried's bot.
+                if (String(e.chatter || 'Streamer') !== 'Bot' && (/^\s*!/.test(text) || emoteOnly(text))) {
+                    out.actions.push({ type: 'stream.say', text, ...(/^!\S+$/.test(text.trim()) ? { _commandText: text.trim() } : {}) });
+                    out.notes.push('Firebot sent this as you (the Streamer account), so it is sent as you: "Send a chat message as you" (re-approve Twitch on Connections once)');
+                    break;
+                }
                 out.actions.push({ type: 'chat.send', platform: 'event', text });
                 break;
             }
@@ -344,6 +352,9 @@ function merge(into, from) {
 const effectList = (x) => list(x?.list ?? x);
 
 /** Firebot overlay position → overlay position (design doc §9.9); Random and custom coordinates → centre. */
+/** A chat line made only of emote codes (death01Love, PansexualPride): every word has a lower-case letter followed by a capital. */
+export const emoteOnly = (t) => { const w = String(t ?? '').trim().split(/\s+/).filter(Boolean); return w.length > 0 && w.length <= 20 && w.every((x) => /^[A-Za-z0-9_]+$/.test(x) && /[a-z0-9][A-Z]/.test(x)); };
+
 const POSITION = Object.freeze({ 'top left': 'top-left', 'top middle': 'top', 'top right': 'top-right', 'middle left': 'left', middle: 'center',
     'middle right': 'right', 'bottom left': 'bottom-left', 'bottom middle': 'bottom', 'bottom right': 'bottom-right' });
 export const overlayPosition = (p) => POSITION[String(p ?? '').trim().toLowerCase()] || 'center';
@@ -465,6 +476,7 @@ export function parseFirebot({ files = null, setup = null, quotes = null, wantVi
         const gaps = [...conv.gaps, ...r.gaps];
         if (list(c.subCommands).length) gaps.push({ gap: 'command.subcommands', detail: `${list(c.subCommands).length} sub-commands` });
         if (c.triggerIsRegex || c.scanWholeMessage) gaps.push({ gap: 'command.regex_trigger', detail: 'Firebot command triggered by a pattern' });
+        if (!r.roles.length && conv.actions.some((x) => x.type === 'chat.clear')) conv.notes.push('Anyone in chat could run this in Firebot, and here it really clears your Twitch chat: check it before turning it on (add a role condition)');
         bundle.commands.push({
             sourceId: String(c.id || c.trigger), name: str(c.trigger, 100), triggers: [str(c.trigger, 100), ...list(c.aliases).map((a) => str(a, 100))].filter(Boolean),
             regex: !!c.triggerIsRegex, anywhere: !!c.scanWholeMessage, enabled: c.active !== false,

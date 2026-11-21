@@ -69,9 +69,10 @@ const SOURCE_LABEL = {
     nsfw_image: 'NSFW image',
     scam_text: 'Scam text (AI second opinion)',
     word_filter: 'Filtered word',
+    ai_moderation: 'AI moderation',
 };
 // name_filter_reviews.field is VARCHAR(12).
-const SOURCE_FIELD = { obfuscated_url: 'obfuscated', automod_escalation: 'automod', anti_everyone: 'everyone', qr: 'qr', image_rule: 'image_rule', nsfw_image: 'nsfw', scam_text: 'scam_text' };
+const SOURCE_FIELD = { obfuscated_url: 'obfuscated', automod_escalation: 'automod', anti_everyone: 'everyone', qr: 'qr', image_rule: 'image_rule', nsfw_image: 'nsfw', scam_text: 'scam_text', ai_moderation: 'ai_mod' };
 const STAFF_PERMS = [
     PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild, PermissionFlagsBits.BanMembers,
     PermissionFlagsBits.KickMembers, PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.ManageMessages,
@@ -890,6 +891,8 @@ export async function decideReviews(guild, userIds, decision, actorId) {
             failed.push({ id: userId, why: `Discord refused: ${err.message}` });
         }
     }
+    // Ban = confirmed, Dismiss = fine, for the detections behind these reviews (core/ai-moderation.js learning loop).
+    if (done.length) import('./ai-moderation.js').then(m => m.onReviewDecision(guild, done, decision, actorId)).catch(() => {});
     if (done.length) {
         void logFeatureEvent(() => (guild), () => (decision === 'ban' ? 'automod.threatBanned' : 'automod.threatLogged'), () => ({
             title: decision === 'ban' ? '🔨 Flagged Members Banned' : '✅ Flagged Members Dismissed',

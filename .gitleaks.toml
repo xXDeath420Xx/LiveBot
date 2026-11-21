@@ -13,6 +13,7 @@ disabledRules = ["discord-client-id"]
 description = "Invented credentials in test fixtures"
 paths = [
   '''(^|/)tests/fixtures/stream-bot-import\.js$''',
+  '''(^|/)tests/stream-bot-heart\.test\.js$''',
   '''(^|/)tests/stream-bot-events\.test\.js$''',
 ]
 

@@ -5,6 +5,7 @@ import { themeColor } from './guild-theme.js';
 import { logFeatureEvent } from './feature-log.js';
 import { latestUploads, classifyUploads } from '../utils/platforms/youtube-uploads.js';
 import { buildFeedContent } from './feed-message.js';
+import { resolveFeedTarget, pingProblem } from './feed-target.js';
 import { pollsGuild } from './guild-presence-logic.js';
 import { resolveYouTubeChannelId } from '../utils/platforms/youtube-resolve.js';
 
@@ -133,8 +134,14 @@ async function processYouTubeFeed(feed, client) {
 
     const guild = client.guilds.cache.get(feed.guild_id);
     if (!guild) return;
-    const channel = await guild.channels.fetch(feed.discord_channel_id).catch(() => null);
-    if (!channel) return;
+    // Threads too (an archived one is reopened first): see core/feed-target.js.
+    const { channel, problem } = await resolveFeedTarget(client, feed.discord_channel_id, { guildId: feed.guild_id });
+    if (!channel) {
+      logger.warn(`[YouTubeFeed] Feed ${feed.id}: ${problem}`);
+      return;
+    }
+    const pingIssue = pingProblem(guild, channel, feed.ping_role_id);
+    if (pingIssue) logger.warn(`[YouTubeFeed] Feed ${feed.id}: ${pingIssue}`);
 
     // Update the channel name in the database if it's not set
     let channelName = feed.channel_name;

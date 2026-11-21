@@ -36,6 +36,8 @@ export default {
       if (newMessage.guild && oldMessage.content !== newMessage.content
         && !(newMessage.client.isDefaultBot && await shouldIgnoreGuild(newMessage.guild.id))) {
         await checkWordFilter(newMessage);
+        // ...or turn a clean message into a scam (core/ai-moderation.js; not awaited).
+        import('../core/ai-moderation.js').then(m => m.screenMessage(newMessage, { edited: true })).catch(() => {});
       }
     } catch (error) {
       logger.error('[MessageUpdate] Error logging message update', {

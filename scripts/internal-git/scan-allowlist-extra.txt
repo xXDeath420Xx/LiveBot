@@ -1,0 +1,3 @@
+# Extra allowlist for the INTERNAL secret gate (scan-check.sh), appended to scripts/publish/secret-scan-allowlist.txt.
+# The public publish pipeline does not read this file.
+env-public REDIS_USERNAME        # Redis ACL user name (added 2026-11-21), a common word; the password stays secret

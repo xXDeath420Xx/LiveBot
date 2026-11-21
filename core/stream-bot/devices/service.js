@@ -6,7 +6,10 @@
  *                                    - light.color: the colour text is read here (#hex, name, 3200K); not understood → failed
  *                                    - light.preset: the preset is looked up; its cloud lights run here, the rest go to Studio as
  *                                      { preset, lights: [...] }
- *                                    - a cloud light (govee-cloud:…, lifx-cloud:…) runs here with the streamer's key
+ *                                    - a cloud light (govee-cloud:…, lifx-cloud:…) runs here with the streamer's key, except
+ *                                      (Studio 0.2.11) when the connected Studio reaches that same light over Bluetooth
+ *                                      (a goveeble light with this cloudId, paired and online): then Studio does it, and the
+ *                                      cloud is the fallback when Studio fails or does not answer in time
  *                                    - every light ('' / 'all'): cloud lights here, and Studio's own lights through `next`
  *                                    Cloud work gets its own dispatch row (capability 'light-cloud', acked or failed) so the run
  *                                    page shows it; the result is { id, status: 'done' | 'failed', detail } (engine.js maps it)
@@ -16,7 +19,9 @@
  *     .presets / savePreset / deletePreset (settings.lights.presets; 50 at most)
  *     .test(profileId, device)       a short flash in CertiFried green; waits for Studio's answer (up to ackWaitMs)
  *     .checkStudio(profileId)        asks Studio to look for lights and Voicemeeter again ('devices.check'), waits for the answer
- *     .onStudioRequest(conn, method, params)   'lights.presets' | 'lights.apply' | 'counters.list' | 'counters.add'
+ *     .onStudioRequest(conn, method, params)   'lights.presets' | 'lights.apply' | 'counters.list' | 'counters.add' |
+ *                                    'lights.cloud' (Studio 0.2.10's Lights tab: the cloud lights on the streamer's Govee / LIFX
+ *                                    key, no keys) | 'lights.cloudTest' { device } (the same test flash as the Devices page)
  *
  * Tested in tests/stream-bot-devices.test.js.
  */
@@ -79,6 +84,13 @@ export function createDeviceService({ store, hub, accounts, cloud, rawDispatch =
         }
     }
 
+    /** The connected Studio's Bluetooth light for this cloud light (0.2.11), when paired and online; else null. */
+    function bleFor(profileId, cloudId) {
+        const st = newestStudio(profileId);
+        const l = (st?.state?.devices?.lights || []).find((x) => x.driver === 'goveeble' && x.cloudId === cloudId);
+        return l && l.online && !l.needsPairing ? l : null;
+    }
+
     const cloudCount = async (profileId) => (await cloud.devices(profileId).catch(() => [])).length;
     const hasLocalLights = async (profileId) => !!newestStudio(profileId) || (await localDevices(profileId)).lights.length > 0;
 
@@ -125,6 +137,15 @@ export function createDeviceService({ store, hub, accounts, cloud, rawDispatch =
         }
         const device = params.device || '';
         if (isCloudDevice(device)) {
+            const ble = bleFor(d.profileId, device);
+            if (ble) {
+                const sent = await sendToHub({ ...d, params: { ...params, device: ble.id } }).catch(() => null);
+                if (sent?.status === 'sent') {
+                    const row = await waitAck(sent.id);
+                    if (row?.status === 'acked') return { id: sent.id, status: 'done', detail: `${ble.name}: over Bluetooth through CertiFried Studio` };
+                    log('info', 'Bluetooth light failed; using the cloud', { profileId: d.profileId, error: String(row?.error || row?.status || 'no answer').slice(0, 120) });
+                }
+            }
             const r = await runCloud(d, d.actionType, params);
             return { id: r.id, status: r.status, detail: r.detail };
         }
@@ -248,6 +269,23 @@ export function createDeviceService({ store, hub, accounts, cloud, rawDispatch =
             switch (method) {
                 case 'lights.presets':
                     return { presets: (await presets(conn.profileId)).map((p) => ({ id: p.id, name: p.name })) };
+                case 'lights.cloud': {
+                    const accs = await accounts.list(conn.profileId);
+                    const lights = [];
+                    for (const a of accs) {
+                        for (const d of a.devices || []) {
+                            if (lights.length >= 200) break;
+                            lights.push({ id: d.id, name: String(d.name || d.id).slice(0, 100), model: d.model || null, provider: a.provider, providerLabel: PROVIDER_LABEL[a.provider] || a.provider, online: d.online !== false });
+                        }
+                    }
+                    return { lights, accounts: accs.map((a) => ({ provider: a.provider, label: PROVIDER_LABEL[a.provider] || a.provider, status: a.status || null, lastError: a.lastError ? String(a.lastError).slice(0, 200) : null })) };
+                }
+                case 'lights.cloudTest': {
+                    const device = String(params?.device || '');
+                    if (!isCloudDevice(device)) throw new RequestError('bad_params', 'device must be a cloud light');
+                    if (!within('_cloudTest', 6, 60_000)) throw new RequestError('rate', 'Too many tests; wait a minute');
+                    return this.test(conn.profileId, device);
+                }
                 case 'lights.apply': {
                     const id = String(params?.presetId || '');
                     if (!/^p_[a-z0-9]{6,16}$/.test(id)) throw new RequestError('bad_params', 'presetId is required');

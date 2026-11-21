@@ -39,13 +39,29 @@ const DEFAULTS = Object.freeze({
     hotkeys: [],
     app: { startWithWindows: false, startMinimised: true, theme: 'dark', checkUpdates: true },
     // Voice commands: microphone off until the person turns it on.
-    voice: { enabled: false, inputDeviceId: 'default', mode: 'always', pttKey: 'F13', threshold: 0.7, phrases: [] },
+    // 0.2.10: commands (phrases with their own confidence and cooldown), thresholdSetAt (when the person or the switchover
+    // last chose the confidence; null = still the default), and the voice log's privacy switches, both off.
+    voice: { enabled: false, inputDeviceId: 'default', mode: 'always', pttKey: 'F13', threshold: 0.7, thresholdSetAt: null, phrases: [], commands: [], logAllSpeech: false, shareSpeechText: false,
+        // 0.2.12: Whisper. engine: auto (graphics card when there is one, else the processor) | cpu | windows (System.Speech, the old
+        // recogniser); matchThreshold: how close the words must be to a phrase; wakePhrase for mode 'wake'; the microphone's name
+        // and how it was picked (communications = Windows' communications device, person = chosen in Studio).
+        engine: 'auto', matchThreshold: 0.8, wakePhrase: 'hey studio', inputDeviceLabel: null, inputPickedBy: null, inputPickedAt: null,
+        // 0.2.13: "Teach Studio how you say it": how many takes to ask for, and whether the takes' audio is kept (off: the audio
+        // is never written to disk and is gone once Whisper has written it down).
+        trainTakes: 8, keepRecordings: false },
+    // 0.2.10: Sound Alerts and Blerp sources whose audio CertiFried manages, with their old settings for undo (alert-audio.js).
+    alertAudio: { managed: false, at: null, sources: [] },
+    // 0.2.11: programs the server's "Run a program on your PC" step may start, by name (programs.js). Empty: none.
+    programs: [],
     // VOD-safe music (only while song requests are on, 0.2.6): the music source's UUID, the optional record-without-music
     // choice, and the server's last word on song requests (null: not told yet, so the 0.2.5 behaviour, enforced, holds).
     music: { sourceUuid: null, recordWithoutMusic: false, prevRecTracks: null, kickMusic: 'unknown', songRequests: null },
     // Phase 5. Lights: no network search until the person chooses Find lights (enabled), then at every start. Known lights
     // (no tokens; those are secrets) and Hue bridges with their pinned certificate fingerprints.
-    lights: { enabled: false, drivers: { govee: true, hue: true, lifx: true, nanoleaf: true, elgato: true, litra: true }, known: [], hue: { bridges: [] } },
+    lights: { enabled: false, drivers: { govee: true, hue: true, lifx: true, nanoleaf: true, elgato: true, litra: true, goveeble: true }, known: [], hue: { bridges: [] } },
+    // 0.2.14: heart rate over Bluetooth LE: off until a device is chosen. device: { address, name } of the watch or strap;
+    // share: send the readings to CertiFried (overlays, automations, {heart.bpm}); nothing is written to disk but the device.
+    heart: { enabled: false, device: null, share: true },
     // Voicemeeter control: off until turned on; the DLL is loaded only then.
     voicemeeter: { enabled: false },
     // The Stream Deck plugin's local connection: off until turned on; 127.0.0.1 only.

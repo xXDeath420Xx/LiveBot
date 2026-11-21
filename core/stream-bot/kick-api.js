@@ -5,6 +5,8 @@
  *     setTitle(channelId, title)            PATCH  /channels { stream_title }    scope channel:write
  *     setCategory(channelId, name)          GET    /categories?q=  then PATCH /channels { category_id }   channel:write
  *     deleteMessage(channelId, messageId)   DELETE /chat/{message_id}             moderation:chat_message:manage
+ *     searchCategories(channelId, q)        GET    /categories?q=                 channel:write sign-in
+ *     ban(channelId, userId, { seconds? })  POST   /moderation/bans               moderation:ban (no seconds = permanent; seconds become whole minutes, 1 to 10080)
  *     streamInfo(channelId)                 GET    /channels?broadcaster_user_id= (app token)
  *
  * The channel's token is the Kick sign-in that Kick Defender uses (services/certifried-bot/defender/channel-tokens.js
@@ -27,6 +29,7 @@ export class KickError extends Error {
 
 export const KICK_WRITE_SCOPE = 'channel:write';
 export const KICK_CHAT_SCOPE = 'moderation:chat_message:manage';
+export const KICK_BAN_SCOPE = 'moderation:ban';
 
 async function bodyOf(res) {
     try { return await res.json(); } catch { return null; }
@@ -85,6 +88,26 @@ export function createKickApi({
             await send(ch.token, 'DELETE', `/chat/${encodeURIComponent(messageId)}`, { asUser: true });
             return { deleted: true };
         },
+        async searchCategories(channelId, q) {
+            const n = String(q || '').trim().slice(0, 100);
+            if (n.length < 2) return [];
+            const ch = await channel(channelId, KICK_WRITE_SCOPE);
+            const data = await send(ch.token, 'GET', '/categories', { query: { q: n }, asUser: true });
+            return (Array.isArray(data?.data) ? data.data : []).slice(0, 8).map((c) => ({ id: String(c.id), name: String(c.name) }));
+        },
+        async ban(channelId, userId, { seconds = null } = {}) {
+            const uid = String(userId || '');
+            if (!/^\d{1,20}$/.test(uid)) throw new KickError(400, 'That is not a Kick user id', 'bad_user');
+            const body = { broadcaster_user_id: Number(channelId), user_id: Number(uid) };
+            if (seconds != null) {
+                const m = Math.ceil(Number(seconds) / 60);
+                if (!Number.isFinite(m) || m < 1 || m > 10080) throw new KickError(400, 'A Kick timeout is 1 minute to 7 days', 'bad_duration');
+                body.duration = m;
+            }
+            const ch = await channel(channelId, KICK_BAN_SCOPE);
+            await send(ch.token, 'POST', '/moderation/bans', { body, asUser: true });
+            return { banned: true, minutes: body.duration ?? null };
+        },
         async streamInfo(channelId) {
             let token = appToken ? await appToken() : null;
             if (!token) {
@@ -104,4 +127,4 @@ export function createKickApi({
     };
 }
 
-export default { createKickApi, KickError, KICK_WRITE_SCOPE, KICK_CHAT_SCOPE };
+export default { createKickApi, KickError, KICK_WRITE_SCOPE, KICK_CHAT_SCOPE, KICK_BAN_SCOPE };

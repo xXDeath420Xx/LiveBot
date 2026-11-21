@@ -19,6 +19,7 @@ import communitySupportRouter from './features/community-support.js';
 import streamEndedRouter from './features/stream-ended.js';
 import autoTrackRouter from './features/auto-track.js';
 import liveRoutingRouter from './features/live-routing.js';
+import streamerBlocklistRouter from './features/streamer-blocklist.js';
 import globalBanRouter from './features/global-ban.js';
 
 const router = express.Router();
@@ -39,6 +40,7 @@ router.use('/', communitySupportRouter);
 router.use('/', streamEndedRouter);
 router.use('/', autoTrackRouter);
 router.use('/', liveRoutingRouter);
+router.use('/', streamerBlocklistRouter);
 router.use('/', globalBanRouter);
 
 // Get guild configuration

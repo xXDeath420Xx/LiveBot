@@ -1,0 +1,72 @@
+<%#
+  GET /super-admin/youtube-review (dashboard/routes/youtube-review.js): who may link a YouTube channel while Google reviews
+  CertiFried's OAuth verification (core/stream-bot/youtube/gate.js). Locals: user, state ({ open, reviewers[], updatedAt,
+  updatedBy, stored }), notice ({ tone, text } | null), inReviewText, ownerId, maxReviewers, csrfToken.
+%>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'YouTube review · Owner console · CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="/css/cf-settings.css">
+</head>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page">
+    <%- include('partials/site/_owner-nav', { ownerActive: 'youtube-review' }) %>
+    <div class="cf-page-head"><div>
+        <h1 class="cf-page-title">YouTube review</h1>
+        <p class="cf-page-sub">While Google reviews CertiFried's YouTube access, only you (<%= ownerId %>) and the accounts below can link a YouTube channel, on the stream bot or for multicast. Everyone else sees: &ldquo;<%= inReviewText %>&rdquo;. The Your viewer data page's YouTube sign-in stays open.</p>
+    </div></div>
+    <% if (notice) { %><div class="cf-notice <%= notice.tone === 'ok' ? 'is-ok' : 'is-bad' %>" role="status"><div class="cf-notice-body"><%= notice.text %></div></div><% } %>
+    <% if (!state.stored) { %><div class="cf-notice is-warn" role="status"><div class="cf-notice-body">Nothing is saved yet, so linking is closed to everyone but you.</div></div><% } %>
+
+    <section class="cf-section" aria-labelledby="ytr-open-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="ytr-open-title">After Google approves</h2>
+            <p class="cf-section-desc">Turn this on once the verification is approved. It opens YouTube linking to every signed-in user.</p></div></header>
+        <form method="post" action="/super-admin/youtube-review/open" class="cf-rows">
+            <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="ytr-open">Open YouTube linking to everyone</label>
+                    <p class="cf-row-desc" id="ytr-open-desc">Now: <strong><%= state.open ? 'open to everyone' : 'you and the reviewers only' %></strong><% if (state.updatedAt) { %>, changed <time datetime="<%= state.updatedAt %>"><%= state.updatedAt.slice(0, 16).replace('T', ' ') %> UTC</time><% } %>.</p></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="ytr-open" name="open" aria-describedby="ytr-open-desc"<%= state.open ? ' checked' : '' %>></div>
+            </div>
+            <div class="cf-section-foot"><button type="submit" class="btn btn-primary btn-sm">Save</button></div>
+        </form>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ytr-list-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="ytr-list-title">Reviewer accounts</h2>
+            <p class="cf-section-desc">Discord accounts that may link YouTube before approval, such as the account given to Google's reviewers. At most <%= maxReviewers %>.</p></div></header>
+        <div class="cf-rows">
+            <% if (!state.reviewers.length) { %><p class="cf-row-desc">Nobody yet.</p><% } else { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead><tr><th scope="col">Discord user ID</th><th scope="col">Note</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Remove</span></th></tr></thead>
+                    <tbody>
+                    <% state.reviewers.forEach((r) => { %>
+                        <tr><td><code><%= r.id %></code></td><td><%= r.note %></td><td><%= r.addedAt ? String(r.addedAt).slice(0, 10) : '' %></td>
+                            <td><form method="post" action="/super-admin/youtube-review/reviewers/<%= encodeURIComponent(r.id) %>/remove"><input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>"><button type="submit" class="btn btn-secondary btn-sm">Remove</button></form></td></tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } %>
+            <form method="post" action="/super-admin/youtube-review/reviewers" class="cf-row">
+                <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                <div class="cf-row-text"><label class="cf-row-label" for="ytr-id">Add an account</label><p class="cf-row-desc">Their Discord user ID, and a note for yourself.</p></div>
+                <div class="cf-row-control cf-input-group">
+                    <input type="text" id="ytr-id" name="userId" inputmode="numeric" maxlength="25" autocomplete="off" placeholder="Discord user ID" required>
+                    <label class="sr-only" for="ytr-note">Note</label>
+                    <input type="text" id="ytr-note" name="note" maxlength="100" autocomplete="off" placeholder="Note">
+                    <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+                </div>
+            </form>
+        </div>
+    </section>
+</div>
+</main>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
+</body>
+</html>

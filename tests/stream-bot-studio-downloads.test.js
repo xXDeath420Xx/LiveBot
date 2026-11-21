@@ -67,6 +67,14 @@ test('the whitelist: exact names only', () => {
     assert.equal(parseSums(`${'a'.repeat(64)}  CertiFried-Studio-Setup-0.2.0.exe\nnot a line\n${'B'.repeat(64)} *x.exe`).get('x.exe'), 'b'.repeat(64));
 });
 
+test('Studio 0.2.12: the voice graphics card pack is served by its exact name only', () => {
+    assert.equal(allowedFile('CertiFried-Studio-Voice-CUDA-1.9.5-cu12.9-b1.zip').type, 'application/zip');
+    for (const bad of ['CertiFried-Studio-Voice-CUDA-1.9.5-cu12.9-b1.zip.exe', 'CertiFried-Studio-Voice-CUDA-../../x-b1.zip', 'CertiFried-Studio-Voice-CUDA-1.9.5-cu12.9.zip',
+        'CertiFried-Studio-Voice-CUDA-1.9.5-cu/12.9-b1.zip', 'certifried-studio-voice-cuda-1.9.5-cu12.9-b1.zip', 'CertiFried-Studio-Voice-CUDA-1.9.5-cu12.9-b1.ZIP']) {
+        assert.equal(allowedFile(bad), null, bad);
+    }
+});
+
 test('an empty folder: the page says the download is not published yet, files are 404', async () => {
     assert.equal(await release(dir), null);
     const r = await fetch(`${base}/downloads/studio`);

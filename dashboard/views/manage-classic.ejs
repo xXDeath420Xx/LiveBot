@@ -1517,6 +1517,7 @@
         'avatar-protection': 'Avatar Protection',
         'verification': 'Verification',
         'message-threats': 'Message Threats',
+        'ai-moderation': 'AI Moderation',
         'nsfw-protection': 'NSFW Protection',
         'domain-reports': 'Domain Reports',
         'advanced-protection': 'Advanced Protection',
@@ -1574,6 +1575,7 @@
         'community-support': 'Community Support',
         'stream-ended': 'Stream-Ended Behavior',
         'auto-track': 'Auto-Track',
+        'streamer-blocklist': 'Blocked Streamers',
         'streaming': 'Streaming',
         'free-games': 'Free Games',
         'tiktok': 'TikTok',
@@ -1826,6 +1828,7 @@
                     'avatar-protection': { partial: 'avatar-protection', data: { guild } },
                     'verification': { partial: 'verification', data: { guild } },
                     'message-threats': { partial: 'message-threats', data: { guild } },
+                    'ai-moderation': { partial: 'ai-moderation', data: { guild } },
                     'nsfw-protection': { partial: 'nsfw-protection', data: { guild } },
                     'domain-reports': { partial: 'domain-reports', data: { guild } },
                     'activity-audit': { partial: 'activity-audit', data: { guild } },
@@ -1835,12 +1838,13 @@
                     // Per-streamer Edit-on-End lives in the streamers table, so that is the landing tab.
                     'stream-ended': { partial: 'streaming', tab: 'streamers', data: streamingData },
                     'auto-track': { partial: 'streaming', tab: 'auto-track', data: streamingData },
+                    'streamer-blocklist': { partial: 'streamer-blocklist', data: { guild } },
                     'global-ban': { partial: 'global-ban', data: { guild, globalBanConfig: typeof globalBanConfig !== 'undefined' ? globalBanConfig : {}, channels } },
                     'phishing': { partial: 'phishing', data: { guild, phishingConfig: typeof phishingConfig !== 'undefined' ? phishingConfig : {}, channels } },
                     'free-games': { partial: 'free-games', data: { guild, freeGamesSubs: typeof freeGamesSubs !== 'undefined' ? freeGamesSubs : [], channels, roles: typeof roles !== 'undefined' ? roles : [] } },
                     // Fully API-driven: loads watchers + the preset catalogue on mount.
                     'game-news': { partial: 'game-news', data: { guild, channels, roles } },
-                    'twitch-clips': { partial: 'twitch-clips', data: { guild, channels } },
+                    'twitch-clips': { partial: 'twitch-clips', data: { guild, channels, roles } },
                     'steam-library': { partial: 'steam-library', data: { guild, channels } },
                     'digimon': { partial: 'digimon', data: { guild, channels } },
                     'digimon-odds': { partial: 'digimon-odds', data: { guild } },
@@ -2257,7 +2261,7 @@
             // Pages added since this layout was designed (core/manage-nav.js lists every page)
             // that no card above covers: filed under the closest original category, styled
             // exactly like the generated cards, so nothing is unreachable from the overview.
-            const CLASSIC_HAND_PAGES = new Set(["achievements", "action-log", "activity-audit", "advanced-protection", "analytics", "announce", "appearance", "auto-purge", "automemes", "automod", "autoresponders", "avatar-protection", "backups", "birthday", "bulk-roles", "catalog", "channel-access", "command-center", "commands", "commission-filter", "community-support", "confessions", "core", "counting", "csv", "custom-commands", "custom-embeds", "domain-reports", "economy", "emoji-manager", "emojistats", "event-schedule", "feeds", "forms", "free-games", "gambling", "game-news", "games", "giveaways", "global-ban", "initialize", "join-requests", "kofi", "language", "leveling", "link-filter", "logging", "mass", "message-threats", "minigames", "moderation", "music", "name-filters", "nsfw-protection", "owo", "permissions", "phishing", "polls", "protection-settings", "quarantine", "reaction-roles", "rejoin", "reminders", "role-manager", "rpg", "schedule", "security", "self-promo", "serverstats", "smart-purge", "soundboard", "starboard", "stat-displays", "stat-roles", "steam-library", "digimon", "digimon-odds", "digimon-quiz", "sticky", "streamers", "suggestions", "tags", "takeover", "theme", "throne", "tickets", "tiktok", "timecapsules", "todo", "trading", "twitch-clips", "twitch-schedules", "utilities", "verification", "weather", "welcome"]);
+            const CLASSIC_HAND_PAGES = new Set(["achievements", "action-log", "activity-audit", "advanced-protection", "ai-moderation", "analytics", "announce", "appearance", "auto-purge", "automemes", "automod", "autoresponders", "avatar-protection", "backups", "birthday", "bulk-roles", "catalog", "channel-access", "command-center", "commands", "commission-filter", "community-support", "confessions", "core", "counting", "csv", "custom-commands", "custom-embeds", "domain-reports", "economy", "emoji-manager", "emojistats", "event-schedule", "feeds", "forms", "free-games", "gambling", "game-news", "games", "giveaways", "global-ban", "initialize", "join-requests", "kofi", "language", "leveling", "link-filter", "logging", "mass", "message-threats", "minigames", "moderation", "music", "name-filters", "nsfw-protection", "owo", "permissions", "phishing", "polls", "protection-settings", "quarantine", "reaction-roles", "rejoin", "reminders", "role-manager", "rpg", "schedule", "security", "self-promo", "serverstats", "smart-purge", "soundboard", "starboard", "stat-displays", "stat-roles", "steam-library", "digimon", "digimon-odds", "digimon-quiz", "sticky", "streamers", "suggestions", "tags", "takeover", "theme", "throne", "tickets", "tiktok", "timecapsules", "todo", "trading", "twitch-clips", "twitch-schedules", "utilities", "verification", "weather", "welcome"]);
             const CLASSIC_SECTION_CATEGORY = {
                 setup: 'Core', protection: 'Moderation & Security', moderation: 'Moderation & Security',
                 joining: 'Community', roles: 'Server Tools', engagement: 'Community', events: 'Community',
@@ -2908,6 +2912,15 @@
                             <div>
                                 <div class="module-title">Message Threats</div>
                                 <div class="module-desc">Obfuscated-link scams, AutoMod escalation, @everyone, QR codes, image-text rules, URL checker</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=ai-moderation" class="module-card red" data-tags="ai moderation classifier scam phishing harassment hate nsfw self-harm spam bot raid impersonation evasion precision recall">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-microchip"></i></div>
+                            <div>
+                                <div class="module-title">AI Moderation</div>
+                                <div class="module-desc">Scams, harassment and spam the other filters miss, with Confirm / This was fine</div>
                             </div>
                         </div>
                     </a>
@@ -3999,6 +4012,7 @@
                 'avatar-protection': 'fa-user-secret',
                 'verification': 'fa-user-lock',
                 'message-threats': 'fa-user-ninja',
+                'ai-moderation': 'fa-microchip',
                 'nsfw-protection': 'fa-eye-slash',
                 'domain-reports': 'fa-flag',
                 'activity-audit': 'fa-user-clock',

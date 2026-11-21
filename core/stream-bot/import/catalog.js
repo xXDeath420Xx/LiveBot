@@ -36,9 +36,9 @@ export const GAPS = Object.freeze({
     'flow.queue': g('Effect queues', '4', 'Runs are not queued per automation.'),
     'web.request': g('HTTP request other than an HTTPS POST', '4', 'The webhook action only sends an HTTPS POST to an allow-listed host.'),
     'discord.webhook': g('Post through a Discord webhook URL', '4', 'Use the Post in Discord action instead; webhook URLs are credentials and are never imported.'),
-    'tts.speak': g('Text to speech', '2b', 'CertiFried Studio does not speak text yet.'),
+    'tts.speak': g('Text to speech', 'importer', 'The Speak text on stream step exists (Community, Media and speech, W2.7); the importer does not turn Firebot or Streamer.bot TTS effects into it yet.'),
     'currency.change': g('Viewer currency / loyalty points', 'done', 'Viewers and points (design doc section 11): a change for one viewer becomes Give, Take or Set points.'),
-    'quotes': g('Stream quotes (!quote)', '4', 'Quotes on Twitch and Kick are not built; Discord quotes are a separate feature.'),
+    'quotes': g('Stream quotes (!quote)', 'done', 'Imported into Community, Quotes, switched off until you turn them on (W2.8).'),
     'variable.argument': g('Temporary arguments inside an action', 'done', 'Available since the Phase 4 build (design doc section 7); the importer maps it.'),
     'obs.transform': g('Move, resize or rotate an OBS source', '2b', 'Studio has no transform action yet.'),
     'obs.media': g('Control an OBS media source', '2b', 'Studio has no media source action yet.'),
@@ -106,7 +106,7 @@ export const INTEGRATIONS = Object.freeze({
     websocket: { label: 'Local websocket / HTTP server', todo: 'Not needed: CertiFried Studio connects to CertiFried.', have: true },
     lumia: { label: 'Lumia Stream', todo: 'Lights are built in: CertiFried Studio finds Govee, Hue, LIFX, Nanoleaf, Elgato and Litra lights, and Govee and LIFX also work through their cloud (Devices, Lights). Lumia colour and brightness steps were imported as light steps.', have: true },
     crowdcontrol: { label: 'Crowd Control', todo: 'Not available.', have: false },
-    tts: { label: 'Text to speech', todo: 'Not available yet (Phase 2b).', have: false },
+    tts: { label: 'Text to speech', todo: 'Use the Speak text on stream step; set the voice under Community, Media and speech.', have: true },
 });
 
 /** Import categories, in the order the page shows them. */

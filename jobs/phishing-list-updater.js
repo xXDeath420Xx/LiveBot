@@ -9,7 +9,9 @@ let clientRef = null;
 
 const SOURCES = {
     'discord-phishing-links': 'https://raw.githubusercontent.com/nikolaischunk/discord-phishing-links/main/domain-list.json',
-    'phishing-database': 'https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt'
+    'phishing-database': 'https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt',
+    // Discord-specific scam domains (~37k), curated by the Discord-AntiScam project. One domain per line (migration 478).
+    'discord-antiscam': 'https://raw.githubusercontent.com/Discord-AntiScam/scam-links/main/list.txt'
 };
 
 // A 'manual' row (a blocked domain report, core/domain-reports.js) stays manual when a feed lists it too,

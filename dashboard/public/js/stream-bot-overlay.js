@@ -1,7 +1,8 @@
 /*
  * A CertiFried overlay inside OBS (views/stream-bot/overlay.ejs). It shows only what the server sends over
  * <base>/events (SSE) and acknowledges overlay actions to <base>/report. Types: alerts, chat, events, goal, counter,
- * nowplaying, canvas, scene; every type also shows the "Show text" and "Show an image or video" actions. A scene screen
+ * nowplaying, canvas, scene, and the widgets train, tipjar, credits, emotewall, poll, labels, viewers and heartrate (WIDGETS below);
+ * every type also shows the "Show text" and "Show an image or video" actions. A scene screen
  * draws the streamer's artwork (cover fit) with its title, scrolling line, countdown, glows and weather effects; it stops
  * its animation loops before it is drawn again (a settings save).
  *
@@ -380,6 +381,8 @@
     // ── build the widget for the type ──
     function build(state) {
         clear(widget);
+        stopWidgetTimers();
+        W = {};
         slot = null; chatBox = null; eventsBox = null; goalNodes = null; counterValue = null; np = null;
         if (type === 'chat') {
             chatBox = el('div', 'sbo-chat');
@@ -432,6 +435,408 @@
             drawNow(state && state.now);
         } else if (type === 'scene') {
             buildScene(state || {});
+        } else if (WIDGETS[type]) {
+            WIDGETS[type].build(state || {});
+        }
+    }
+
+    // ── widgets: hype and sub train, tip jar, credits, emote wall, polls, labels, viewer count ──
+    var wTimers = [];
+    function every(fn, ms) { var t = setInterval(fn, ms); wTimers.push(t); return t; }
+    function later(fn, ms) { var t = setTimeout(fn, ms); wTimers.push(t); return t; }
+    function stopWidgetTimers() { wTimers.forEach(function (t) { clearTimeout(t); clearInterval(t); }); wTimers = []; }
+    function secsLeft(iso) { var t = iso ? Date.parse(iso) : NaN; return isFinite(t) ? Math.max(0, Math.round((t - Date.now()) / 1000)) : null; }
+    function mmss(s) { if (s == null) return ''; var m = Math.floor(s / 60), x = s % 60; return m + ':' + (x < 10 ? '0' : '') + x; }
+    function num(n) { return (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+    function blockedNode(text) { return el('p', 'sbo-blocked sbo-panel', text); }
+
+    var W = {};   // the current widget's nodes and data
+    var WIDGETS = {
+        train: {
+            build: function (state) {
+                var box = el('div', 'sbo-train');
+                W = { box: box, hype: null, sub: null, hypeData: null, subData: null };
+                widget.appendChild(placed(cfg.position, box, cfg.width));
+                if (state.blocked && cfg.showHype) box.appendChild(blockedNode(state.blocked));
+                W.hypeNode = trainBlock('sbo-train--hype', cfg.hypeTitle);
+                W.subNode = trainBlock('sbo-train--sub', cfg.subTitle);
+                box.appendChild(W.hypeNode.root); box.appendChild(W.subNode.root);
+                W.hypeData = cfg.showHype ? state.hype : null;
+                W.subData = cfg.showSubTrain ? state.sub : null;
+                drawTrain();
+                every(drawTrain, 1000);
+            },
+            frame: function (d) {
+                if (d.hype !== undefined && cfg.showHype) { W.hypeData = d.hype; if (d.hype && !d.hype.active) later(function () { if (W.hypeData === d.hype) { W.hypeData = null; drawTrain(); } }, 10000); }
+                if (d.sub !== undefined && cfg.showSubTrain) { W.subData = d.sub; if (W.subNode) bump(W.subNode.count); }
+                drawTrain();
+            },
+        },
+        tipjar: {
+            build: function (state) {
+                var size = Number(cfg.size) || 300;
+                var box = el('div', 'sbo-jar');
+                box.style.width = Math.round(size * 0.8) + 'px';
+                var SVGNS = SVG;
+                var svg = document.createElementNS(SVGNS, 'svg');
+                svg.setAttribute('viewBox', '0 0 100 125'); svg.setAttribute('class', 'sbo-jar-svg'); svg.setAttribute('aria-hidden', 'true');
+                svg.style.height = size + 'px';
+                var defs = document.createElementNS(SVGNS, 'defs');
+                var clip = document.createElementNS(SVGNS, 'clipPath');
+                var cid = 'sbo-jar-clip-' + Math.random().toString(36).slice(2);
+                clip.setAttribute('id', cid);
+                var JAR = 'M22 18h56v8c8 4 12 12 12 22v58c0 8-6 14-14 14H24c-8 0-14-6-14-14V48c0-10 4-18 12-22z';
+                var inner = document.createElementNS(SVGNS, 'path'); inner.setAttribute('d', JAR);
+                clip.appendChild(inner); defs.appendChild(clip); svg.appendChild(defs);
+                var fill = document.createElementNS(SVGNS, 'rect');
+                fill.setAttribute('x', '0'); fill.setAttribute('width', '100'); fill.setAttribute('y', '125'); fill.setAttribute('height', '0');
+                fill.setAttribute('clip-path', 'url(#' + cid + ')'); fill.setAttribute('class', 'sbo-jar-fill');
+                svg.appendChild(fill);
+                var glass = document.createElementNS(SVGNS, 'path'); glass.setAttribute('d', JAR); glass.setAttribute('class', 'sbo-jar-glass'); svg.appendChild(glass);
+                var lid = document.createElementNS(SVGNS, 'rect');
+                lid.setAttribute('x', '18'); lid.setAttribute('y', '8'); lid.setAttribute('width', '64'); lid.setAttribute('height', '10'); lid.setAttribute('rx', '3'); lid.setAttribute('class', 'sbo-jar-lid');
+                svg.appendChild(lid);
+                var drops = el('div', 'sbo-jar-drops');
+                var wrapJar = el('div', 'sbo-jar-wrap'); wrapJar.appendChild(svg); wrapJar.appendChild(drops);
+                box.appendChild(wrapJar);
+                var cap = el('div', 'sbo-jar-cap sbo-panel');
+                var title = el('p', 'sbo-jar-title', cfg.title || '');
+                var total = el('p', 'sbo-jar-total');
+                if (cfg.title) cap.appendChild(title);
+                if (cfg.showTotal !== false) cap.appendChild(total);
+                if (cap.firstChild) box.appendChild(cap);
+                widget.appendChild(placed(cfg.position, box));
+                W = { fill: fill, total: total, drops: drops, data: state };
+                drawJar(state);
+            },
+            frame: function (d) {
+                if (d.add) dropCoin(d.add);
+                if (d.total != null) { W.data = d; drawJar(d); }
+                else if (d.test && d.add) drawJar({ total: (Number(W.data.total) || 0) + d.add.amount, target: W.data.target, label: d.add.label + ' (test)', targetLabel: W.data.targetLabel });
+            },
+        },
+        credits: {
+            build: function (state) {
+                var root = el('div', 'sbo-credits');
+                if (Number(cfg.dim) > 0) root.style.background = 'rgba(0,0,0,' + (Number(cfg.dim) / 100) + ')';
+                var roll = el('div', 'sbo-credits-roll');
+                root.appendChild(roll);
+                widget.appendChild(root);
+                W = { roll: roll };
+                drawCredits(state);
+            },
+            frame: function (d) { drawCredits(d); },
+        },
+        emotewall: {
+            build: function () {
+                var root = el('div', 'sbo-wall');
+                widget.appendChild(root);
+                W = { root: root };
+            },
+            frame: function (d) {
+                (d.list || []).forEach(function (src, i) { later(function () { floatEmote(src); }, i * 140); });
+            },
+        },
+        poll: {
+            build: function (state) {
+                var box = el('div', 'sbo-poll sbo-panel');
+                box.hidden = true;
+                var blocked = state.blocked ? blockedNode(state.blocked) : null;
+                var col = el('div', 'sbo-poll-col');
+                if (blocked) col.appendChild(blocked);
+                col.appendChild(box);
+                widget.appendChild(placed(cfg.position, col, cfg.width));
+                W = { box: box, blocked: blocked, state: state, endedAt: {} };
+                drawPoll();
+                every(drawPoll, 1000);
+            },
+            frame: function (d) { W.state = { twitch: d.twitch !== undefined ? d.twitch : W.state.twitch, prediction: d.prediction !== undefined ? d.prediction : W.state.prediction, chat: d.chat !== undefined ? d.chat : W.state.chat, blocked: W.state.blocked }; drawPoll(); },
+        },
+        labels: {
+            build: function (state) {
+                var box = el('div', 'sbo-labels sbo-labels--' + (cfg.layout === 'row' ? 'row' : 'column'));
+                widget.appendChild(placed(cfg.position, box));
+                W = { box: box };
+                drawLabels(state.values || {});
+            },
+            frame: function (d) { drawLabels(d.values || {}); },
+        },
+        viewers: {
+            build: function (state) {
+                var box = el('div', 'sbo-viewers sbo-panel');
+                widget.appendChild(placed(cfg.position, box));
+                W = { box: box };
+                drawViewers(state.counts);
+            },
+            frame: function (d) { drawViewers(d.counts); },
+        },
+        // Heart rate (Studio 0.2.14): the number, a heart that beats at that rate, an optional graph and this stream's figures.
+        heartrate: {
+            build: function (state) {
+                var box = el('div', 'sbo-heart sbo-panel');
+                var row = el('div', 'sbo-heart-row');
+                var icon = null;
+                if (cfg.showHeart) {
+                    icon = document.createElementNS(SVG, 'svg');
+                    icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('class', 'sbo-heart-icon'); icon.setAttribute('aria-hidden', 'true');
+                    var hp = document.createElementNS(SVG, 'path');
+                    hp.setAttribute('d', 'M12 21.2s-7.6-4.7-10-9.5C.4 8.4 2.3 4.4 6.1 4.4c2.2 0 3.5 1.2 4.4 2.5L12 8.9l1.5-2c.9-1.3 2.2-2.5 4.4-2.5 3.8 0 5.7 4 4.1 7.3-2.4 4.8-10 9.5-10 9.5z');
+                    icon.appendChild(hp);
+                    row.appendChild(icon);
+                }
+                var reading = el('span', 'sbo-heart-reading');
+                var numNode = el('span', 'sbo-heart-num', '--');
+                reading.appendChild(numNode);
+                if (cfg.label) reading.appendChild(el('span', 'sbo-heart-unit', cfg.label));
+                row.appendChild(reading);
+                box.appendChild(row);
+                var line = null;
+                if (cfg.showGraph) {
+                    var g = document.createElementNS(SVG, 'svg');
+                    g.setAttribute('class', 'sbo-heart-graph'); g.setAttribute('aria-hidden', 'true'); g.setAttribute('preserveAspectRatio', 'none');
+                    g.setAttribute('viewBox', '0 0 ' + Math.max(1, (Number(cfg.graphSec) || 60) - 1) + ' 100');
+                    g.style.width = (Number(cfg.graphWidth) || 260) + 'px';
+                    line = document.createElementNS(SVG, 'polyline');
+                    line.setAttribute('vector-effect', 'non-scaling-stroke');
+                    g.appendChild(line);
+                    box.appendChild(g);
+                }
+                var stats = cfg.showStats ? el('div', 'sbo-heart-stats') : null;
+                if (stats) box.appendChild(stats);
+                widget.appendChild(placed(cfg.position, box));
+                W = { box: box, num: numNode, icon: icon, line: line, stats: stats, lastAt: null };
+                drawHeart(state.heart, true);
+                every(heartHide, 1000);
+            },
+            frame: function (d) { drawHeart(d.heart, false); },
+        },
+    };
+    function heartHide() {
+        if (!W.box) return;
+        var hide = Number(cfg.hideAfterSec) || 0;
+        W.box.hidden = hide > 0 && (!W.lastAt || Date.now() - W.lastAt > hide * 1000);
+        if (W.icon) W.icon.classList.toggle('is-beating', !!W.lastAt && Date.now() - W.lastAt < 15000);
+    }
+    function drawHeart(h, first) {
+        if (!W.box) return;
+        if (h && h.bpm != null) {
+            if (h.live) W.lastAt = first && h.at ? Math.max(Date.parse(h.at) || 0, Date.now() - 1000) : Date.now();
+            else if (first && h.at) W.lastAt = Date.parse(h.at) || null;
+            var bpm = Math.round(Number(h.bpm));
+            W.num.textContent = String(bpm);
+            var c = '';
+            if (cfg.zones) c = bpm >= cfg.hotAt ? cfg.hotColor : bpm >= cfg.warmAt ? cfg.warmColor : '';
+            W.num.style.color = c;
+            if (W.icon) W.icon.style.animationDuration = (60 / Math.max(30, Math.min(240, bpm))).toFixed(3) + 's';
+            if (W.line) {
+                var n = Math.max(2, Number(cfg.graphSec) || 60);
+                var list = (h.history || []).slice(-n).map(Number).filter(isFinite);
+                if (list.length > 1) {
+                    var lo = Math.min.apply(null, list) - 5, hi = Math.max.apply(null, list) + 5;
+                    W.line.setAttribute('points', list.map(function (v, i) { return (n - list.length + i) + ',' + (100 - ((v - lo) / Math.max(1, hi - lo)) * 100).toFixed(1); }).join(' '));
+                } else W.line.setAttribute('points', '');
+            }
+            if (W.stats) {
+                clear(W.stats);
+                [['Low', h.min], ['Avg', h.avg], ['High', h.max]].forEach(function (p) {
+                    if (p[1] == null) return;
+                    var s = el('span', 'sbo-heart-stat');
+                    s.appendChild(el('span', 'sbo-heart-stat-label', p[0]));
+                    s.appendChild(el('span', 'sbo-heart-stat-num', String(p[1])));
+                    W.stats.appendChild(s);
+                });
+            }
+        } else if (first) {
+            W.num.textContent = '--';
+        }
+        heartHide();
+    }
+    function bump(n) { if (!n) return; n.classList.remove('is-bump'); void n.offsetWidth; n.classList.add('is-bump'); }
+
+    function trainBlock(cls, title) {
+        var root = el('div', 'sbo-train-block sbo-panel ' + cls);
+        root.hidden = true;
+        var head = el('div', 'sbo-train-head');
+        var t = el('span', 'sbo-train-title', title || '');
+        var count = el('span', 'sbo-train-count');
+        var left = el('span', 'sbo-train-left');
+        head.appendChild(t); head.appendChild(count); head.appendChild(left);
+        var track = el('div', 'sbo-goal-track sbo-train-track');
+        var fill = el('div', 'sbo-goal-fill');
+        track.appendChild(fill);
+        var foot = el('p', 'sbo-train-foot');
+        root.appendChild(head); root.appendChild(track); root.appendChild(foot);
+        return { root: root, count: count, left: left, fill: fill, foot: foot };
+    }
+    function drawTrain() {
+        if (!W.hypeNode) return;
+        var h = W.hypeData, s = W.subData, n;
+        n = W.hypeNode;
+        if (h) {
+            n.root.hidden = false;
+            n.count.textContent = 'Level ' + (h.level || 1);
+            var pct = h.goal > 0 ? Math.min(100, (Number(h.progress) || 0) / h.goal * 100) : (h.active ? 0 : 100);
+            n.fill.style.width = pct.toFixed(1) + '%';
+            var hl = secsLeft(h.expiresAt);
+            n.left.textContent = h.active ? (hl != null ? mmss(hl) : '') : 'Ended';
+            n.foot.textContent = h.active ? (h.goal ? num(h.progress) + ' of ' + num(h.goal) + ' to the next level' : '') : 'Reached level ' + (h.level || 1);
+        } else n.root.hidden = true;
+        n = W.subNode;
+        var sl = s ? secsLeft(s.endsAt) : 0;
+        if (s && sl > 0) {
+            n.root.hidden = false;
+            n.count.textContent = s.count + (s.count === 1 ? ' sub' : ' subs');
+            n.left.textContent = mmss(sl);
+            n.fill.style.width = Math.min(100, sl / (Number(cfg.subTrainSec) || 60) * 100).toFixed(1) + '%';
+            n.foot.textContent = s.last ? 'Last: ' + s.last : '';
+        } else { n.root.hidden = true; if (s) W.subData = null; }
+    }
+
+    function drawJar(d) {
+        if (!W.fill || !d) return;
+        var target = Number(d.target) || Number(cfg.target) || 1;
+        var pct = Math.min(1, Math.max(0, (Number(d.total) || 0) / target));
+        var top = 26, bottom = 120;
+        var h = (bottom - top) * pct;
+        W.fill.setAttribute('y', String(bottom - h));
+        W.fill.setAttribute('height', String(h));
+        if (W.total) W.total.textContent = (d.label || num(d.total)) + (d.targetLabel ? ' of ' + d.targetLabel : '');
+    }
+    function dropCoin(add) {
+        if (!W.drops) return;
+        var c = el('div', 'sbo-coin');
+        c.style.left = (30 + Math.random() * 40) + '%';
+        var tag = el('div', 'sbo-coin-tag', (add.name ? add.name + ' ' : '') + (add.label || ''));
+        tag.style.left = c.style.left;
+        W.drops.appendChild(c); W.drops.appendChild(tag);
+        later(function () { if (c.parentNode) c.parentNode.removeChild(c); }, 1600);
+        later(function () { if (tag.parentNode) tag.parentNode.removeChild(tag); }, 3600);
+    }
+
+    function drawCredits(d) {
+        if (!W.roll) return;
+        clear(W.roll);
+        var title = d.title != null ? d.title : cfg.title;
+        if (title) W.roll.appendChild(el('h1', 'sbo-credits-title', title));
+        (d.sections || []).forEach(function (s) {
+            var sec = el('section', 'sbo-credits-sec');
+            sec.appendChild(el('h2', 'sbo-credits-head', s.title));
+            (s.names || []).forEach(function (n) {
+                var row = el('p', 'sbo-credits-name', n.name);
+                if (n.note) row.appendChild(el('span', 'sbo-credits-note', n.note));
+                sec.appendChild(row);
+            });
+            W.roll.appendChild(sec);
+        });
+        if (!(d.sections || []).length) W.roll.appendChild(el('p', 'sbo-credits-name', 'See you next time'));
+        W.roll.style.animation = 'none';
+        void W.roll.offsetWidth;
+        W.roll.style.animation = 'sbo-roll ' + (Number(cfg.durationSec) || 45) + 's linear ' + (cfg.loop ? 'infinite' : '1') + ' both';
+    }
+
+    function floatEmote(src) {
+        if (!W.root || !src) return;
+        var max = Number(cfg.max) || 40;
+        while (W.root.children.length >= max) W.root.removeChild(W.root.firstChild);
+        var img = el('img', 'sbo-wall-emote');
+        img.alt = '';
+        img.src = url(src);
+        var size = Number(cfg.size) || 84;
+        img.style.height = size + 'px';
+        img.style.left = (Math.random() * 92) + '%';
+        var secs = (Number(cfg.riseSec) || 7) * (0.85 + Math.random() * 0.3);
+        img.style.animationDuration = secs + 's, ' + (1.6 + Math.random() * 1.6) + 's';
+        img.addEventListener('error', function () { if (img.parentNode) img.parentNode.removeChild(img); });
+        W.root.appendChild(img);
+        later(function () { if (img.parentNode) img.parentNode.removeChild(img); }, secs * 1000 + 200);
+    }
+
+    function pickPoll() {
+        var s = W.state || {};
+        var hide = (Number(cfg.hideAfterSec) || 0) * 1000;
+        var cands = [];
+        if (cfg.chatPolls && s.chat) cands.push(s.chat);
+        if (cfg.twitchPolls && s.twitch) cands.push(s.twitch);
+        if (cfg.predictions && s.prediction) cands.push(s.prediction);
+        var live = cands.filter(function (p) { return p.status === 'active' || p.status === 'locked'; });
+        if (live.length) return live[0];
+        var ended = cands.filter(function (p) { var k = p.kind + ':' + p.id + ':' + p.status; if (!W.endedAt[k]) W.endedAt[k] = Date.now(); return Date.now() - W.endedAt[k] < hide; });
+        return ended[0] || null;
+    }
+    function drawPoll() {
+        if (!W.box) return;
+        var p = pickPoll();
+        if (W.blocked) W.blocked.hidden = !!p;
+        if (!p) { W.box.hidden = true; W.sig = ''; return; }
+        var rows = (p.kind === 'prediction' ? p.outcomes : p.options) || [];
+        var key = function (r) { return p.kind === 'prediction' ? Number(r.points) || 0 : Number(r.votes) || 0; };
+        var total = rows.reduce(function (a, r) { return a + key(r); }, 0);
+        var sig = JSON.stringify(p);
+        var left = secsLeft(p.endsAt);
+        if (sig !== W.sig) {
+            W.sig = sig;
+            clear(W.box);
+            W.box.hidden = false;
+            var head = el('div', 'sbo-poll-head');
+            head.appendChild(el('span', 'sbo-poll-kind', p.kind === 'prediction' ? 'Prediction' : p.kind === 'chat' ? 'Chat poll' : 'Poll'));
+            W.left = el('span', 'sbo-poll-left');
+            head.appendChild(W.left);
+            W.box.appendChild(head);
+            W.box.appendChild(el('p', 'sbo-poll-title', p.title || ''));
+            rows.forEach(function (r, i) {
+                var share = total > 0 ? key(r) / total * 100 : 0;
+                var row = el('div', 'sbo-poll-row' + (p.winner && p.winner === r.title ? ' is-winner' : ''));
+                var line = el('div', 'sbo-poll-line');
+                line.appendChild(el('span', 'sbo-poll-opt', (p.kind === 'chat' ? (i + 1) + '. ' : '') + r.title));
+                line.appendChild(el('span', 'sbo-poll-num', p.kind === 'prediction' ? num(r.points) + ' points' : Math.round(share) + '%'));
+                var track = el('div', 'sbo-goal-track');
+                var fill = el('div', 'sbo-goal-fill');
+                fill.style.width = share.toFixed(1) + '%';
+                track.appendChild(fill);
+                row.appendChild(line); row.appendChild(track);
+                W.box.appendChild(row);
+            });
+            var foot = p.kind === 'chat' && p.status === 'active' ? 'Type !vote and a number in chat' : p.status === 'locked' ? 'Predictions are locked' : p.status === 'canceled' ? 'Canceled' : '';
+            if (foot) W.box.appendChild(el('p', 'sbo-poll-foot', foot));
+        }
+        if (W.left) W.left.textContent = p.status === 'active' ? mmss(left) : p.status === 'locked' ? 'Locked' : p.status === 'canceled' ? 'Canceled' : 'Ended';
+    }
+
+    function drawLabels(values) {
+        if (!W.box) return;
+        clear(W.box);
+        var keys = data.only ? [data.only] : (cfg.items || []);
+        var titles = { latest_follower: 'Latest follower', latest_sub: 'Latest sub', latest_tip: 'Latest tip', top_cheer: 'Top cheer' };
+        keys.forEach(function (k) {
+            var v = values[k];
+            var item = el('div', 'sbo-label sbo-panel');
+            if (cfg.showTitles) item.appendChild(el('span', 'sbo-label-title', titles[k] || k));
+            var val = el('span', 'sbo-label-value');
+            if (v) { val.appendChild(el('span', 'sbo-name', v.name)); if (v.detail) val.appendChild(el('span', 'sbo-label-detail', v.detail)); }
+            else val.textContent = cfg.empty || '';
+            item.appendChild(val);
+            W.box.appendChild(item);
+        });
+    }
+
+    function drawViewers(c) {
+        if (!W.box) return;
+        clear(W.box);
+        c = c || { live: false, total: 0, platforms: {} };
+        if (cfg.hideOffline && !c.live) { W.box.hidden = true; return; }
+        W.box.hidden = false;
+        var plats = (cfg.platforms || []).filter(function (p) { return c.platforms && c.platforms[p]; });
+        if (cfg.mode === 'each' && plats.length) {
+            plats.forEach(function (p) {
+                var row = el('span', 'sbo-viewers-item');
+                row.appendChild(platformMark(p));
+                row.appendChild(el('span', 'sbo-viewers-num', num(c.platforms[p].viewers)));
+                W.box.appendChild(row);
+            });
+        } else {
+            var total = plats.reduce(function (a, p) { return a + (Number(c.platforms[p].viewers) || 0); }, 0);
+            if (cfg.label) W.box.appendChild(el('span', 'sbo-viewers-label', cfg.label));
+            W.box.appendChild(el('span', 'sbo-viewers-num', num(total)));
         }
     }
     // ── scene screen: artwork, title, scrolling line, countdown, glows and weather (all in % of the artwork) ──
@@ -718,6 +1123,14 @@
         goal: drawGoal,
         counter: function (d) { drawCounter(d.value, true); },
         nowplaying: function (d) { drawNow(d.now); },
+        train: function (d) { if (type === 'train') WIDGETS.train.frame(d); },
+        tipjar: function (d) { if (type === 'tipjar') WIDGETS.tipjar.frame(d); },
+        credits: function (d) { if (type === 'credits') WIDGETS.credits.frame(d); },
+        emotes: function (d) { if (type === 'emotewall') WIDGETS.emotewall.frame(d); },
+        poll: function (d) { if (type === 'poll') WIDGETS.poll.frame(d); },
+        labels: function (d) { if (type === 'labels') WIDGETS.labels.frame(d); },
+        viewers: function (d) { if (type === 'viewers') WIDGETS.viewers.frame(d); },
+        heart: function (d) { if (type === 'heartrate') WIDGETS.heartrate.frame(d); },
     };
     function run(name, d) { try { handlers[name](d || {}); } catch (err) { /* one bad frame never stops the page */ } }
     function connect() {

@@ -36,7 +36,7 @@ export function reportOf(plan, { categories = null } = {}) {
     return {
         counts, groups,
         gaps: plan.gaps.map((g) => ({ key: g.key, label: g.label, phase: g.phase, why: g.why, count: g.count, bySource: g.bySource, examples: g.examples })),
-        checklist: plan.checklist, obs: plan.obs,
+        checklist: plan.checklist, obs: plan.obs, speech: plan.speech || [],
         media: plan.media.map((m) => ({ path: String(m.path).slice(0, 300), kind: m.kind, usedBy: m.usedBy, source: m.source, size: m.size ?? null, status: m.status ?? null })),
     };
 }

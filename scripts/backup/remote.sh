@@ -1,5 +1,5 @@
 #!/bin/bash
-# CertiFried server1 backup helper.
+# CertiFried server backup helper (server.certifriedmultitool.com = the OVH Vint Hill server since 2026-11-20).
 # Backup-CertiFried.ps1 sends this file over ssh on every run (bash -c "<script>" cfbackup MODE ...),
 # so nothing is installed on the server and nothing large is written to the server's disk.
 #
@@ -12,6 +12,10 @@
 #   tablecount        number of base tables in the database (re-checked after the dump)
 #   db                gzip stream of mysqldump --single-transaction (no table locks on InnoDB)
 #   files             gzip stream of a tar of the file set (see FILESET below)
+#   extras            gzip stream of a tar of the root-staged sets in /var/backups/offsite-stage (YourMafia DBs,
+#                     /var/vmail, newest mongodump; refreshed daily 09:20 UTC by offsite-stage.timer, refused if
+#                     older than 30 h) plus the Windrose saves (/srv/windrose/server-files/R5/Saved without logs)
+#                     and the Windrose compose files
 #   notify <b64msg>   Discord DM to the owner through scripts/publish/notify-owner.mjs
 #   restoretest <table> <b64 of nothing>   load SQL from stdin into _restore_test_<table>, compare, drop
 #
@@ -136,7 +140,9 @@ PY
     # ~/certifried-data (stream bot sounds, media, imports) and the pm2 process list. Excluded, with reasons:
     #   node_modules (npm ci rebuilds), .git (3.5 GB, pre-purge history), logs, backups, temp_audio,
     #   scratchpad, .playwright-mcp, .claude/worktrees (agent scratch),
-    #   piper_models except the custom en_GB/bear voice and previews (stock voices re-download from piper-voices).
+    #   piper_models except the custom en_GB/bear voice and previews (stock voices re-download from piper-voices),
+    #   own-voice recordings (certifried-data/voice/<voice>/samples: biometric, kept 30 days at most, never backed up)
+    #   and the sidecar socket. Own-voice models ARE backed up, encrypted with a per-voice key that a delete destroys.
     set +e
     find CertiFriedUtility certifried-data .pm2/dump.pm2 \
       \( \( -type d -name node_modules \) \
@@ -147,6 +153,8 @@ PY
          -o -path CertiFriedUtility/scratchpad \
          -o -path CertiFriedUtility/.playwright-mcp \
          -o -path CertiFriedUtility/.claude/worktrees \
+         -o -path 'certifried-data/voice/*/samples' \
+         -o -path certifried-data/voice/run \
          -o \( -path 'CertiFriedUtility/piper_models/*' \
                ! -path CertiFriedUtility/piper_models/en_GB \
                ! -path 'CertiFriedUtility/piper_models/en_GB/bear*' \
@@ -161,6 +169,26 @@ PY
     echo "CFBK_STATUS find=${st[0]} tar=${st[1]} pigz=${st[2]}" >&2
     # tar exit 1 = a file changed while it was read (normal on a live server); 2 = fatal.
     if [ "${st[1]}" -ge 2 ] || [ "${st[2]}" -ne 0 ]; then exit 1; fi
+    ;;
+
+  extras)
+    STAGE=/var/backups/offsite-stage
+    [ -r "$STAGE/manifest.txt" ] || { echo "cfbackup: $STAGE/manifest.txt is missing (offsite-stage.timer has not run)" >&2; exit 1; }
+    [ -n "$(find "$STAGE/manifest.txt" -mmin -1800)" ] || { echo "cfbackup: the staged set is older than 30 h (offsite-stage.timer failing?)" >&2; exit 1; }
+    TMPD=$(mktemp -d /dev/shm/cfbkx.XXXXXX)
+    mkdir "$TMPD/_backup_meta"
+    date -u +%Y-%m-%dT%H:%M:%SZ > "$TMPD/_backup_meta/created-utc.txt"
+    set +e
+    nice -n 10 tar --create --file=- --format=gnu \
+        -C "$TMPD" _backup_meta \
+        -C /var/backups offsite-stage \
+        -C /srv --exclude=windrose/server-files/R5/Saved/Logs --exclude=windrose/server-files/R5/Saved/Crashes \
+          windrose/server-files/R5/Saved windrose/docker-compose.yml windrose/docker-compose.override.yml windrose/.env \
+    | pigz -p 4 -6
+    st=("${PIPESTATUS[@]}")
+    set -e
+    echo "CFBK_STATUS find=0 tar=${st[0]} pigz=${st[1]}" >&2
+    if [ "${st[0]}" -ge 2 ] || [ "${st[1]}" -ne 0 ]; then exit 1; fi
     ;;
 
   notify)

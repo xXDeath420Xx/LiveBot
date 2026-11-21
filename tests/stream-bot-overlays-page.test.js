@@ -64,7 +64,7 @@ test('the Overlays list renders in Dark, Light and Sand: overlays with their sta
     assert.match(off, /Overlays start after the next CertiFried restart/);
 });
 
-test('every overlay type has a settings page in every theme; the alert box has all 13 alerts with Test, variations and read aloud', () => {
+test('every overlay type has a settings page in every theme; the alert box has all 16 alerts with Test, variations and read aloud', () => {
     for (const t of OVERLAY_TYPES) {
         for (const theme of ['dark', 'light', 'sand']) {
             const e = D.edit(t.type);
@@ -76,8 +76,8 @@ test('every overlay type has a settings page in every theme; the alert box has a
         }
     }
     const a = render(D.edit('alerts').template, D.edit('alerts').locals);
-    assert.equal((a.match(/data-alert="/g) || []).length, 13);
-    assert.equal((a.match(/data-test-alert="/g) || []).length, 26, 'a Test button in the list and in each alert');
+    assert.equal((a.match(/data-alert="/g) || []).length, 16);
+    assert.equal((a.match(/data-test-alert="/g) || []).length, 32, 'a Test button in the list and in each alert');
     assert.match(a, /data-cfg="alerts\.cheer\.tts"/);
     assert.doesNotMatch(a, /data-cfg="alerts\.follow\.tts"/, 'read aloud only for Bits and tips');
     assert.match(a, /threw \{amount\} Bits!/);

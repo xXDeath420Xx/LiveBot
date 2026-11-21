@@ -163,7 +163,8 @@ test('the Stream bot grant: no user:read:follows, no revenue scopes; coverage pe
     const full = coverage({ streamBot: STREAM_BOT_SCOPES });
     for (const f of full) assert.equal(f.covered, true, `${f.key} covered by the stream bot grant`);
     const none = coverage({});
-    assert.deepEqual(none.filter((f) => f.covered).map((f) => f.key).sort(), ['online', 'raid']);
+    // 'update' (Title or category changed, channel.update) needs no scope either (wave 2 group A, 2026-11-20).
+    assert.deepEqual(none.filter((f) => f.covered).map((f) => f.key).sort(), ['online', 'raid', 'update']);
     // manage satisfies read (polls via channel:manage:polls), split grants still count
     const split = coverage({ serverAnalytics: ['user:read:chat'], serverWrite: ['user:bot', 'channel:manage:polls'] });
     assert.equal(split.find((f) => f.key === 'chat').covered, true);

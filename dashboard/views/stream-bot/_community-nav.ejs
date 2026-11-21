@@ -1,0 +1,14 @@
+<%# Community sub-navigation (dashboard/routes/stream-bot-community.js). Locals: section ('overview'|'games'|'store'|'quotes'|'media'). %>
+<%
+  const _cSec = typeof section !== 'undefined' ? section : '';
+  const _cLinks = [
+      ['overview', '/stream/bot/community', 'Overview'],
+      ['games', '/stream/bot/community/games', 'Chat games'],
+      ['store', '/stream/bot/community/store', 'Store'],
+      ['quotes', '/stream/bot/community/quotes', 'Quotes'],
+      ['media', '/stream/bot/community/media', 'Media and speech'],
+  ];
+%>
+<nav class="sbc-subnav" aria-label="Community">
+    <% _cLinks.forEach(([k, href, label]) => { %><a href="<%= href %>"<% if (k === _cSec) { %> aria-current="page"<% } %>><%= label %></a><% }) %>
+</nav>

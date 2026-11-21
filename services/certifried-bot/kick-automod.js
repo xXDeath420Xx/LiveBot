@@ -10,6 +10,7 @@
  */
 import realPool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { parsePermit, grantPermit, hasPermit, permitReply } from './link-permits.js';
 
 const URL_RE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|gg|tv|xyz|live|co|me|link|store|shop)\b)/i;
 const SYMBOL_RE = /[^\p{L}\p{N}\s]/gu;
@@ -126,11 +127,23 @@ export function clearKickAutomodCache(channelPk) {
  */
 export async function runKickAutomod({ channelPk, messageId, message, username, isMod, isBroadcaster, reply, deleteMessage }) {
     try {
-        if (channelPk == null || isMod || isBroadcaster) return false;
+        if (channelPk == null) return false;
+        // !permit @name (moderators and the broadcaster, only while the link filter is on): links allowed for 60 seconds.
+        const permitFor = (isMod || isBroadcaster) ? parsePermit(message) : null;
+        if (permitFor) {
+            const s = await loadAutomod(channelPk);
+            if (!s?.links) return false;
+            grantPermit(`kick:${channelPk}`, permitFor);
+            if (typeof reply === 'function') { try { reply(permitReply(permitFor)); } catch (_) { /* ignore */ } }
+            return true;
+        }
+        if (isMod || isBroadcaster) return false;
         const settings = await loadAutomod(channelPk);
         if (!settings) return false;
-        const hit = evaluateMessage(message, settings);
-        if (!hit) return false;
+        let hit = evaluateMessage(message, settings);
+        // A permitted viewer's link passes; the other rules still apply to the same message.
+        if (hit?.rule === 'links' && hasPermit(`kick:${channelPk}`, username)) hit = evaluateMessage(message, { ...settings, links: false });
+        if (!hit) return await kickAiCheck({ channelPk, messageId, message, username, settings, deleteMessage });
 
         if (messageId && typeof deleteMessage === 'function') {
             try { await deleteMessage(messageId); } catch (_) { /* best effort */ }
@@ -139,6 +152,33 @@ export async function runKickAutomod({ channelPk, messageId, message, username, 
             try { reply(`@${username} ${hit.reason}.`); } catch (_) { /* ignore */ }
         }
         return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The shared AI layer (core/ai-moderation.js, local models only) for a message no rule caught, when the channel
+ * set automod.ai_mode to 'detect' or 'enforce' (off by default). enforce deletes clear cases; nothing is ever banned.
+ * Decisions go to kbd_enforcement_log (platform 'kick', channel = the tokes_channels id).
+ */
+async function kickAiCheck({ channelPk, messageId, message, username, settings, deleteMessage }) {
+    const mode = ['detect', 'enforce'].includes(settings?.ai_mode) ? settings.ai_mode : 'off';
+    if (mode === 'off') return false;
+    try {
+        const { screenChat } = await import('../../core/ai-moderation.js');
+        const r = await screenChat({ platform: 'kick', channelId: String(channelPk), userId: String(username || ''), text: message, mode });
+        if (!r || r.action === 'none') return false;
+        const reason = `AI ${r.label} ${Math.round(r.confidence * 100)}%${r.reason ? `: ${r.reason}` : ''}`.slice(0, 255);
+        let ok = false;
+        if (r.action === 'delete' && messageId && typeof deleteMessage === 'function') {
+            try { await deleteMessage(messageId); ok = true; } catch (_) { ok = false; }
+        }
+        await realPool.execute(
+            'INSERT INTO kbd_enforcement_log (platform, channel_id, target_user_id, target_username, action, reason, success) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            ['kick', String(channelPk), null, String(username || 'unknown').slice(0, 255), r.action === 'delete' ? 'delete' : 'detected', reason, r.action === 'delete' ? (ok ? 1 : 0) : 1],
+        ).catch(() => {});
+        return ok;
     } catch {
         return false;
     }

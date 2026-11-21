@@ -8,6 +8,8 @@
  *             automation. It never works for the realtime channel (hello accepts 'sbd_' tokens only) or the device
  *             sound download.
  *   linked    capabilities ['dock', 'of:<studio device id>']: asking again from the same Studio revokes the previous key
+ *   chat      the optional capabilities 'chat' (send chat, delete, timeout, ban) and 'channel' (title and category) are never
+ *             put on a new key: the owner switches them on per key on the Devices page (dashboard/routes/stream-bot-live.js)
  *
  *   newDockKey(), isDockKey(s)
  *   dockUrls(publicUrl, key)              → { activity, controls, chat }
@@ -25,6 +27,8 @@ import { hashSecret, tokenHint } from './pairing.js';
 export const DOCK_PREFIX = 'sbk_';
 const DOCK_RE = /^sbk_[A-Za-z0-9_-]{22}$/;
 export const MAX_STREAMS = 3;
+export const DOCK_CHAT = 'chat';
+export const DOCK_CHANNEL = 'channel';
 
 export const newDockKey = () => DOCK_PREFIX + crypto.randomBytes(16).toString('base64url');
 export const isDockKey = (s) => typeof s === 'string' && DOCK_RE.test(s);

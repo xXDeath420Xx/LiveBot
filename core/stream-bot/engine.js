@@ -40,6 +40,7 @@ export function createEngine({
     const L = { ...ENGINE_LIMITS, ...limits };
     const recent = new Map();   // profileId -> ms[] of runs started in the last minute
     const active = new Map();   // profileId -> runs in flight
+    let runGate = null;         // setRunGate(): (profile, automation, start) → start()'s promise, now or later
     const log = (level, msg, meta) => { try { logger?.[level]?.(`[StreamBot] ${msg}`, meta); } catch { /* never let logging break a run */ } };
 
     function admit(profileId) {
@@ -274,10 +275,14 @@ export function createEngine({
             return [];
         }
         const matching = list.filter((a) => triggerMatches(a, ev));
-        return Promise.all(matching.map((a) => runAutomation(profile, a, ev, { source: 'event', eventId })));
+        // A run gate (core/stream-bot/control/queues.js) can hold a run back, for automations in a blocking queue.
+        return Promise.all(matching.map((a) => {
+            const go = () => runAutomation(profile, a, ev, { source: 'event', eventId });
+            return runGate ? runGate(profile, a, go) : go();
+        }));
     }
 
-    return { handleEvent, runAutomation, limiter, _state: { recent, active } };
+    return { handleEvent, runAutomation, limiter, _state: { recent, active }, setRunGate(fn) { runGate = typeof fn === 'function' ? fn : null; } };
 }
 
 export default { createEngine, ENGINE_LIMITS };

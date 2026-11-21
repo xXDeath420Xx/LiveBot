@@ -74,6 +74,14 @@ test.before(async () => {
                 res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
                 return res.end(render(p.template, p.locals));
             }
+            if (url.pathname === '/__demo/widgets' || url.pathname === '/__demo/label') {
+                const isLabel = url.pathname === '/__demo/label';
+                const p = D.page(isLabel ? 'labels' : 'poll', { demo: true });
+                const pd = JSON.parse(p.locals.pageData);
+                if (isLabel) pd.only = 'latest_tip';
+                res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+                return res.end(render(p.template, { ...p.locals, pageData: JSON.stringify(pd) }));
+            }
             if (url.pathname === '/__dash/list') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(render(D.list.template, D.list.locals)); }
             if (url.pathname === '/__dash/edit') {
                 const e = D.edit('alerts', { previewSrc: `/stream/bot/overlay/alerts/sbo_${'C'.repeat(32)}?preview=1` });
@@ -225,6 +233,73 @@ for (const t of OVERLAY_TYPES) {
                     assert.ok(r.grain, 'grain is drawn locally, not fetched');
                     break;
                 }
+                case 'train': {
+                    await page.waitForFunction(() => document.querySelector('.sbo-train--sub') && !document.querySelector('.sbo-train--sub').hidden, { timeout: 5000 });
+                    const r = await page.evaluate(() => ({
+                        level: document.querySelector('.sbo-train--hype .sbo-train-count').textContent, hypeFill: document.querySelector('.sbo-train--hype .sbo-goal-fill').style.width,
+                        subs: document.querySelector('.sbo-train--sub .sbo-train-count').textContent, last: document.querySelector('.sbo-train--sub .sbo-train-foot').textContent,
+                        left: document.querySelector('.sbo-train--hype .sbo-train-left').textContent,
+                    }));
+                    assert.deepEqual([r.level, r.hypeFill, r.subs, r.last], ['Level 2', '65%', '3 subs', 'Last: MapleFan_88']);
+                    assert.match(r.left, /^[34]:\d\d$/, 'the hype train counts down');
+                    break;
+                }
+                case 'tipjar': {
+                    await page.waitForFunction(() => document.querySelector('.sbo-jar-total')?.textContent === '$45 of $100', { timeout: 5000 });
+                    const r = await page.evaluate(() => ({ h: document.querySelector('.sbo-jar-fill').getAttribute('height'), coin: !!document.querySelector('.sbo-coin'), tag: document.querySelector('.sbo-coin-tag')?.textContent }));
+                    assert.equal(Number(r.h).toFixed(1), '42.3', '45% of the jar');
+                    assert.ok(r.coin);
+                    assert.equal(r.tag, 'Hazel $5');
+                    break;
+                }
+                case 'credits': {
+                    await page.waitForSelector('.sbo-credits-title', { timeout: 5000 });
+                    const r = await page.evaluate(() => { const s = document.querySelector('.sbo-credits-roll').style; return { heads: [...document.querySelectorAll('.sbo-credits-head')].map((n) => n.textContent),
+                        anim: [s.animationName, s.animationDuration, s.animationIterationCount].join(' '), note: document.querySelector('.sbo-credits-note')?.textContent }; });
+                    assert.deepEqual(r.heads, ['New followers', 'Gifted subs', 'Raiders', 'Moderators']);
+                    assert.equal(r.anim, 'sbo-roll 45s 1', 'rolls once over the set time');
+                    assert.equal(r.note, '5 gifts');
+                    break;
+                }
+                case 'emotewall': {
+                    await page.waitForFunction(() => document.querySelectorAll('.sbo-wall-emote').length === 3, { timeout: 5000 });
+                    const srcs = await page.evaluate(() => [...document.querySelectorAll('.sbo-wall-emote')].map((n) => n.getAttribute('src')));
+                    assert.ok(srcs.every((s) => /^\/stream\/bot\/overlay\/emotewall\/sbo_B+\/img\/(tw|7tv|bttv)-emote\//.test(s)), 'emotes come from this server');
+                    break;
+                }
+                case 'poll': {
+                    await page.waitForFunction(() => document.querySelector('.sbo-poll') && !document.querySelector('.sbo-poll').hidden, { timeout: 5000 });
+                    const r = await page.evaluate(() => ({ title: document.querySelector('.sbo-poll-title').textContent, nums: [...document.querySelectorAll('.sbo-poll-num')].map((n) => n.textContent),
+                        opt: document.querySelector('.sbo-poll-opt').textContent, foot: document.querySelector('.sbo-poll-foot').textContent }));
+                    assert.deepEqual(r, { title: 'Which boss next?', nums: ['75%', '25%'], opt: '1. The Lantern Witch', foot: 'Type !vote and a number in chat' });
+                    break;
+                }
+                case 'labels': {
+                    await page.waitForFunction(() => document.querySelectorAll('.sbo-label').length === 4 && /1,000 Bits/.test(document.querySelector('.sbo-labels').textContent), { timeout: 5000 });
+                    const r = await page.evaluate(() => [...document.querySelectorAll('.sbo-label')].map((n) => n.textContent));
+                    assert.deepEqual(r, ['Latest followerWren', 'Latest subMapleFan_88', 'Latest tipHazel5.00 USD', 'Top cheerMapleFan_881,000 Bits']);
+                    break;
+                }
+                case 'viewers': {
+                    await page.waitForFunction(() => document.querySelector('.sbo-viewers-num')?.textContent === '99', { timeout: 5000 });
+                    const r = await page.evaluate(() => ({ nums: [...document.querySelectorAll('.sbo-viewers-num')].map((n) => n.textContent), marks: document.querySelectorAll('.sbo-viewers svg.sbo-badge').length }));
+                    assert.deepEqual(r, { nums: ['99', '32'], marks: 2 }, 'each platform with its sign');
+                    break;
+                }
+                case 'heartrate': {
+                    // Studio 0.2.14: the number, a heart beating once per beat (60 / 124 s), the graph and this stream's figures
+                    await page.waitForFunction(() => document.querySelector('.sbo-heart-num')?.textContent === '124', { timeout: 5000 });
+                    const r = await page.evaluate(() => {
+                        const icon = document.querySelector('.sbo-heart-icon');
+                        return { beating: icon.classList.contains('is-beating'), dur: icon.style.animationDuration, anim: getComputedStyle(icon).animationName,
+                            points: (document.querySelector('.sbo-heart-graph polyline').getAttribute('points') || '').split(' ').length,
+                            stats: [...document.querySelectorAll('.sbo-heart-stat-num')].map((n) => n.textContent), hidden: document.querySelector('.sbo-heart').hidden,
+                            color: document.querySelector('.sbo-heart-num').style.color, unit: document.querySelector('.sbo-heart-unit').textContent };
+                    });
+                    assert.deepEqual(r, { beating: true, dur: '0.484s', anim: 'sbo-beat', points: 60, stats: ['84', '104', '131'], hidden: false, color: 'rgb(242, 201, 76)', unit: 'BPM' },
+                        'beat synced to BPM, amber zone from 120, a 60-second graph, low / avg / high');
+                    break;
+                }
                 default: break;
             }
             await new Promise((r) => setTimeout(r, 400));
@@ -236,6 +311,30 @@ for (const t of OVERLAY_TYPES) {
         }
     });
 }
+
+test('widgets: a Twitch part without its scope says "Reconnect Twitch to enable"; a single label from ?label=', async () => {
+    const { page, errors } = await open(`${base}/__demo/widgets`, { width: 800, height: 600 });
+    try {
+        await page.waitForFunction(() => typeof window.__sboFeed === 'function', { timeout: 5000 });
+        const [hello] = D.frames('poll');
+        await page.evaluate((h) => { window.__sboFeed('hello', { ...h, state: { twitch: null, prediction: null, chat: null, blocked: 'Reconnect Twitch to enable' } }); }, hello[1]);
+        await page.waitForSelector('.sbo-blocked', { timeout: 3000 });
+        assert.equal(await page.evaluate(() => document.querySelector('.sbo-blocked').textContent), 'Reconnect Twitch to enable');
+        assert.equal(await page.evaluate(() => document.querySelector('.sbo-poll').hidden), true, 'in place of the widget');
+        await page.evaluate(() => window.__sboFeed('poll', { chat: { kind: 'chat', id: 'x', title: 'Q', options: [{ title: 'A', votes: 1 }, { title: 'B', votes: 0 }], endsAt: new Date(Date.now() + 30000).toISOString(), status: 'active', winner: null } }));
+        await page.waitForFunction(() => document.querySelector('.sbo-blocked').hidden && !document.querySelector('.sbo-poll').hidden, { timeout: 3000 });
+        assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+    const one = await open(`${base}/__demo/label`, { width: 800, height: 600 });
+    try {
+        await one.page.waitForFunction(() => typeof window.__sboFeed === 'function', { timeout: 5000 });
+        const [hello] = D.frames('labels');
+        await one.page.evaluate((h) => window.__sboFeed('hello', h), hello[1]);
+        await one.page.waitForSelector('.sbo-label', { timeout: 3000 });
+        assert.deepEqual(await one.page.evaluate(() => [...document.querySelectorAll('.sbo-label')].map((n) => n.textContent)), ['Latest tipHazel5.00 USD']);
+        assert.deepEqual(one.errors, []);
+    } finally { await one.page.close(); }
+});
 
 test('alert box: text over the image, the image at a share of its size, and the text waiting for the image', async () => {
     const { page, errors } = await open(`${base}/__demo/alerts`, { width: 800, height: 600 });
@@ -285,7 +384,7 @@ test('the settings page in Chrome: the preview frame scales the real overlay, a 
         assert.deepEqual(body.config.alerts.cheer.variations.map((v) => v.min), [1000, 10000, 25000]);
         assert.equal(body.config.alerts.cheer.variations[2].message, 'Enormous');
         assert.equal(body.config.alerts.cheer.tts, true);
-        assert.equal(Object.keys(body.config.alerts).length, 17, "every alert, the YouTube ones too (kept while the editor hides them)");
+        assert.equal(Object.keys(body.config.alerts).length, 22, "every alert, the YouTube ones too (kept while the editor hides them)");
         await new Promise((r) => setTimeout(r, 300));
         assert.deepEqual(errors, [], 'settings page: console errors');
     } finally { await page.close(); }

@@ -3,7 +3,9 @@
  * render.js and conditions.js (no viewer code inside the engine files).
  *
  *   points.add / points.remove / points.set   "Give points", "Take points", "Set points" (server actions): the viewer behind
- *                                             the event, or one named by a template such as {arg1}; the amount is a template
+ *                                             the event, or one named by a template such as {arg1}; the amount is a template.
+ *                                             Give and Set are skipped for a YouTube event or a YouTube viewer (YouTube API
+ *                                             policy III.F.3.c: no rewards for engaging with YouTube; youtube/policy.js)
  *   viewers.command                           "Viewers: run a command": !points, !top, !give, !gamble, !addpoints, !removepoints,
  *                                             answering in the chat the event came from
  *   viewer.rank_up                            trigger "Viewer reached a new rank" ({rank.name}, {rank.previous})
@@ -16,6 +18,7 @@
  */
 import { replyInEventChat, commandInput } from '../music/register.js';
 import { formatPoints, formatWatch } from './settings.js';
+import { noRewards } from '../youtube/policy.js';
 
 const f = (name, kind, label, extra = {}) => ({ name, kind, label, ...extra });
 
@@ -52,7 +55,7 @@ function pointsAction(ref, type, label, verb) {
         fields: [
             f('who', 'select', 'Who', { options: Object.keys(WHO), default: 'event', optionLabels: WHO }),
             f('viewer', 'template', 'Viewer name (when "A viewer by name"), such as {arg1}', { optional: true }),
-            f('amount', 'template', 'Amount, such as 100 or {amount}'),
+            f('amount', 'template', 'Amount, such as 100 or {amount}', type === 'points.remove' ? {} : { hint: 'Variables such as {amount} work here. Skipped for YouTube viewers: YouTube\'s API rules do not allow giving them points.' }),
         ],
         templates: ['viewer', 'amount'],
         validate(s, out, err) {
@@ -69,12 +72,15 @@ function pointsAction(ref, type, label, verb) {
             const raw = String(await ctx.render(step.amount)).trim().replace(/,/g, '');
             const n = /^\d{1,12}(\.\d+)?$/.test(raw) ? Math.min(AMOUNT_MAX, Math.floor(Number(raw))) : NaN;
             if (!Number.isFinite(n)) return { status: 'failed', detail: `the amount "${raw.slice(0, 40)}" is not a number` };
+            if (type !== 'points.remove' && noRewards(ctx.ev?.platform)) return { status: 'skipped', detail: 'YouTube viewers cannot be given points (YouTube API policy)' };
             const who = await stepViewer(svc, step, ctx);
             if (who.error) return { status: 'skipped', detail: who.error };
+            if (type !== 'points.remove' && noRewards(who.row.platform)) return { status: 'skipped', detail: 'YouTube viewers cannot be given points (YouTube API policy)' };
             if (ctx.dryRun) return { status: 'dry', detail: `would ${verb} ${formatPoints(n)} for ${who.row.name}` };
             const r = await svc.changePoints(ctx.profile.id, who.row.id, type === 'points.remove' ? -n : n, {
                 mode: type === 'points.set' ? 'set' : 'add', kind: 'automation', note: `${ctx.automation?.name ? `Automation: ${ctx.automation.name}` : 'Automation'}`.slice(0, 200), actor: 'automation',
             });
+            if (!r.ok && r.error === 'youtube') return { status: 'skipped', detail: 'YouTube viewers cannot be given points (YouTube API policy)' };
             if (!r.ok) return { status: 'failed', detail: r.error || 'could not change the points' };
             return { status: 'ok', detail: `${who.row.name}: ${formatPoints(r.before)} → ${formatPoints(r.balance)}` };
         },

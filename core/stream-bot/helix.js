@@ -14,6 +14,11 @@
  *     announce(profileId, { message, color })                 POST   /chat/announcements         moderator:manage:announcements
  *     shoutout(profileId, login)                              POST   /chat/shoutouts             moderator:manage:shoutouts
  *     deleteChat(profileId, messageId?)                       DELETE /moderation/chat            moderator:manage:chat_messages
+ *     sayAsBroadcaster(profileId, message)                    POST   /chat/messages              user:write:chat (sender = the streamer)
+ *     banUser(profileId, { userId, seconds?, reason? })       POST   /moderation/bans            moderator:manage:banned_users (no seconds = permanent)
+ *     searchCategories(profileId, query)                      GET    /search/categories          (no scope)
+ *     listRedemptions(profileId, rewardId)                    GET    /channel_points/custom_rewards/redemptions   channel:manage:redemptions (read or manage)
+ *     updateRedemption(profileId, { rewardId, redemptionId, status })   PATCH /channel_points/custom_rewards/redemptions   channel:manage:redemptions
  *     streamInfo(profileId)                                   GET    /streams, /channels         (no scope)
  *
  * The broadcaster (and, for the moderator endpoints, the moderator) is always the grant's own Twitch user: the
@@ -32,7 +37,8 @@ export class HelixError extends Error {
 export const SCOPE_FOR = Object.freeze({
     clip: 'clips:edit', broadcast: 'channel:manage:broadcast', ad: 'channel:edit:commercial', raid: 'channel:manage:raids',
     poll: 'channel:manage:polls', prediction: 'channel:manage:predictions', announce: 'moderator:manage:announcements',
-    shoutout: 'moderator:manage:shoutouts', chat: 'moderator:manage:chat_messages',
+    shoutout: 'moderator:manage:shoutouts', chat: 'moderator:manage:chat_messages', say: 'user:write:chat',
+    ban: 'moderator:manage:banned_users', redemptions: 'channel:manage:redemptions',
 });
 
 export const ANNOUNCE_COLORS = Object.freeze(['primary', 'blue', 'green', 'orange', 'purple']);
@@ -211,6 +217,67 @@ export function createHelix({ auth, fetchImpl = (...a) => fetch(...a), clientId 
                 need: [SCOPE_FOR.chat],
             });
             return { cleared: !messageId };
+        },
+
+        /** A chat line sent from the streamer's own account (the grant's user), in their own channel. */
+        async sayAsBroadcaster(profileId, message) {
+            const m = String(message || '').trim().slice(0, 500);
+            if (!m) throw new HelixError(400, 'The message is empty', 'empty');
+            const { data } = await call(profileId, 'POST', '/chat/messages', {
+                body: (me) => ({ broadcaster_id: me.userId, sender_id: me.userId, message: m }),
+                need: [SCOPE_FOR.say],
+            });
+            const r = data?.data?.[0] || {};
+            if (r.is_sent === false) throw new HelixError(422, `Twitch did not send it${r.drop_reason?.message ? `: ${String(r.drop_reason.message).slice(0, 150)}` : ''}`, 'dropped');
+            return { message: m, id: r.message_id ? String(r.message_id) : null };
+        },
+
+        /** Time out (seconds 1 to 1209600) or, without seconds, ban a user in the grant user's own channel. */
+        async banUser(profileId, { userId, seconds = null, reason = '' }) {
+            const uid = String(userId || '');
+            if (!/^\d{1,20}$/.test(uid)) throw new HelixError(400, 'That is not a Twitch user id', 'bad_user');
+            const data = { user_id: uid };
+            if (seconds != null) {
+                const s = Math.floor(Number(seconds));
+                if (!Number.isFinite(s) || s < 1 || s > 1_209_600) throw new HelixError(400, 'A timeout is 1 second to 14 days', 'bad_duration');
+                data.duration = s;
+            }
+            const r = String(reason || '').trim().slice(0, 500);
+            if (r) data.reason = r;
+            await call(profileId, 'POST', '/moderation/bans', {
+                query: (me) => ({ broadcaster_id: me.userId, moderator_id: me.userId }),
+                body: { data },
+                need: [SCOPE_FOR.ban],
+            });
+            return { userId: uid, seconds: data.duration ?? null };
+        },
+
+        /** Up to 8 matching categories for the title and category editor's autocomplete. */
+        async searchCategories(profileId, query) {
+            const q = String(query || '').trim().slice(0, 100);
+            if (q.length < 2) return [];
+            const { data } = await call(profileId, 'GET', '/search/categories', { query: { query: q, first: 8 } });
+            return (data?.data || []).slice(0, 8).map((c) => ({ id: String(c.id), name: String(c.name) }));
+        },
+
+        /** Unfulfilled redemptions of one reward. Twitch answers 403 for a reward that CertiFried's client did not create. */
+        async listRedemptions(profileId, rewardId, { status = 'UNFULFILLED' } = {}) {
+            const { data } = await call(profileId, 'GET', '/channel_points/custom_rewards/redemptions', {
+                query: (me) => ({ broadcaster_id: me.userId, reward_id: rewardId, status, first: 50 }),
+                need: [SCOPE_FOR.redemptions],
+            });
+            return (data?.data || []).map((x) => ({ id: String(x.id), status: String(x.status || '') }));
+        },
+
+        /** status: FULFILLED (done) or CANCELED (refunds the points). Only rewards created by CertiFried's client can be changed. */
+        async updateRedemption(profileId, { rewardId, redemptionId, status }) {
+            if (!['FULFILLED', 'CANCELED'].includes(status)) throw new HelixError(400, 'Choose done or refund', 'bad_status');
+            await call(profileId, 'PATCH', '/channel_points/custom_rewards/redemptions', {
+                query: (me) => ({ id: redemptionId, broadcaster_id: me.userId, reward_id: rewardId }),
+                body: { status },
+                need: [SCOPE_FOR.redemptions],
+            });
+            return { redemptionId: String(redemptionId), status };
         },
 
         async streamInfo(profileId) {

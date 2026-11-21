@@ -10,6 +10,7 @@
  *   {touser}                                          first mention, else the first word typed, else the sender
  *   {args} {arg1}..{arg9} {query}                     what was typed after the command; {query} is URL-encoded
  *   {channel.*} {server.*} {random:1-100} {choice:a|b|c} {urlencode:text}
+ *   {math:2*(3+{arg1})}                               arithmetic after the variables inside are filled in (core/math-expr.js, no eval)
  *   {api:https://…}  {api.json:https://…|path.to.field}
  *   {evilinsult} {evilinsult:de}                      an Evil Insult line (core/evil-insults.js), served locally
  *
@@ -43,6 +44,7 @@
  * template, so a stored value can never ping anyone the template itself would not.
  */
 import { LANGUAGES as EVIL_INSULT_LANGUAGES, isKnownLanguage } from './evil-insults.js';
+import { evaluateMath } from './math-expr.js';
 
 /** Storage limits ({db:…} / {sdb:…}). */
 export const MAX_DB_OPS = 10;
@@ -90,6 +92,7 @@ export const TEMPLATE_VARIABLES = Object.freeze([
     { group: 'Channel and server', token: '{server.id}', description: "This server's ID", example: '345678901234567890' },
     { group: 'Random', token: '{random:1-100}', description: 'A random whole number in that range', example: '42' },
     { group: 'Random', token: '{choice:a|b|c}', insert: '{choice:|}', description: 'Picks one of the options at random', example: '{choice:heads|tails} → tails' },
+    { group: 'Random', token: '{math:2*(3+4)}', insert: '{math:}', description: 'Works out a sum: + - * / % ^, brackets, round, floor, ceil, min, max, abs. Variables work inside', example: '{math:{arg1}*2} → 14' },
     { group: 'API calls', token: '{api:https://…}', insert: '{api:https://}', description: 'Fetches the URL and inserts the reply text (max 400 characters)', example: '{api:https://icanhazdadjoke.com/}' },
     { group: 'API calls', token: '{api.json:https://…|field}', insert: '{api.json:https://|}', description: 'Fetches JSON and inserts one field; use dots and [0] for nested fields', example: '{api.json:https://api.kanye.rest|quote}' },
     { group: 'Insults', token: '{evilinsult}', description: "A random crude insult from Evil Insult's open database (English), filtered like /insult. Includes sexual jokes", example: '{touser}, {evilinsult}' },
@@ -243,6 +246,12 @@ function ourToken(body, state, ctx) {
         return { t: 'choice', options: opts.map(o => parse(o, { ...state, noApi: true }, ctx)) };
     }
     if (/^urlencode:/i.test(body)) return { t: 'enc', body: parse(body.slice(10), state, ctx) };
+    if (/^math:/i.test(body)) {
+        const inner = parse(body.slice(5), state, ctx);
+        // A sum with no variables inside can be checked now.
+        if (inner.every((n) => n.t === 'text')) { const r = evaluateMath(inner.map((n) => n.v).join('')); if (!r.ok) ctx.warn(`{math:} cannot work out "${body.slice(5, 45)}": ${r.error}`); }
+        return { t: 'math', body: inner };
+    }
     if (/^api\.json:/i.test(body)) {
         const parts = splitTop(body.slice(9), '|');
         const path = parts.length > 1 ? parts.pop() : '';
@@ -334,7 +343,7 @@ export function parse(text, state = {}, ctx = { warn() {} }) {
 function apiNodes(nodes, out = []) {
     for (const n of nodes) {
         if (n.t === 'api') out.push(n);
-        else if (n.t === 'enc') apiNodes(n.body, out);
+        else if (n.t === 'enc' || n.t === 'math') apiNodes(n.body, out);
         else if (n.t === 'db' && n.value) apiNodes(n.value, out);
     }
     return out;
@@ -344,7 +353,7 @@ function apiNodes(nodes, out = []) {
 function dbNodes(nodes, out = []) {
     for (const n of nodes) {
         if (n.t === 'db') out.push(n);
-        else if (n.t === 'enc') dbNodes(n.body, out);
+        else if (n.t === 'enc' || n.t === 'math') dbNodes(n.body, out);
     }
     return out;
 }
@@ -390,6 +399,7 @@ function evaluate(nodes, vars, enc = false) {
             }
             case 'choice': out += evaluate(n.options[Math.floor(vars.rng() * n.options.length)], vars, enc); break;
             case 'enc': out += encodeURIComponent(evaluate(n.body, vars, false)); break;
+            case 'math': { const r = evaluateMath(evaluate(n.body, vars, false)); out += encode(r.ok ? r.text : ''); break; }
             case 'api': out += vars.results.get(n) ?? API_ERROR_TEXT; break;
             case 'db': out += encode(vars.dbResults?.get(n) ?? ''); break;
             default: break;

@@ -9,6 +9,7 @@ import { ACTION_TYPES, TARGET_LABEL, IF_CHECKS, actionType, isClientAction, chil
 import { STREAM_VARS } from '../../core/stream-bot/render.js';
 import { STREAM_BOT_SCOPES, TWITCH_FEATURES } from '../../core/stream-bot/scopes.js';
 import { DISABLED_TEXT as YOUTUBE_OFF_TEXT } from '../../core/stream-bot/youtube/config.js';
+import { IN_REVIEW_TEXT } from '../../core/stream-bot/youtube/gate.js';
 
 const SNOWFLAKE = /^\d{17,20}$/;
 
@@ -43,7 +44,7 @@ export function eventView(e) {
 
 export function catalog(online = { studio: false, overlay: false }) {
     return {
-        events: EVENT_TYPES.map((t) => ({ type: t.type, label: t.label, group: t.group, platforms: t.platforms, fields: t.fields })),
+        events: EVENT_TYPES.map((t) => ({ type: t.type, label: t.label, group: t.group, platforms: t.platforms, fields: t.fields, ...(t.config ? { config: t.config } : {}) })),
         conditions: CONDITION_TYPES,
         matchModes: MATCH_MODES,
         actions: ACTION_TYPES,
@@ -173,6 +174,7 @@ export const CONNECTION_MESSAGES = Object.freeze({
         unknown_platform: 'That platform cannot be linked here.',
         platform_coming_soon: 'That platform cannot be linked yet.',
         youtube_off: 'YouTube cannot be linked yet: CertiFried is waiting for its Google sign-in to be approved.',
+        youtube_in_review: IN_REVIEW_TEXT,
         oauth_denied: 'The sign-in was cancelled.',
         oauth_state: 'The sign-in expired or was opened in another tab. Start again.',
         no_channel_id: 'That sign-in did not return a channel to link.',
@@ -197,12 +199,16 @@ export function connectionNotice(query) {
     return null;
 }
 
-/** The Connections page's YouTube panel (H-741): off with the reason, or the service's per-channel state and today's quota. */
-export function youtubePanel(yt, profileId) {
+/**
+ * The Connections page's YouTube panel (H-741): off with the reason, or the service's per-channel state and today's quota.
+ * canLink: false while Google reviews the app and this user is neither the owner nor a listed reviewer (youtube/gate.js);
+ * the page then says so instead of showing the sign-in button.
+ */
+export function youtubePanel(yt, profileId, { canLink = true } = {}) {
     const cfg = yt?.config || { enabled: false, reason: 'no_client' };
     if (!cfg.enabled || !yt?.service) return { enabled: false, text: YOUTUBE_OFF_TEXT[cfg.reason] || YOUTUBE_OFF_TEXT.no_client };
     const st = yt.service.status(profileId);
-    return { enabled: true, channels: st.channels, quota: st.quota };
+    return { enabled: true, channels: st.channels, quota: st.quota, canLink: canLink !== false, inReviewText: IN_REVIEW_TEXT };
 }
 
 /** Scopes the stream actions use (2026-11-19), with what they do. */
@@ -214,13 +220,13 @@ export const ACTION_SCOPES = Object.freeze({
     'moderator:manage:announcements': 'Chat announcements',
     'moderator:manage:chat_messages': 'Clear chat and delete messages',
     'moderator:manage:shoutouts': 'Shoutouts',
+    'moderator:manage:banned_users': 'Time out and ban viewers from the OBS chat dock (only when you press the button)',
+    'channel:manage:redemptions': 'Marking redemptions done or refunding them (only rewards CertiFried created)',
     'moderator:manage:blocked_terms': 'Add your imported banned words to Twitch blocked terms (only when you press the button on Import)',
 });
 
 /** Scopes nothing uses yet, with what they will do. */
-export const LATER_SCOPES = Object.freeze({
-    'channel:manage:redemptions': 'Marking redemptions done or refunding them',
-});
+export const LATER_SCOPES = Object.freeze({});
 
 /** What each Stream bot grant scope enables (scopes.js TWITCH_FEATURES); the Phase 4 manage scopes are marked "later". */
 export function scopeRows() {

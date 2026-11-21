@@ -26,11 +26,15 @@
  * broadcast skips YouTube's backlog of older messages. Every 10 minutes a live broadcast is verified with videos.list (1 unit,
  * viewer count for {stream.viewers}); offlineAt, chatEndedEvent, liveChatEnded and an ended video all end it.
  *
+ * New subscribers. While live, subscriptions.list myRecentSubscribers (1 unit) runs every minute (scaled by the quota level, off at
+ * "critical"). The first answer of a broadcast only records who is there already; later new ones become "follow" events
+ * (normalise.js subscriberEvent), so the alert box, goals and labels see YouTube subscribers. Only public subscriptions are listed.
+ *
  * Every message becomes an event through ingest.youtube() (echo guard, de-duplication, store, live feed, automations, viewers).
  * Before that, each message (also deletions and bans, which are not events) goes to ingest.youtubeRaw(item, channelId) when
  * something set it: the Chat overlay (overlays/index.js), like the raw Twitch and Kick notifications.
  */
-import { normaliseYouTubeMessage, broadcastEvent, isChatEnded } from './normalise.js';
+import { normaliseYouTubeMessage, broadcastEvent, subscriberEvent, isChatEnded } from './normalise.js';
 import { CHAT_MAX } from './config.js';
 
 export const TIMINGS = Object.freeze({
@@ -43,6 +47,7 @@ export const TIMINGS = Object.freeze({
     persistMs: 30_000,
     maxAgeMs: 15 * 60_000,       // messages older than this are never events (backlog after a gap)
     backlogSlackMs: 60_000,      // the first connection of a broadcast keeps messages from this long before the reader started
+    subscribersMs: 60_000,       // new subscribers while live (subscriptions.list, 1 unit)
 });
 
 const LEVEL_FACTOR = Object.freeze({ normal: 1, slow: 2, critical: 4, exhausted: 6 });
@@ -126,7 +131,7 @@ export function createYouTubeService({
             profileId: Number(r.profile_id), ownerId: String(r.owner_discord_id), channelId: String(r.platform_user_id), login: r.login || null, name: r.display_name || r.login || null,
             live: false, broadcastId: null, chatId: null, title: null, startedAt: null, endedAt: null, viewers: null, pageToken: null, transport: 'stream',
             readerStartedAt: null, lastMessageAt: null, lastCheckAt: null, nextCheckAt: now() + Math.floor(Math.random() * 30_000), burstUntil: 0, verifyAt: 0,
-            error: null, errorCode: null, first: new Set(), reader: null, abort: null, streamFailures: 0, messages: 0, persistedAt: 0, ended: false,
+            error: null, errorCode: null, first: new Set(), subsSeen: null, subsAt: 0, subsOff: false, reader: null, abort: null, streamFailures: 0, messages: 0, persistedAt: 0, ended: false,
         };
     }
     async function reload(resume = false) {
@@ -225,7 +230,7 @@ export function createYouTubeService({
         ch.live = true; ch.ended = false;
         ch.broadcastId = b.id; ch.chatId = b.chatId; ch.title = b.title || null;
         ch.startedAt = b.startedAt ? new Date(b.startedAt).getTime() : now(); ch.endedAt = null;
-        if (!same) { ch.pageToken = null; ch.first = new Set(); ch.messages = 0; }
+        if (!same) { ch.pageToken = null; ch.first = new Set(); ch.messages = 0; ch.subsSeen = null; }
         ch.readerStartedAt = now(); ch.verifyAt = now() + TM.verifyMs; ch.error = null; ch.errorCode = null; ch.streamFailures = 0;
         await persist(ch, true);
         log('info', 'YouTube broadcast is live', { profileId: ch.profileId });
@@ -256,6 +261,29 @@ export function createYouTubeService({
         ch.viewers = v.viewers; ch.title = v.title || ch.title;
         if (v.chatId && v.chatId !== ch.chatId) { ch.chatId = v.chatId; ch.pageToken = null; }
         if (!ch.reader) startReader(ch);   // a reader that stopped on an error gets another go
+    }
+
+    // ── new subscribers while live ──
+    async function checkSubscribers(ch) {
+        ch.subsAt = now() + TM.subscribersMs * (LEVEL_FACTOR[quota.level()] || 1);
+        if (ch.subsOff || ['critical', 'exhausted'].includes(quota.level()) || typeof api.recentSubscribers !== 'function') return;
+        const tok = await tokenFor(ch);
+        if (!tok) return;
+        let list;
+        try { list = await api.recentSubscribers(tok.accessToken, ch.profileId); } catch (err) {
+            if (err?.status === 403) { ch.subsOff = true; log('info', 'YouTube does not list subscribers for this channel; subscriber alerts are off', { profileId: ch.profileId }); }
+            else log('debug', 'subscriber check failed', { error: err?.reason || err?.message });
+            return;
+        }
+        const first = !ch.subsSeen;
+        ch.subsSeen ||= new Set();
+        const fresh = list.filter((s) => !ch.subsSeen.has(s.channelId));
+        for (const s of list) ch.subsSeen.add(s.channelId);
+        if (ch.subsSeen.size > 5000) ch.subsSeen = new Set(list.map((s) => s.channelId));
+        if (first) return;   // who was there before this broadcast started is not news
+        for (const s of fresh.reverse()) {
+            try { await ingest.youtube(subscriberEvent({ channelId: ch.channelId, subscriber: s })); } catch (err) { log('warn', 'ingest failed', { error: err?.message }); }
+        }
     }
 
     // ── the chat reader ──
@@ -362,6 +390,7 @@ export function createYouTubeService({
                 try {
                     if (!ch.live && now() >= ch.nextCheckAt) await checkLive(ch);
                     else if (ch.live && now() >= ch.verifyAt) await verify(ch);
+                    if (ch.live && now() >= ch.subsAt) await checkSubscribers(ch);
                 } catch (err) { log('warn', 'check failed', { profileId: ch.profileId, error: err?.message }); }
             }
         } finally {

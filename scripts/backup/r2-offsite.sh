@@ -1,13 +1,15 @@
 #!/bin/bash
 # Nightly off-site copy of CertiFried's backup to Cloudflare R2.
 #
-# Streams the same two archives the workstation backup pulls (scripts/backup/remote.sh modes `db` and `files`)
-# straight into the R2 bucket, so nothing large is written to this server's disk. Each run writes one folder:
+# Streams the same three archives the workstation backup pulls (scripts/backup/remote.sh modes `db`, `files` and
+# `extras`) straight into the R2 bucket, so nothing large is written to this server's disk. Each run writes one folder:
 #   r2:<bucket>/backups/<UTC YYYY-MM-DD_HHMM>/db.sql.gz      gzip of mysqldump --single-transaction
 #   r2:<bucket>/backups/<UTC YYYY-MM-DD_HHMM>/files.tar.gz   gzip tar of the file set (remote.sh FILESET)
+#   r2:<bucket>/backups/<UTC YYYY-MM-DD_HHMM>/extras.tar.gz  YourMafia DBs, /var/vmail, newest mongodump (staged by
+#                                                            root's offsite-stage.timer, 09:20 UTC) + Windrose saves
 #   r2:<bucket>/backups/<UTC YYYY-MM-DD_HHMM>/manifest.json  sizes, SHA-256, table count, git HEAD, timestamps
-# manifest.json is written last, only after both archives are uploaded, their sizes checked with
-# `rclone lsjson` and both read back in full with a matching SHA-256, so a night folder is COMPLETE exactly
+# manifest.json is written last, only after all archives are uploaded, their sizes checked with
+# `rclone lsjson` and all read back in full with a matching SHA-256, so a night folder is COMPLETE exactly
 # when it has manifest.json.
 #
 # Retention: after a fully verified run, every night folder except the 2 newest complete ones is deleted
@@ -27,7 +29,7 @@
 #   R2_OFFSITE_TEST_DIR=/abs/dir     use a local rclone remote (RCLONE_CONFIG_R2_TYPE=local) rooted at this
 #                                    directory instead of R2; the "bucket" is <dir>/<R2_BUCKET>
 #   R2_OFFSITE_ENV_FILE=/abs/file    read the R2_* keys from this file instead of the repo .env (TEST_DIR only)
-#   R2_OFFSITE_TEST_BREAK=db|files   pass remote.sh an invalid mode for that step, to test the failure path
+#   R2_OFFSITE_TEST_BREAK=db|files|extras   pass remote.sh an invalid mode for that step, to test the failure path
 #                                    (TEST_DIR only)
 #   R2_OFFSITE_NO_NOTIFY=1           log the failure DM instead of sending it
 set -uo pipefail
@@ -35,7 +37,7 @@ umask 077
 export PATH=/usr/local/bin:/usr/bin:/bin
 export LC_ALL=C
 
-VERSION=1.0.0
+VERSION=1.1.0
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 REMOTE_SH="$HERE/remote.sh"
@@ -47,6 +49,7 @@ LOG_MAX=1048576        # rotate the log above this many bytes
 LOG_KEEP=3             # rotated logs kept (.1 .. .3)
 MIN_DB_BYTES=1048576   # sanity floor: a real dump is ~180 MB compressed
 MIN_FILES_BYTES=10485760
+MIN_EXTRAS_BYTES=1048576 # staged DBs + Windrose saves are ~100 MB
 
 TEST_DIR="${R2_OFFSITE_TEST_DIR:-}"
 ENV_FILE="$REPO/.env"
@@ -320,13 +323,21 @@ read -r FILES_BYTES FILES_SHA < "$WORK/files.tar.gz.stats"
 log "files.tar.gz: $FILES_BYTES bytes in ${FILES_SECONDS}s, sha256 $FILES_SHA"
 [ "$FILES_BYTES" -ge "$MIN_FILES_BYTES" ] || fail "the files archive was far too small ($FILES_BYTES bytes)"
 
-# ---------------------------------------------------------------- 4. verify both objects
-if ! rcl lsjson "$DEST" 2>"$WORK/ls.err" | python3 -c "$PY_VERIFY" "db.sql.gz=$DB_BYTES" "files.tar.gz=$FILES_BYTES"; then
+# ---------------------------------------------------------------- 3b. extras (YourMafia DBs, mail, mongodump, Windrose saves)
+t=$SECONDS
+stream extras.tar.gz extras || fail "the extras archive (YourMafia DBs, mail, MongoDB, Windrose saves) or its upload failed"
+EXTRAS_SECONDS=$((SECONDS - t))
+read -r EXTRAS_BYTES EXTRAS_SHA < "$WORK/extras.tar.gz.stats"
+log "extras.tar.gz: $EXTRAS_BYTES bytes in ${EXTRAS_SECONDS}s, sha256 $EXTRAS_SHA"
+[ "$EXTRAS_BYTES" -ge "$MIN_EXTRAS_BYTES" ] || fail "the extras archive was far too small ($EXTRAS_BYTES bytes)"
+
+# ---------------------------------------------------------------- 4. verify the objects
+if ! rcl lsjson "$DEST" 2>"$WORK/ls.err" | python3 -c "$PY_VERIFY" "db.sql.gz=$DB_BYTES" "files.tar.gz=$FILES_BYTES" "extras.tar.gz=$EXTRAS_BYTES"; then
   sed 's/^/  rclone: /' "$WORK/ls.err"
   fail "the uploaded archives could not be verified in the bucket"
 fi
-# Read both objects back from the bucket and compare SHA-256 with what was streamed (R2 egress is free).
-for pair in "db.sql.gz:$DB_SHA" "files.tar.gz:$FILES_SHA"; do
+# Read every object back from the bucket and compare SHA-256 with what was streamed (R2 egress is free).
+for pair in "db.sql.gz:$DB_SHA" "files.tar.gz:$FILES_SHA" "extras.tar.gz:$EXTRAS_SHA"; do
   name=${pair%%:*}; want=${pair#*:}; t=$SECONDS
   rcl cat "$DEST/$name" 2>"$WORK/cat.err" | nice -n 10 python3 -c "$PY_HASH" "$WORK/$name.reread" >/dev/null
   st=("${PIPESTATUS[@]}")
@@ -353,17 +364,19 @@ m = {
     'database': {'file': 'db.sql.gz', 'bytes': $DB_BYTES, 'sha256': '$DB_SHA', 'seconds': $DB_SECONDS,
                  'table_count': $TABLES_BEFORE, 'table_count_after_dump': ${TABLES_AFTER:-None}},
     'files': {'file': 'files.tar.gz', 'bytes': $FILES_BYTES, 'sha256': '$FILES_SHA', 'seconds': $FILES_SECONDS},
+    'extras': {'file': 'extras.tar.gz', 'bytes': $EXTRAS_BYTES, 'sha256': '$EXTRAS_SHA', 'seconds': $EXTRAS_SECONDS,
+               'contents': 'offsite-stage/ (YourMafia DBs, vmail.tar.gz, mongodb-kbd.archive.gz, manifest.txt) + windrose/ (R5/Saved, compose files)'},
     'git_head': '$GIT_HEAD',
     'git_head_date': '$GIT_HEAD_DATE',
     'status': 'VERIFIED',
-    'verification': 'both archives streamed without error; their sizes in the bucket equal the streamed byte counts and a full read-back from the bucket has the same SHA-256',
+    'verification': 'all three archives streamed without error; their sizes in the bucket equal the streamed byte counts and a full read-back from the bucket has the same SHA-256',
 }
 open(sys.argv[1], 'w').write(json.dumps(m, indent=2) + '\n')
 PY
 MANIFEST_BYTES=$(stat -c %s "$WORK/manifest.json")
 rcl rcat "$DEST/manifest.json" < "$WORK/manifest.json" 2>&1 | sed 's/^/  rclone: /'
 [ "${PIPESTATUS[0]}" = 0 ] || fail "manifest.json could not be uploaded"
-if ! rcl lsjson "$DEST" 2>"$WORK/ls.err" | python3 -c "$PY_VERIFY" "db.sql.gz=$DB_BYTES" "files.tar.gz=$FILES_BYTES" "manifest.json=$MANIFEST_BYTES"; then
+if ! rcl lsjson "$DEST" 2>"$WORK/ls.err" | python3 -c "$PY_VERIFY" "db.sql.gz=$DB_BYTES" "files.tar.gz=$FILES_BYTES" "extras.tar.gz=$EXTRAS_BYTES" "manifest.json=$MANIFEST_BYTES"; then
   sed 's/^/  rclone: /' "$WORK/ls.err"
   fail "manifest.json could not be verified in the bucket"
 fi
@@ -399,6 +412,6 @@ else
 fi
 [ "$PRUNE_FAILED" = 1 ] && notify "CertiFried off-site backup (Cloudflare R2): tonight's copy ($NIGHT UTC) is safely uploaded, but clearing out old copies did not fully work, so the bucket may hold more than $KEEP nights. Details: logs/r2-offsite.log on the server."
 
-log "===== r2-offsite $NIGHT end: OK after ${SECONDS}s (db $DB_BYTES bytes, files $FILES_BYTES bytes) ====="
+log "===== r2-offsite $NIGHT end: OK after ${SECONDS}s (db $DB_BYTES bytes, files $FILES_BYTES bytes, extras $EXTRAS_BYTES bytes) ====="
 DONE=1
 exit 0

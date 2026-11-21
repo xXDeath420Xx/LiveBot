@@ -263,3 +263,34 @@ test('the page in Dark, Light and Sand; scripts build no markup from strings; ro
     assert.match(server, /import\('\.\/routes\/stream-bot-switchover\.js'\)/);
     assert.match(read('dashboard/views/stream-bot/import.ejs'), /href="\/stream\/bot\/import\/switchover"/, 'the Import page links to it');
 });
+
+test('import notes: the newest report that lists an item wins, also with no notes left (a re-import clears an old hold)', async () => {
+    const auto = { id: 14, name: 'Streamer.bot: Go Live', enabled: false, trigger_type: 'voice.phrase', trigger_config: { phrases: ['Go Live On Stream Right Now'] }, conditions: [],
+        actions: [{ type: 'chat.send', platform: 'twitch', text: '!reset' }, { type: 'chat.clear' }, { type: 'obs.stream', state: 'start' }, { type: 'obs.scene', scene: 'START' }] };
+    const other = { id: 15, name: 'Streamer.bot: Other', enabled: false, trigger_type: 'chat.command', trigger_config: {}, conditions: [], actions: [{ type: 'obs.scene', scene: 'X' }] };
+    const item = (a, sourceId) => ({ id: a.id, source: 'streamerbot', kind: 'speech', source_id: sourceId, target_kind: 'automation', target_ref: `automation:${a.id}`, data: { hash: automationHash(a) } });
+    const view = (sourceId, why) => ({ source: 'streamerbot', kind: 'speech', sourceId, why });
+    const reports = {
+        1: { groups: { changed: [view('go', ['Streamer.bot had this set to Stop streaming; check that is what you want before turning it on']), view('other', ['check it before you turn it on'])] } },
+        2: { groups: { as_is: [view('go', [])] } },   // the re-import: Go Live has no notes now; "other" is not in it
+    };
+    const importStore = { listImports: async () => [{ id: 2 }, { id: 1 }], getImport: async (_p, id) => ({ id, report: reports[id] }), listItems: async () => [item(auto, 'go'), item(other, 'other')] };
+    const store = { listAutomations: async () => [auto, other], listChannels: async () => [], getSettingsKey: async () => null };
+    const db = { query: async () => [[]] };
+    const sw = createSwitchover({ db, store, importStore, prefix: 'sbtw_notes_' });
+    const plan = await sw.preview(2, { sceneItems: null });
+    const row = (id) => plan.automations.find((a) => a.id === id);
+    assert.equal(row(14).state, 'turn_on', JSON.stringify(row(14).reasons));
+    assert.equal(row(15).state, 'attention', 'an item the newer report does not list keeps its older note');
+});
+
+test('"add a role condition" (Firebot !clear for anyone) stops holding once a Moderator or Broadcaster role condition is there', () => {
+    const note = ['Anyone in chat could run this in Firebot, and here it really clears your Twitch chat: check it before turning it on (add a role condition)'];
+    const clear = (conditions) => ({ conditions, actions: [{ type: 'chat.clear' }] });
+    assert.equal(attentionFor(clear([]), { notes: note }).length, 1);
+    assert.deepEqual(attentionFor(clear([{ type: 'role', roles: ['moderator', 'broadcaster'], mode: 'any' }]), { notes: note }), []);
+    assert.equal(attentionFor(clear([{ type: 'role', roles: ['everyone'], mode: 'any' }]), { notes: note }).length, 1, 'everyone is no limit');
+    assert.equal(attentionFor(clear([{ type: 'role', roles: ['moderator'], mode: 'none' }]), { notes: note }).length, 1, '"not a moderator" is no limit');
+    // Other notes still hold it.
+    assert.equal(attentionFor(clear([{ type: 'role', roles: ['moderator'], mode: 'any' }]), { notes: [...note, 'Streamer.bot had this set to Stop streaming; check that is what you want before turning it on'] }).length, 1);
+});

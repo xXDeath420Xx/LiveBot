@@ -31,7 +31,8 @@
  *   → request { id, method, params }   ← response { id, ok, result? | error?, message? }
  *   ← sounds_changed {}   the dashboard sound library changed: ask sounds.list again
  * Close codes: 4400 bad message, 4401 bad token, 4403 revoked, 4408 hello/heartbeat timeout,
- * 4409 replaced by a newer connection with the same token, 4429 too many messages.
+ * 4409 replaced by a newer connection with the same token, 4429 too many messages (more than 70 in 10 s; was 50 until Studio
+ * 0.2.14, whose heart-rate readings add up to 10 requests in 10 s).
  *
  * Dispatch: one connected device of the target kind with the capability (newest connection first); no ack in
  * ackTimeoutMs → resent (another device of that kind when there is one) up to maxAttempts, then failed. No
@@ -52,7 +53,7 @@ const MAX_SOCKETS = 2000;
 
 export function createHub({
     store, logger = null, now = () => Date.now(), heartbeatMs = 20_000, helloTimeoutMs = 10_000, ackTimeoutMs = 10_000,
-    maxAttempts = 3, rate = { count: 50, windowMs: 10_000 }, WebSocketServer = DefaultWSS, sweepMs = 5_000,
+    maxAttempts = 3, rate = { count: 70, windowMs: 10_000 }, WebSocketServer = DefaultWSS, sweepMs = 5_000,
 } = {}) {
     const log = (level, msg, meta) => { try { logger?.[level]?.(`[StreamBotWS] ${msg}`, meta); } catch { /* ignore */ } };
     const sockets = new Set();             // every open socket (conn objects)

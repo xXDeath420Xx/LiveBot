@@ -21,3 +21,9 @@
 .sbs-obs-wrap { overflow-x: auto; }
 .sbs-counts { margin: 0; color: var(--cf-text); }
 .sbs-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.sbs-blocking { border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); background: var(--cf-surface-2); padding: var(--cf-3); }
+.sbs-tick { display: flex; gap: var(--cf-2); align-items: flex-start; color: var(--cf-text); font-size: var(--cf-text-sm); }
+.sbs-fix { display: grid; gap: var(--cf-2); margin: var(--cf-2) 0 0 1.6em; }
+.sbs-fix-label { display: grid; gap: var(--cf-1); font-size: var(--cf-text-sm); font-weight: 400; color: var(--cf-text-2); }
+.sbs-fix-label :is(input, select, textarea) { width: 100%; max-width: 32rem; }
+.sbs-fix-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }

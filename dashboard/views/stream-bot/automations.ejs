@@ -1,6 +1,7 @@
 <%#
   GET /stream/bot/automations. Locals: automations [{ id, name, enabled, trigger, triggerLabel, platforms[], match,
-  actionsCount, conditionsCount, lastRunAt, needs[] }], max. The switches post to /stream/bot/api/automations/:id/toggle
+  actionsCount, conditionsCount, lastRunAt, needs[] }], max, hasVoice (a Voice command automation exists: the voice log shows,
+  filled by /js/stream-bot.js from GET /stream/bot/api/voice/log). The switches post to /stream/bot/api/automations/:id/toggle
   (/js/stream-bot.js).
 %>
 <%- include('_head', { pageTitle: 'Automations', active: 'automations' }) %>
@@ -50,5 +51,24 @@
         <% } %>
     </div>
 </section>
+
+<% if (locals.hasVoice) { %>
+<section class="cf-section" id="sb-voice-log" aria-labelledby="sb-voice-log-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-voice-log-title">Voice log</h2>
+        <p class="cf-section-desc">What CertiFried Studio heard for your voice commands, newest first (the last 200). It shows the closest command, how sure it was, and what happened. The words are not sent here unless you turn that on in Studio, Voice.</p>
+        <p class="cf-section-desc">Teach Studio from this list: "This was ..." adds the words to how you say that command, "Not a command" tells Studio those words are not it, and "Wrong, undo learning" stops a command that ran by mistake from running for those words again. Studio picks up the change within a few seconds.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-voice-log-status" role="status" aria-live="polite"></span><button type="button" class="btn btn-secondary btn-sm" id="sb-voice-log-clear">Clear</button></div></header>
+    <div class="cf-rows">
+        <p class="cf-list-meta" id="sb-voice-log-note"></p>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack" id="sb-voice-log-table" hidden>
+                <thead><tr><th scope="col">Time</th><th scope="col">Heard</th><th scope="col">Closest command</th><th scope="col">How sure</th><th scope="col">What happened</th><th scope="col">Teach</th></tr></thead>
+                <tbody id="sb-voice-log-rows"></tbody>
+            </table>
+        </div>
+        <p class="cf-state-text" id="sb-voice-log-empty">Nothing heard yet.</p>
+    </div>
+</section>
+<% } %>
 
 <%- include('_foot') %>

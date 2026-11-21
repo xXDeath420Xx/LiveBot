@@ -2,7 +2,9 @@
   GET /stream/bot (dashboard/routes/stream-bot.js). Locals: channels [{ id, platform, platformLabel, login, displayName,
   live (true|false|null), liveSince, ok (true|false|null) }], devicesOnline [{ deviceId, kind, name, connectedAt }],
   counts [{ type, label, n, total }], events [eventView], automationCount, enabledCount, grant ({ login, status } | null).
-  The live feed (#sb-feed) is filled by /js/stream-bot.js from GET /stream/bot/api/feed.
+  The live feed (#sb-feed) is filled by /js/stream-bot.js from GET /stream/bot/api/feed. The title and category editor
+  (#sb-chan-forms) and the Redemptions list (#sb-redeem-list) are filled by /js/stream-bot-live.js from
+  /stream/bot/api/channel/* and /stream/bot/api/redemptions (dashboard/routes/stream-bot-live.js).
 %>
 <%- include('_head', { pageTitle: 'Overview', active: 'overview' }) %>
 <%
@@ -86,6 +88,22 @@
     </section>
 </div>
 
+<% if (channels.length) { %>
+<section class="cf-section" aria-labelledby="sb-chan-title" id="sb-chan-section">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-chan-title">Title and category</h2>
+        <p class="cf-section-desc">Change what your Twitch and Kick channels show. Twitch needs the Stream bot grant; Kick needs the Kick channel bot sign-in on Connections.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-chan-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows" id="sb-chan-forms"><div class="cf-state cf-state--compact"><p class="cf-state-title">Loading.</p></div></div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-redeem-title" id="sb-redeem-section">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-redeem-title">Redemptions</h2>
+        <p class="cf-section-desc">Channel point redemptions from the last 7 days. Fulfil marks one done; Refund gives the points back. Twitch only lets CertiFried change rewards that CertiFried created, so redemptions of any other reward are listed but cannot be changed here. To change those, use Recreate under CertiFried on the <a href="/stream/bot/import">Import page</a>.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-redeem-status" role="status" aria-live="polite"></span><button type="button" class="btn btn-secondary btn-sm" id="sb-redeem-refresh">Refresh</button></div></header>
+    <div class="cf-rows" id="sb-redeem-list"><div class="cf-state cf-state--compact"><p class="cf-state-title">Loading.</p></div></div>
+</section>
+<% } %>
+
 <section class="cf-section" aria-labelledby="sb-today-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-today-title">Today</h2>
         <p class="cf-section-desc">Events received since 00:00 UTC, test events left out. Chat counts only when chat is kept in the log.</p></div></header>
@@ -124,4 +142,5 @@
     </div>
 </section>
 
+<script src="/js/stream-bot-live.js" defer></script>
 <%- include('_foot') %>

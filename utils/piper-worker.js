@@ -229,6 +229,26 @@ export function synthesizeFastStream(text, voice, options = {}) {
 async function piperFast(text, voice, options) {
     const modelPath = getModelPath(voice);
     if (!modelPath) throw new Error(`Voice '${voice}' not found`);
+    return piperAt(modelPath, text, options);
+}
+
+/**
+ * Speak with an explicit model file: own voices (core/voice-clone/synth.js) are decrypted into /dev/shm and are never
+ * in piper_models/ or any voice list. Returns a padded WAV path the caller must delete.
+ */
+export async function synthesizeWithModel(text, modelPath, options = {}) {
+    if (!path.isAbsolute(String(modelPath || '')) || !String(modelPath).endsWith('.onnx')) throw new Error('bad model path');
+    return piperAt(modelPath, text, options);
+}
+
+/** Stop every warm worker of one model file (a deleted or suspended own voice stops at once). */
+export function stopWorkersFor(modelPath) {
+    let n = 0;
+    for (const [key, w] of [...workers]) if (key.startsWith(`${modelPath}|`)) { w.stop(); n++; }
+    return n;
+}
+
+async function piperAt(modelPath, text, options) {
     const opts = { ...DEFAULTS, ...voiceTuning(modelPath), ...options };
     const clean = String(text).replace(/[\r\n]+/g, ' ').trim();
     if (!clean) throw new Error('Nothing to say');
@@ -256,4 +276,4 @@ export function stopAllPiperWorkers() {
     for (const w of workers.values()) w.stop();
 }
 
-export default { synthesizeFast, synthesizeFastStream, stopAllPiperWorkers, padWav, voiceTuning, DEFAULTS };
+export default { synthesizeFast, synthesizeFastStream, synthesizeWithModel, stopWorkersFor, stopAllPiperWorkers, padWav, voiceTuning, DEFAULTS };

@@ -4,6 +4,7 @@ import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import pool from '../utils/db.js';
 import { crossPollinateStreamer } from '../utils/streamer-cross-pollinate.js';
 import { syncLinkedPlatforms } from '../core/streamer-sync.js';
+import { findBlockedStreamer } from '../core/streamer-blocklist.js';
 
 // Track recently auto-registered streamers to avoid spamming DB lookups
 const recentlyChecked = new Map(); // `${guildId}:${userId}` -> timestamp
@@ -249,6 +250,12 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
         const twitchUrl = newStreaming.url;
         const twitchUsername = twitchUrl.replace(/https?:\/\/(www\.)?twitch\.tv\//i, '').split(/[/?#]/)[0].toLowerCase();
         if (!twitchUsername || twitchUsername.length < 2) return;
+
+        // The server's blocked streamers list (core/streamer-blocklist.js): never auto-track them.
+        if (await findBlockedStreamer(guildId, { platform: 'twitch', username: twitchUsername })) {
+            logger.debug(`[AutoTrack] Skipping ${twitchUsername}: on the blocked streamers list of guild ${guildId}`, { category: 'streams' });
+            return;
+        }
 
         // ── Skip if already tracked (fallback deduplication) ──────────
         // Check by Discord user ID — skip if this user has ANY subscription in this guild

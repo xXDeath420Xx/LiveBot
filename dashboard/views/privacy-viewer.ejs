@@ -6,7 +6,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
 <head>
-<%- include('partials/site-head', { title: 'Your viewer data · CertiFried', description: 'Watched a stream that uses the CertiFried stream bot? Sign in with Twitch or Kick to download or delete what the stream bot holds about you. No CertiFried account needed.', path: '/privacy/viewer' }) %>
+<%- include('partials/site-head', { title: 'Your viewer data · CertiFried', description: 'Watched a stream that uses the CertiFried stream bot? Sign in with Twitch, Kick or YouTube to download or delete what the stream bot holds about you. No CertiFried account needed.', path: '/privacy/viewer' }) %>
     <style>
         .pv-box { margin: 0 0 var(--cf-6); padding: var(--cf-4) var(--cf-5); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); }
         .pv-box h2 { margin-top: 0; }
@@ -41,6 +41,12 @@
     stream_bot_viewer_history_about_you: 'Changes to your points there (bonuses, gifts, gambles, the streamer\'s changes) and rank-ups',
     stream_bot_viewers: 'Your viewer records (watch time, messages, points)',
     stream_bot_viewer_history: 'Point history of your viewer records',
+    stream_bot_store_redemptions_about_you: 'What you redeemed in a streamer\'s loyalty store',
+    stream_bot_media_requests_about_you: 'Videos you asked for with !media',
+    stream_bot_quotes_you_added: 'Quotes you added with !addquote (on delete your name is removed; the quote stays)',
+    stream_bot_store_redemptions: 'Your loyalty store redemptions',
+    stream_bot_media_requests: 'Your media share requests',
+    stream_bot_quotes_added_by_cleared: 'Quotes you added (your name removed)',
     stream_bot_music_requests_by_you: 'Song requests you made',
     stream_bot_music_likes_by_you: 'Songs you liked (!like)',
     twitch_user_follows: 'Channels your Twitch account followed (read once on October 28, 2026; no longer collected)',
@@ -53,7 +59,7 @@
     <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
         <div class="cfs-pagehead">
             <h1>Your viewer data</h1>
-            <p class="cfs-lede">If you watch or chat in a stream that uses the CertiFried stream bot, it may hold your follows, subs, cheers, song requests and similar events, and a viewer record with your watch time, chat message count and points, linked to your Twitch or Kick account. Sign in with that account to download or delete them, in every streamer&rsquo;s channel. You do not need a CertiFried account.</p>
+            <p class="cfs-lede">If you watch or chat in a stream that uses the CertiFried stream bot, it may hold your follows, subs, cheers, song requests and similar events, and a viewer record with your watch time, chat message count and points, linked to your Twitch, Kick or YouTube account. Sign in with that account to download or delete them, in every streamer&rsquo;s channel. You do not need a CertiFried account. On YouTube there are no points, and what came from YouTube is deleted after 30 days.</p>
         </div>
 
         <% if (locals.error) { %><div class="pv-status is-error" role="alert"><%= locals.error %></div><% } %>

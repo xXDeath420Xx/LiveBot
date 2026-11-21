@@ -22,13 +22,13 @@ const COLOR = /^#[0-9a-f]{6}$/i;
 
 export const DRIVER_LABEL = Object.freeze({
     govee: 'Govee (on your network)', 'govee-cloud': 'Govee (cloud)', hue: 'Philips Hue', lifx: 'LIFX (on your network)', 'lifx-cloud': 'LIFX (cloud)',
-    nanoleaf: 'Nanoleaf', elgato: 'Elgato', litra: 'Logitech Litra',
+    nanoleaf: 'Nanoleaf', elgato: 'Elgato', litra: 'Logitech Litra', goveeble: 'Govee (Bluetooth)',
 });
 export const CLOUD_PROVIDERS = Object.freeze(['govee', 'lifx']);
 export const PROVIDER_LABEL = Object.freeze({ govee: 'Govee', lifx: 'LIFX' });
 
 /** Device ids: '<driver>:<local id>'. Cloud ones never go to Studio. '' or 'all' means every light. */
-export const DEVICE_ID = /^(?:all|(?:govee|hue|lifx|nanoleaf|elgato|litra|govee-cloud|lifx-cloud):[A-Za-z0-9._:/-]{1,120})$/;
+export const DEVICE_ID = /^(?:all|(?:govee|hue|lifx|nanoleaf|elgato|litra|goveeble|govee-cloud|lifx-cloud):[A-Za-z0-9._:/-]{1,120})$/;
 export const isCloudDevice = (id) => /^(govee|lifx)-cloud:/.test(String(id || ''));
 export const cloudProviderOf = (id) => (String(id || '').match(/^(govee|lifx)-cloud:/)?.[1] || null);
 export const isAllDevices = (id) => !id || id === 'all';

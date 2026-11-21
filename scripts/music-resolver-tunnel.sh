@@ -5,8 +5,9 @@
 # pm2. (The server2-initiated reverse tunnel on :49999 can be wedged by a stale listener that only
 # server1's sshd can reap — this path is independent of that.) The key is restricted on server2 to
 # forwarding 127.0.0.1:49999 only: no shell, no other ports.
+# The key belongs to the user that runs the CertiFried apps (certifried since 2026-11-21): $HOME/.ssh/music_tunnel.
 exec /usr/bin/ssh -NT \
-    -i /home/death/.ssh/music_tunnel \
+    -i "${MUSIC_TUNNEL_KEY:-$HOME/.ssh/music_tunnel}" \
     -L 127.0.0.1:49998:127.0.0.1:49999 \
     -o BatchMode=yes \
     -o IdentitiesOnly=yes \

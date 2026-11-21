@@ -1,0 +1,165 @@
+<%#
+  GET /stream/bot/voice (dashboard/routes/voice-clone.js). Your voice: invite-only own-voice feature (core/voice-clone).
+  Locals: ready (migration 476 ran), state (service.state(user)), consent { sections, version, sha }, states [{ code, name, blocked }],
+  limits { minMinutes, maxMinutes, chars }, tuningChoices { speed, clarity }.
+  Plain page: one primary button per step, status as text. The script in /js/voice-clone.js does the recording.
+%>
+<%- include('_head', { pageTitle: 'Your voice', active: 'voice', sbPage: 'voice' }) %>
+<link rel="stylesheet" href="/css/voice-clone.css">
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Your voice</h1>
+        <p class="cf-page-sub">A computer voice that sounds like you, for your own automations. Invite-only. Read <a href="/legal/voice">how your voice data is handled</a>.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'voice' }) %>
+<%
+  const s = locals.state || {};
+  const v = s.voice || null;
+  const st = v ? v.status : null;
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+%>
+<% if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Your voice starts after the next CertiFried update.</div></div>
+<% } else if (!s.invited) { %>
+<section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Not available</h2>
+    <p class="cf-section-desc"><%= s.inviteReason || 'Your voice is invite-only.' %> There is no sign-up: the CertiFried owner adds people one by one.</p></div></header></section>
+<% } else { %>
+
+<div id="vc-msg" class="vc-msg" role="status" aria-live="polite"></div>
+
+<% if (!s.kek) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Your voice is not switched on on this server yet: the encryption key is missing.</div></div>
+<% } %>
+
+<section class="cf-section" id="vc-status"><header class="cf-section-head"><div><h2 class="cf-section-title">Status</h2>
+    <p class="cf-section-desc" id="vc-status-text"><%
+      if (!v) { %>You have not made a voice yet.<% }
+      else if (st === 'draft' && v.legacy) { %>Your voice was made before this page existed. Your written consent is on file with the CertiFried owner; there is nothing for you to do.<% }
+      else if (st === 'consent_ok' && v.legacy) { %>Your written consent is on file. Your voice will be retrained from the recordings you already made; you do not need to record anything.<% }
+      else if (st === 'draft') { %>You signed the consent on <%= fmtDate(v.createdAt) %>. Next: the live check.<% }
+      else if (st === 'consent_ok') { %>Recording: <%= v.minutes %> of <%= v.needMinutes %> minutes needed (up to <%= v.maxMinutes %>).<% }
+      else if (st === 'queued') { %>Waiting to be trained<%= v.job && v.job.ahead ? `: ${v.job.ahead} voice${v.job.ahead === 1 ? '' : 's'} ahead of you` : '' %>. Training runs on the operator's computer between 2:00 and 14:00 Pacific time, never while they are live.<% }
+      else if (st === 'training') { %><%= v.job && v.job.state === 'paused' ? `Paused: ${v.job.pauseReason === 'owner_live' ? 'the training computer\'s owner is live' : 'the training computer is busy'}. It carries on by itself.` : `Training${v.job && v.job.totalSteps ? `: step ${v.job.step} of ${v.job.totalSteps}` : ''}${v.job && v.job.etaS ? `, about ${Math.max(1, Math.round(v.job.etaS / 60))} minutes left` : ''}.` %><% }
+      else if (st === 'review') { %>Your voice is trained. Listen to it below. It is used only once you choose "Use this voice" and the CertiFried owner has approved it.<% if (v.userApproved && !v.adminApproved) { %> You approved it; waiting for the owner.<% } %><% }
+      else if (st === 'active') { %>Your voice is ready<%= v.lastUsedAt ? `. Last used ${fmtDate(v.lastUsedAt)}` : '' %>.<% }
+      else if (st === 'suspended') { %>Your voice is suspended. Contact support@certifriedmultitool.com.<% } %></p>
+    <% if (v && v.job && v.job.state === 'failed' && v.job.error) { %><p class="cf-section-desc vc-bad">The last training did not work: <%= v.job.error %></p><% } %>
+    <% if (v && v.reviewNote && v.reviewNote.startsWith('review:')) { %><p class="cf-section-desc">Your recordings are waiting for a quick check by the CertiFried owner before training.</p><% } %>
+</div></header></section>
+
+<% if (!v) { %>
+<section class="cf-section" id="vc-consent"><header class="cf-section-head"><div><h2 class="cf-section-title">Before you start: consent</h2>
+    <p class="cf-section-desc">Read this in full. Version <%= consent.version %>.</p></div></header>
+    <div class="vc-consent-text" tabindex="0">
+        <% consent.sections.forEach((sec) => { %><h3><%= sec.heading %></h3><% sec.paras.forEach((p) => { %><p><%= p %></p><% }) %><% }) %>
+    </div>
+    <% if (s.atCapacity) { %><div class="cf-notice is-warn"><div class="cf-notice-body">No more voices can be made right now.</div></div><% } else { %>
+    <form id="vc-consent-form" class="cf-rows" novalidate>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-state">The US state you live in</label><p class="cf-row-desc">Not available in Illinois or Texas, or outside the United States.</p></div>
+            <div class="cf-row-control"><select id="vc-state" required><option value="">Choose…</option><% states.forEach((x) => { %><option value="<%= x.code %>"><%= x.name %><%= x.blocked ? ' (not available)' : '' %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-age">I am 18 or older</label></div><div class="cf-row-control"><input type="checkbox" id="vc-age"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-own">This is my own voice, and only I speak in my recordings</label></div><div class="cf-row-control"><input type="checkbox" id="vc-own"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-keep">Keep my recordings after training</label><p class="cf-row-desc">Off: they are deleted 7 days after your voice is trained. On: kept so you can train again, but never more than 30 days from when you made them.</p></div><div class="cf-row-control"><input type="checkbox" id="vc-keep"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-name">Type your full name to sign</label></div><div class="cf-row-control"><input type="text" id="vc-name" maxlength="120" autocomplete="name"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-agree">I have read this and I agree</label></div><div class="cf-row-control"><input type="checkbox" id="vc-agree"></div></div>
+        <div class="cf-section-foot"><button type="submit" class="btn btn-primary btn-sm"<%= s.kek ? '' : ' disabled' %>>Agree and continue</button></div>
+    </form>
+    <% } %>
+</section>
+<% } %>
+
+<% if (st === 'draft' && !v.legacy) { %>
+<section class="cf-section" id="vc-live"><header class="cf-section-head"><div><h2 class="cf-section-title">Live check</h2>
+    <p class="cf-section-desc">Three short sentences appear one at a time. Press Record within 10 seconds, read the sentence aloud, then press Stop. This checks that the person at the keyboard is the one who will be recorded. There is no file upload here.</p>
+    <% if (v.consentLockedUntil) { %><p class="cf-section-desc vc-bad">Paused until <%= new Date(v.consentLockedUntil).toLocaleString('en-US') %> after three checks in a row did not match.</p><% } else { %><p class="cf-section-desc"><%= v.consentAttemptsLeft %> of 5 checks left today.</p><% } %></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label">Microphone</p><p class="cf-row-desc" id="vc-mic-note">Not checked yet.</p></div>
+            <div class="cf-row-control"><span class="vc-meter" aria-hidden="true"><span id="vc-meter-bar"></span></span><button type="button" class="btn btn-secondary btn-sm" id="vc-mic">Check my mic</button></div></div>
+    </div>
+    <div class="vc-stage" id="vc-live-stage" hidden>
+        <p class="vc-count" id="vc-live-count"></p>
+        <p class="vc-sentence" id="vc-live-sentence"></p>
+        <p class="vc-timer" id="vc-live-timer"></p>
+        <div class="vc-buttons"><button type="button" class="btn btn-primary btn-sm" id="vc-live-rec">Record</button><button type="button" class="btn btn-secondary btn-sm" id="vc-live-stop" disabled>Stop</button></div>
+    </div>
+    <div class="cf-section-foot"><button type="button" class="btn btn-primary btn-sm" id="vc-live-start"<%= v.consentLockedUntil || !v.consentAttemptsLeft ? ' disabled' : '' %>>Start the live check</button></div>
+</section>
+<% } %>
+
+<% if (['consent_ok', 'review', 'active'].includes(st) && !v.legacy) { %>
+<section class="cf-section" id="vc-record"><header class="cf-section-head"><div><h2 class="cf-section-title">Record</h2>
+    <p class="cf-section-desc">Read each sentence as you normally talk, in a quiet room, with the mic you used for the live check. You need at least <%= limits.minMinutes %> minutes; more is better, up to <%= limits.maxMinutes %>.
+    <% if (v.samplesExpireAt) { %>Recordings you do not use are deleted on <%= fmtDate(v.samplesExpireAt) %>.<% } %></p></div></header>
+    <p class="vc-progress" id="vc-progress"><%= v.minutes %> of <%= v.needMinutes %> minutes (<%= v.takes %> sentences)</p>
+    <div class="vc-stage">
+        <p class="vc-sentence" id="vc-take-sentence">Loading the next sentence…</p>
+        <div class="vc-buttons">
+            <button type="button" class="btn btn-primary btn-sm" id="vc-take-rec">Record</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="vc-take-stop" disabled>Stop</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="vc-take-play" disabled>Play</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="vc-take-redo" disabled>Redo</button>
+        </div>
+        <p class="vc-result" id="vc-take-result" aria-live="polite"></p>
+    </div>
+    <div class="cf-section-foot"><button type="button" class="btn btn-primary btn-sm" id="vc-train"<%= v.minutes >= v.needMinutes ? '' : ' disabled' %>><%= st === 'consent_ok' ? 'Start training' : 'Train again' %></button></div>
+</section>
+<% } %>
+
+<% if (['queued', 'training'].includes(st)) { %>
+<section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Training</h2>
+    <p class="cf-section-desc">You can leave this page. Cancelling keeps your recordings (within the 30-day limit).</p></div></header>
+    <div class="cf-section-foot"><button type="button" class="btn btn-secondary btn-sm" id="vc-cancel">Cancel training</button></div>
+</section>
+<% } %>
+
+<% if (['review', 'active'].includes(st)) { %>
+<section class="cf-section" id="vc-test"><header class="cf-section-head"><div><h2 class="cf-section-title">Listen</h2>
+    <p class="cf-section-desc">Type up to <%= limits.chars %> characters. Every clip carries an inaudible CertiFried watermark.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--stack"><div class="cf-row-text"><label class="cf-row-label" for="vc-test-text">Text</label></div>
+            <div class="cf-row-control"><textarea id="vc-test-text" maxlength="<%= limits.chars %>" rows="2">Hello everyone, welcome back to the stream.</textarea></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-speed">Speed</label></div><div class="cf-row-control"><select id="vc-speed"><% tuningChoices.speed.forEach((x) => { %><option value="<%= x %>"<%= v.tuning.speed === x ? ' selected' : '' %>><%= x.charAt(0).toUpperCase() + x.slice(1) %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-clarity">Clarity</label><p class="cf-row-desc">Clean has less hiss; natural has more variation.</p></div><div class="cf-row-control"><select id="vc-clarity"><% tuningChoices.clarity.forEach((x) => { %><option value="<%= x %>"<%= v.tuning.clarity === x ? ' selected' : '' %>><%= x.charAt(0).toUpperCase() + x.slice(1) %></option><% }) %></select></div></div>
+    </div>
+    <div class="cf-section-foot">
+        <button type="button" class="btn btn-secondary btn-sm" id="vc-play">Play</button>
+        <% if (st === 'review' && !v.userApproved) { %><button type="button" class="btn btn-primary btn-sm" id="vc-approve">Use this voice</button><% } %>
+    </div>
+</section>
+<% } %>
+
+<% if (st === 'active') { %>
+<section class="cf-section" id="vc-use"><header class="cf-section-head"><div><h2 class="cf-section-title">Use</h2>
+    <p class="cf-section-desc">Your voice only speaks in your own automations: in a "Speak text on stream" step, pick the voice "My own voice" and type the words. Variables such as {message} (other people's words) are read in your voice only if you allow it below.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="vc-auto">Use my voice in my automations</label><p class="cf-row-desc">Off: steps set to "My own voice" read with your default voice instead.</p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="vc-auto"<%= v.features.automations ? ' checked' : '' %>></div></div>
+    </div>
+</section>
+<% } %>
+
+<% if (v && (st === 'active' || v.legacy)) { %>
+<section class="cf-section" id="vc-optin"><header class="cf-section-head"><div><h2 class="cf-section-title">Who your voice reads</h2>
+    <p class="cf-section-desc">Your voice always reads your own messages and your own automations. Only you can change these; each change is recorded.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="vc-viewer">Read other people's messages in my voice</label><p class="cf-row-desc">Only in your own places: your stream bot (!tts and alert messages) and the channel reader in Discord servers you own or manage. Off: other people are read in a stock voice.</p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="vc-viewer"<%= v.viewerText ? ' checked' : '' %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="vc-isaid">Say "I said" for my own messages</label><p class="cf-row-desc">The channel reader says "I said" instead of your name when it reads your message in your voice.</p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="vc-isaid"<%= v.iSaid ? ' checked' : '' %>></div></div>
+    </div>
+</section>
+<% } %>
+
+<% if (v) { %>
+<section class="cf-section" id="vc-delete"><header class="cf-section-head"><div><h2 class="cf-section-title">Delete my voice, or withdraw consent</h2>
+    <p class="cf-section-desc">Both do the same: your voice stops working straight away; your recordings, the trained voice, your voiceprint and the key that encrypts them are removed within minutes; encrypted copies in backups expire within 7 days. The record that you agreed (no audio, no voiceprint) is kept for 5 years, marked withdrawn.</p></div></header>
+    <div class="cf-rows"><div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="vc-del-confirm">Type delete to confirm</label></div><div class="cf-row-control"><input type="text" id="vc-del-confirm" autocomplete="off"></div></div></div>
+    <div class="cf-section-foot"><button type="button" class="btn btn-danger btn-sm" id="vc-del">Delete my voice</button></div>
+    <p class="cf-section-desc" id="vc-del-result" role="status"></p>
+</section>
+<% } %>
+<% } %>
+<script type="application/json" id="vc-data"><%- JSON.stringify({ status: st, consentVersion: consent.version, limits }).replace(/</g, '\\u003c') %></script>
+<script src="/js/voice-clone.js" defer></script>
+<%- include('_foot') %>

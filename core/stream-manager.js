@@ -13,6 +13,7 @@ import { resolveStyle as resolveRenderStyle } from './stream-render-style.js';
 import { recordObservation, closeStaleSessions } from './stream-session-recorder.js';
 import { recordLiveRoleGrant, forgetLiveRoleGrant, cleanupLeftoverLiveRoles } from './live-role-grants.js';
 import { attachGoLiveFilters, goLivePasses } from './stream-alert-filters.js';
+import { dropBlockedSubscriptions } from './streamer-blocklist.js';
 
 
 // Platform backoff tracking for rate limit handling
@@ -837,7 +838,7 @@ async function checkStreamers(client, cycleOptions = {}) {
                     sub.announcement_channel_id AS explicit_channel_id,
                     sub.live_role_id AS sub_role_id, sub.override_nickname, sub.override_avatar_url, sub.post_as_streamer,
                     sub.team_subscription_id, sub.delete_on_end, sub.edit_on_end, sub.custom_message, sub.ping_role_id,
-                    s.streamer_id, s.discord_user_id, s.username, s.platform, s.profile_image_url
+                    s.streamer_id, s.discord_user_id, s.username, s.platform, s.profile_image_url, s.platform_user_id
              FROM subscriptions sub
              JOIN streamers s ON sub.streamer_id = s.streamer_id
              LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
@@ -848,6 +849,16 @@ async function checkStreamers(client, cycleOptions = {}) {
         // Per-subscription go-live filters (category / title keywords), read separately so a database
         // without those columns still announces as before. See core/stream-alert-filters.js.
         await attachGoLiveFilters(connection, subscriptions);
+
+        // Each server's "never announce these streamers" list (core/streamer-blocklist.js). A blocked
+        // streamer's subscriptions in that server are left out of this run, so no go-live post of any kind
+        // (alerts, shoutout channel, auto-tracked members, teams) is made for them there.
+        const { dropped: blockedSubs } = await dropBlockedSubscriptions(subscriptions);
+        if (blockedSubs.length) {
+            const drop = new Set(blockedSubs);
+            for (let i = subscriptions.length - 1; i >= 0; i--) if (drop.has(subscriptions[i])) subscriptions.splice(i, 1);
+            logger.debug(`[Stream Manager] ${blockedSubs.length} subscription(s) skipped: on the server's blocked streamers list`, { category: "streams" });
+        }
 
         const [teams] = await connection.query(
             'SELECT id, announcement_channel_id AS team_channel_id, live_role_id AS team_role_id, webhook_name AS team_webhook_name, webhook_avatar_url AS team_webhook_avatar FROM twitch_teams'

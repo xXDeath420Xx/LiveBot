@@ -1,0 +1,63 @@
+<%#
+  GET /super-admin/voice (dashboard/routes/voice-clone.js): the owner console for Your voice (invite-only own voices).
+  Invites, voices (approve, allow training, suspend, delete), training jobs, the audit trail and the watermark detection tool.
+  Data from GET /api/super-admin/voice. Locals: user, limits, gpu.
+%>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'Your voice · Owner console · CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/voice-clone.css">
+</head>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page">
+    <%- include('partials/site/_owner-nav', { ownerActive: 'voice' }) %>
+    <div class="cf-page-head"><div>
+        <h1 class="cf-page-title">Your voice</h1>
+        <p class="cf-page-sub">Invite-only own voices. At most <%= limits.voicesPerUser %> voice per person and <%= limits.voicesTotal %> in all. Training runs on your PC from <%= gpu.startHour %>:00 to <%= gpu.endHour %>:00 Pacific, at most <%= gpu.maxSecondsPerDay / 3600 %> hours a day, never while you are live.</p>
+    </div></div>
+    <div id="vc-msg" class="vc-msg" role="status" aria-live="polite"></div>
+
+    <section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Invite someone</h2>
+        <p class="cf-section-desc">Their Discord user ID. They then open certifriedmultitool.com/stream/bot/voice and go through consent and the live check themselves. Withdrawing an invite deletes their voice.</p></div></header>
+        <form id="vc-invite" class="vc-inline">
+            <input type="text" id="vc-invite-id" inputmode="numeric" placeholder="Discord user ID" aria-label="Discord user ID" maxlength="20">
+            <input type="text" id="vc-invite-note" placeholder="Note (optional)" aria-label="Note" maxlength="200">
+            <button type="submit" class="btn btn-primary btn-sm">Invite</button>
+        </form>
+        <div id="vc-invites"></div>
+    </section>
+
+    <section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Voices</h2>
+        <p class="cf-section-desc" id="vc-health"></p></div></header>
+        <div id="vc-voices"><p class="cf-muted">Loading…</p></div>
+    </section>
+
+    <section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Pre-existing voices</h2>
+        <p class="cf-section-desc">Voices made before the live check (written consent on file). Compare the live voice with a retrained one before approving; the live voice stays until you approve the new one.</p></div></header>
+        <div class="cf-rows" id="vc-legacy"></div>
+    </section>
+
+    <section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Training jobs</h2></div></header>
+        <div id="vc-jobs"></div>
+    </section>
+
+    <section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Is this clip ours?</h2>
+        <p class="cf-section-desc">Upload a clip (WAV, MP3, FLAC, Ogg or WebM, at most 10 MB). It is checked for CertiFried's watermark and not kept. Internal only: there is no public detection page.</p></div></header>
+        <form id="vc-detect" class="vc-inline"><input type="file" id="vc-detect-file" accept="audio/*" aria-label="Audio clip"><button type="submit" class="btn btn-secondary btn-sm">Check</button></form>
+        <p id="vc-detect-result" class="vc-result" role="status"></p>
+    </section>
+
+    <section class="cf-section"><header class="cf-section-head"><div><h2 class="cf-section-title">Recent events</h2></div></header>
+        <div id="vc-events"></div>
+    </section>
+</div>
+</main>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
+<script src="/js/voice-clone-admin.js" defer></script>
+</body>
+</html>

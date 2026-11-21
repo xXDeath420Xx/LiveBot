@@ -1,0 +1,16 @@
+/*
+ * Stream bot Community pages (/stream/bot/community/*). Only what the site kit (cf-ui.css, cf-settings.css, stream-bot.css) lacks.
+ * Colours come from the cf- tokens, so Dark (default), Light and Sand all work.
+ */
+.sbc-subnav { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; padding: 0; }
+.sbc-subnav a { padding: 6px 12px; border-radius: 999px; font-size: 0.875rem; color: var(--cf-text-2); text-decoration: none; border: 1px solid var(--cf-border); }
+.sbc-subnav a:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+.sbc-subnav a[aria-current="page"] { color: var(--cf-text); background: var(--cf-surface-3); border-color: var(--cf-accent); }
+.sbc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sbc-lineup { margin: 0; padding-left: 1.5rem; }
+.sbc-lineup:empty { display: none; }
+.sbc-lineup li { padding: 4px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sbc-url { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.8125rem; min-width: 0; }
+.sbc-history summary { cursor: pointer; padding: 6px 0; }
+.sbc-history-list { margin: 4px 0 0; padding-left: 1.25rem; color: var(--cf-text-2); font-size: 0.875rem; }
+.sbc-subnav a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }

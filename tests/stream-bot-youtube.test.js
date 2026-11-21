@@ -24,7 +24,7 @@ import pool from '../utils/db.js';
 import { makeTables, makeProfile, fakeEncryption } from './fixtures/stream-bot-tables.js';
 import { youtubeDdl, RETENTION_ROWS } from '../migrations/470_stream_bot_youtube.js';
 import { viewersDdl } from '../migrations/464_stream_bot_viewers.js';
-import { youtubeBotConfig, canRead, canWrite, BOT_SCOPES, VIEWER_SCOPES, YT_SCOPE, QUOTA_COST, DISABLED_TEXT } from '../core/stream-bot/youtube/config.js';
+import { youtubeBotConfig, canRead, canWrite, BOT_SCOPES, VIEWER_SCOPES, YT_SCOPE, LEGACY_FULL_SCOPE, QUOTA_COST, DISABLED_TEXT } from '../core/stream-bot/youtube/config.js';
 import { createQuotaGuard, quotaTable, pacificDay, nextPacificMidnight } from '../core/stream-bot/youtube/quota.js';
 import { normaliseYouTubeMessage, broadcastEvent, ytRoles } from '../core/stream-bot/youtube/normalise.js';
 import { createYouTubeApi, createArrayStreamParser, YouTubeError } from '../core/stream-bot/youtube/api.js';
@@ -120,7 +120,8 @@ test('config: on only with the Google client; one scope that reads and writes; q
     assert.equal(youtubeBotConfig({ GOOGLE_OAUTH_CLIENT_ID: 'id', GOOGLE_OAUTH_CLIENT_SECRET: 'sec', STREAM_BOT_YOUTUBE: '0' }).reason, 'switched_off');
     assert.deepEqual(BOT_SCOPES, [YT_SCOPE.forceSsl]);
     assert.deepEqual(VIEWER_SCOPES, [YT_SCOPE.readonly]);
-    assert.ok(canRead(BOT_SCOPES) && canWrite(BOT_SCOPES) && canWrite([YT_SCOPE.full]));
+    assert.ok(canRead(BOT_SCOPES) && canWrite(BOT_SCOPES) && canWrite([LEGACY_FULL_SCOPE]), 'an old grant with the broad scope still works');
+    assert.equal(YT_SCOPE.full, undefined, 'the broad youtube scope is not one CertiFried asks for');
     assert.ok(canRead([YT_SCOPE.readonly]) && !canWrite([YT_SCOPE.readonly]));
     assert.deepEqual([QUOTA_COST['liveChatMessages.streamList'], QUOTA_COST['liveChatMessages.insert'], QUOTA_COST['liveChatBans.insert'], QUOTA_COST['liveBroadcasts.list']], [5, 20, 200, 1]);
     assert.ok(DISABLED_TEXT.no_client && DISABLED_TEXT.switched_off);

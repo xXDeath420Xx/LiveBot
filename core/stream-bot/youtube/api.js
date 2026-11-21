@@ -10,6 +10,7 @@
  *     .sendMessage(token, chatId, text, profileId)           liveChatMessages.insert                                           20 units
  *     .deleteMessage(token, messageId, profileId)            liveChatMessages.delete                                           20 units
  *     .ban(token, chatId, userChannelId, seconds|null, profileId)   liveChatBans.insert (temporary or permanent)            200 units
+ *     .recentSubscribers(token, profileId)                  subscriptions.list myRecentSubscribers (newest first, public ones)  1 unit
  *
  * streamList is HTTP server streaming: GET /youtube/v3/liveChat/messages/stream answers with a JSON array whose elements
  * (liveChatMessageListResponse) arrive as they happen. Checked against the live API on 2026-11-20 with a public chat and the
@@ -223,7 +224,15 @@ export function createYouTubeApi({ fetchImpl = (...a) => globalThis.fetch(...a),
         return call('liveChatBans.insert', { token, profileId, path: '/liveChat/bans', httpMethod: 'POST', query: { part: 'snippet' }, body: { snippet } });
     }
 
-    return { activeBroadcasts, video, listChat, streamChat, sendMessage, deleteMessage, ban };
+    /** The channel's newest subscribers (only those whose subscriptions are public), newest first: [{ channelId, name, at }]. */
+    async function recentSubscribers(token, profileId) {
+        const data = await call('subscriptions.list', { token, profileId, path: '/subscriptions', query: { part: 'subscriberSnippet,snippet', myRecentSubscribers: 'true', maxResults: 20 } });
+        return (data?.items || []).map((s) => ({
+            channelId: String(s.subscriberSnippet?.channelId || ''), name: String(s.subscriberSnippet?.title || '').slice(0, 100), at: s.snippet?.publishedAt || null,
+        })).filter((s) => /^UC[A-Za-z0-9_-]{22}$/.test(s.channelId));
+    }
+
+    return { activeBroadcasts, video, listChat, streamChat, sendMessage, deleteMessage, ban, recentSubscribers };
 }
 
 export default { createYouTubeApi, createArrayStreamParser, YouTubeError, errorReason, API_BASE };

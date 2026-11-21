@@ -314,7 +314,8 @@ test('save-time validation of conditions, triggers and actions', () => {
     assert.equal(validateConditions([{ type: 'metadata', path: 'a;drop', value: 'x' }]).ok, false);
     assert.equal(validateConditions(new Array(11).fill({ type: 'cooldown', seconds: 1 })).ok, false, 'at most 10');
     assert.equal(validateTrigger('nope').ok, false);
-    assert.deepEqual(validateTrigger('follow', { platforms: ['kick', 'youtube'] }).value, { platforms: ['kick'] });
+    assert.deepEqual(validateTrigger('follow', { platforms: ['kick', 'studio'] }).value, { platforms: ['kick'] });
+    assert.deepEqual(validateTrigger('follow', { platforms: ['youtube'] }).value, { platforms: ['youtube'] }, 'YouTube subscribers are follows (2026-11-20)');
     assert.equal(validateTrigger('chat', { match: { text: '' } }).ok, false);
 
     const ctx = { automationIds: new Set([1, 2]), selfId: 1, guildIds: new Set(['100000000000000001']), allowHosts: ['hooks.example.org'] };

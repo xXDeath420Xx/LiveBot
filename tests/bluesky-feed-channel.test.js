@@ -10,16 +10,16 @@ function fakeClient(channels) {
 }
 
 test("a channel of the feed server is used", async () => {
-    const client = fakeClient([{ id: "10", guildId: "1" }]);
-    assert.equal((await resolveChannel(client, "10", "1"))?.id, "10");
+    const client = fakeClient([{ id: "100000000000000010", guildId: "1", type: 0, isTextBased: () => true }]);
+    assert.equal((await resolveChannel(client, "100000000000000010", "1"))?.id, "100000000000000010");
 });
 
 test("a channel of another server is refused", async () => {
-    const client = fakeClient([{ id: "20", guildId: "2" }]);
-    assert.equal(await resolveChannel(client, "20", "1"), null);
+    const client = fakeClient([{ id: "100000000000000020", guildId: "2", type: 0, isTextBased: () => true }]);
+    assert.equal(await resolveChannel(client, "100000000000000020", "1"), null);
 });
 
 test("an unknown channel gives null", async () => {
     const client = fakeClient([]);
-    assert.equal(await resolveChannel(client, "30", "1"), null);
+    assert.equal(await resolveChannel(client, "100000000000000030", "1"), null);
 });

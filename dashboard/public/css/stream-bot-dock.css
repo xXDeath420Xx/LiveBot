@@ -27,3 +27,15 @@ section + section { margin-top: 14px; }
 .dock-counters { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin: 0; }
 .dock-counters dt { color: var(--cf-text-2); overflow-wrap: anywhere; }
 .dock-counters dd { margin: 0; font-family: var(--cf-mono); text-align: right; }
+.dock-form { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.dock-form .dock-btn { align-self: flex-start; margin-top: 4px; }
+.dock-label { color: var(--cf-text-2); font-size: var(--cf-text-xs); }
+.dock-input { font: inherit; font-size: var(--cf-text-sm); width: 100%; box-sizing: border-box; padding: 4px 8px; border-radius: var(--cf-radius); border: 1px solid var(--cf-border-strong); background: var(--cf-surface-2); color: var(--cf-text); }
+.dock-input:focus-visible { outline: 2px solid var(--cf-accent-line); outline-offset: 1px; }
+.dock-send { margin: 0 0 10px; }
+.dock-send-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.dock-select { width: auto; flex: none; }
+.dock-line-actions { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: baseline; }
+.dock-line-actions .dock-btn { padding: 0 6px; font-size: var(--cf-text-xs); }
+.dock-btn.is-danger { border-color: var(--cf-danger); color: var(--cf-danger); }
+.dock-item.is-gone { opacity: 0.5; text-decoration: line-through; }

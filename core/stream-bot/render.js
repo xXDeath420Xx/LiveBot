@@ -36,7 +36,7 @@ export const STREAM_VARS = [   // not frozen: registerTemplateVars() adds featur
     { token: '{stream.viewers}', description: 'Viewers watching now' },
     { token: '{args.name}', description: 'An argument set earlier in this run with "Set an argument"' },
     { token: '{clip.url}', description: 'The link of the clip a "Create a clip" step made earlier in this run' },
-    { token: '{powerup}', description: 'The power-up used: message effect, celebration or giant emote' },
+    { token: '{powerup}', description: 'The power-up used: message effect, celebration, giant emote, or the title of your own custom power-up' },
     { token: '{counter.name}', description: 'Counter changed: which value changed' },
     { token: '{counter.value}', description: 'Counter changed: the new value' },
     { token: '{counter.old}', description: 'Counter changed: the value before' },
@@ -85,7 +85,8 @@ export function templateValues(ev, { channelName = '' } = {}) {
         viewers: m.viewers != null ? String(m.viewers) : (ev?.type === 'raid' ? fmtAmount(ev.amount) : ''),
         count: m.count != null ? String(m.count) : '', level: m.level != null ? String(m.level) : '',
         title: m.title || '', winner: m.winner || '',
-        powerup: POWER_UP[m.powerUp] || (ev?.type === 'bits.used' && m.kind ? String(m.kind).replace(/_/g, ' ') : ''),
+        powerup: POWER_UP[m.powerUp] || (ev?.type === 'bits.used' && m.kind === 'custom_power_up' && m.powerUpTitle ? String(m.powerUpTitle) : '')
+            || (ev?.type === 'bits.used' && m.kind ? String(m.kind).replace(/_/g, ' ') : ''),
         'counter.name': ev?.type === 'variable.changed' ? String(m.key ?? '') : '',
         'counter.value': ev?.type === 'variable.changed' ? String(m.value ?? '') : '',
         'counter.old': ev?.type === 'variable.changed' ? String(m.oldValue ?? '') : '',

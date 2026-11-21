@@ -553,46 +553,11 @@ export async function handleCinemaStart(interaction) {
         clear: () => { pending.delete(interaction.user.id); pendingQueue.delete(interaction.user.id); },
       });
     }
-    const vc = start.vc;
-
-    // Re-check the global lock right before starting (TOCTOU guard).
-    if (await getActiveState()) {
-      await interaction.update({ content: '🎬 Cinema just became busy — try again shortly.', components: [] });
-      return true;
-    }
-
-    // Send the WHOLE playlist to the cinema service in one call. The service
-    // holds the queue and advances IN-PROCESS the instant each episode ends —
-    // no bot round-trip, no gap, and it survives main-bot restarts.
-    const firstId = q ? q.items[0].id : itemId;
-    const item = await jf.getItem(firstId);
-    const firstName = q ? q.items[0].label : item.Name;
-    const queuePayload = q ? q.items.map((it) => ({ itemId: it.id, itemName: it.label })) : undefined;
-    const r = await cinema.play({
-      guildId: interaction.guildId, voiceChannelId: vc.id, channelId: interaction.channelId,
-      itemId: firstId, itemName: firstName, startedBy: interaction.user.id,
-      audioIndex: sel.audioIndex, subIndex: sel.subIndex,
-      queue: queuePayload,
-    });
+    // The Go Live stream (the CertiFried-Cinema selfbot) was retired on 2026-11-20 and getConfig always says 'activity',
+    // so this is reached only in a server with no Cinema settings: answer plainly instead of calling the old service.
     pending.delete(interaction.user.id);
     pendingQueue.delete(interaction.user.id);
-    if (!r.ok) {
-      console.error('[cinema:start] play failed', r.status, r.data?.error);
-      const reason = r.status === 409 ? 'Cinema is busy right now.' : 'Could not start playback. Please try again.';
-      await interaction.update({ content: `🎬 ${reason}`, components: [] });
-      return true;
-    }
-
-    const banner = q && q.items.length > 1
-      ? `🎬 Starting **${firstName}** — queued **${q.items.length}** episodes in ${q.header}. Opening the control panel…`
-      : `🎬 Starting **${firstName}** — opening the control panel…`;
-    const where = start.usedDefault ? ` Join <#${vc.id}> to watch.` : '';
-    await interaction.update({ content: banner + where, components: [] });
-
-    const state = await getActiveState();
-    const panel = await interaction.channel.send(buildPanel(state));
-    await setPanelMessageId(panel.id);
-    (await import('../../jobs/cinema-panel-reaper.js')).rememberPanel(panel.channelId, panel.id, interaction.guildId);
+    await interaction.update({ content: '🎬 Cinema plays films with Watch Together now, and it is not set up in this server. An admin can turn Cinema on on the dashboard (Music & voice, then Cinema).', components: [] });
     return true;
   } catch (e) {
     // Log full detail internally; the error may embed the Jellyfin URL incl. api_key.

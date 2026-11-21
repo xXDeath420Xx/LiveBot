@@ -19,6 +19,8 @@
 
 export const KICK_CHANNEL_BOT_SCOPES = Object.freeze([
     'user:read', 'chat:write', 'events:subscribe', 'channel:read', 'channel:write', 'moderation:ban', 'moderation:chat_message:manage',
+    // Added 2026-11-20 (wave 2 group A): change channel rewards and accept or reject redemptions (docs.kick.com channel rewards).
+    'channel:rewards:write',
 ]);
 
 /** What each permission lets the stream bot (and Kick Defender) do. */
@@ -30,6 +32,7 @@ export const KICK_SCOPE_LABELS = Object.freeze({
     'channel:write': 'Change title and category',
     'moderation:ban': 'Ban and time out viewers',
     'moderation:chat_message:manage': 'Delete chat messages',
+    'channel:rewards:write': 'Change channel rewards and redemptions',
 });
 
 export const KICK_BOT_RETURN_PATH = '/stream/bot/connections';

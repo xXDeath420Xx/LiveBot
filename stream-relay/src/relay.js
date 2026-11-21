@@ -13,7 +13,7 @@ function createRelay({ db, registry, makeMultistreamer }) {
     // NMS v2 always starts an HTTP server; port 0 misbinds to :80 (EACCES), so
     // we give it a high port NOT opened in the firewall. Defense in depth on top
     // of that: disable the admin API (no stream-key enumeration) and tighten CORS.
-    http: { port: 8935, allow_origin: '127.0.0.1', api: false },
+    http: { port: config.httpPort, allow_origin: '127.0.0.1', api: false },
     // Require a signed URL for playback so live streams can't be replayed by
     // anyone who reaches :8935 locally. The relay's own loopback pull is exempt
     // (NMS skips play-auth when the client isLocal), so fan-out still works.

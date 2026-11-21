@@ -1,0 +1,133 @@
+<%#
+  GET /stream/bot/community/media (dashboard/routes/stream-bot-community.js). Locals: ready, running, media (mediaWithDefaults) | null,
+  tts (ttsWithDefaults) | null, approval, voices [{ value, label }], builtIn (masked words built in), limits, pageUrl, status
+  { pages, previews, gate } | null, musicRunning, queue, history, commands, ttsCommands, currency.
+  Saves, the queue buttons, Copy, New address and Test run in /js/stream-bot-community.js.
+%>
+<%- include('_head', { pageTitle: 'Media and speech', active: 'community', sbPage: 'community-media' }) %>
+<link rel="stylesheet" href="/css/stream-bot-community.css">
+<%
+  const _on = (v) => v ? ' checked' : '';
+  const _sel = (a, b) => String(a) === String(b) ? ' selected' : '';
+  const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
+  const _len = (ms) => { if (!ms) return ''; const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const _status = { pending: 'Waiting for approval', queued: 'In the song queue', playing: 'Playing', played: 'Played', skipped: 'Skipped', denied: 'Denied', removed: 'Removed', failed: 'Could not play' };
+  const _gate = status && status.gate;
+  const m = media || { open: false, approval: 'all', maxSeconds: 180, maxPerUser: 2, maxQueue: 20, cost: 0, showCard: true };
+  const t = tts || { voice: 'ryan', mask: true, words: [], maxChars: 200, volume: 80 };
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Media and speech</h1>
+        <p class="cf-page-sub">Viewers ask for YouTube videos with <code>!media</code>, and your automations can read text aloud with the <strong>Speak text on stream</strong> step. Both show on one OBS browser source, CertiFried Media Share. <code>!media</code> works in Twitch and Kick chat: YouTube's API rules do not allow it as a reward for YouTube viewers.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'community' }) %>
+<%- include('_community-nav', { section: 'media' }) %>
+
+<div class="cf-notice" id="sbc-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbc-msg-text"></div></div>
+<% if (!running) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Media share and text to speech start after the next CertiFried update.</div></div>
+<% } else if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Media share requests are kept once the next CertiFried update has run. Text to speech already works.</div></div>
+<% } %>
+
+<section class="cf-section" aria-labelledby="sbc-page-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-page-title">The OBS source</h2>
+        <p class="cf-section-desc">In OBS, add a Browser source called CertiFried Media Share with this address, 1920 by 1080, and tick <strong>Control audio via OBS</strong>. It plays the speech; videos on it are muted.</p></div></header>
+    <div class="cf-rows">
+        <% if (pageUrl) { %>
+        <div class="cf-row cf-row--stack">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbc-page-url">Address</label><p class="cf-row-desc">Anyone with it can see the page, so keep it private. A new address stops the old one at once.</p></div>
+            <div class="cf-row-control cf-input-group">
+                <input type="text" id="sbc-page-url" readonly value="<%= pageUrl %>" class="sbc-url">
+                <button type="button" class="btn btn-secondary btn-sm" id="sbc-page-copy">Copy</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="sbc-page-new">New address</button>
+            </div>
+        </div>
+        <p class="cf-muted" id="sbc-page-state"><%= status && status.pages ? `Open in OBS (${status.pages})` : 'Not open in OBS right now.' %></p>
+        <% } else { %><p class="cf-muted">The address appears here after the next CertiFried update.</p><% } %>
+    </div>
+</section>
+
+<form id="sbc-media-form" novalidate>
+<section class="cf-section" aria-labelledby="sbc-media-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-media-title">Media share</h2>
+        <p class="cf-section-desc">Videos carry music, so their sound never plays on the Media Share source. An approved video joins your song request queue: its sound plays through the CertiFried Music source, which is kept off your Twitch VOD, and it only plays while that protection is on. The Media Share source shows the video, muted, in step with it.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-notice <%= _gate && _gate.vodSafe ? 'is-ok' : 'is-warn' %>"><div class="cf-notice-body"><%= !musicRunning ? 'Song requests are not running, so videos cannot play yet.' : _gate && _gate.vodSafe ? 'VOD protection is on: videos can play.' : `VOD protection is off, so videos wait: ${(_gate && _gate.reason) || 'open CertiFried Studio and turn on song requests on the Music page.'}` %> Clips, Kick VODs and your own recordings can still contain the sound. See the <a href="/stream/bot/music">Music</a> page.</div></div>
+        <div class="cf-notice is-bad" id="sbc-errors" role="alert" tabindex="-1" hidden><div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sbc-errors-list"></ul></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-open">Take requests</label><p class="cf-row-desc">Off: <code>!media</code> answers that media share is closed.</p></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-media-open"<%= _on(m.open) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-approval">Approval</label></div>
+            <div class="cf-row-control"><select id="sbc-media-approval"><% approval.forEach((a) => { %><option value="<%= a.value %>"<%= _sel(a.value, m.approval) %>><%= a.label %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-len">Longest video (seconds)</label><p class="cf-row-desc">Live streams are never accepted.</p></div><div class="cf-row-control"><input type="number" id="sbc-media-len" min="<%= limits.mediaSeconds[0] %>" max="<%= limits.mediaSeconds[1] %>" step="1" inputmode="numeric" value="<%= m.maxSeconds %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-per">Videos per viewer at a time</label></div><div class="cf-row-control"><input type="number" id="sbc-media-per" min="1" max="20" step="1" inputmode="numeric" value="<%= m.maxPerUser %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-queue">Queue size</label></div><div class="cf-row-control"><input type="number" id="sbc-media-queue" min="1" max="100" step="1" inputmode="numeric" value="<%= m.maxQueue %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-cost">Cost (<%= currency %>)</label><p class="cf-row-desc">0 for free. Given back when a video is denied, removed before it plays, or cannot play.</p></div><div class="cf-row-control"><input type="number" id="sbc-media-cost" min="0" max="1000000000" step="1" inputmode="numeric" value="<%= m.cost %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-media-card">Show the title and who asked for it</label></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-media-card"<%= _on(m.showCard) %>></div></div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbc-media-status" role="status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-primary btn-sm"<%= running ? '' : ' disabled' %>>Save</button>
+        </div>
+    </div>
+</section>
+</form>
+
+<section class="cf-section" aria-labelledby="sbc-mq-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-mq-title">Video queue</h2>
+        <p class="cf-section-desc">Moderators can also use <code>!mediaapprove</code>, <code>!mediadeny</code> and <code>!mediaskip</code> in chat. Requests are kept for 90 days.</p></div>
+        <div class="cf-section-actions"><button type="button" class="btn btn-secondary btn-sm" id="sbc-mq-refresh"<%= ready ? '' : ' disabled' %>>Refresh</button></div></header>
+    <div class="cf-rows">
+        <form id="sbc-mq-add" class="sb-filters" novalidate>
+            <label class="sr-only" for="sbc-mq-url">YouTube link</label><input type="url" id="sbc-mq-url" maxlength="400" placeholder="Add a YouTube link yourself" autocomplete="off">
+            <button type="submit" class="btn btn-secondary btn-sm"<%= ready ? '' : ' disabled' %>>Add</button>
+        </form>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">Video</th><th scope="col">Asked by</th><th scope="col">Length</th><th scope="col">State</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody id="sbc-mq-body">
+                    <% if (!queue.length) { %><tr><td colspan="5" class="cf-cell-muted">No videos are waiting.</td></tr><% } %>
+                    <% queue.forEach((r) => { %>
+                    <tr><td data-label="Video"><a href="<%= r.url %>" rel="noopener noreferrer" target="_blank"><%= r.title || r.url %></a><% if (r.channel) { %><br><span class="cf-cell-muted"><%= r.channel %></span><% } %></td>
+                        <td data-label="Asked by"><%= r.viewerName || 'Someone' %></td><td data-label="Length"><%= _len(r.durationMs) %></td><td data-label="State"><%= _status[r.status] || r.status %></td>
+                        <td><% if (r.status === 'pending') { %><button type="button" class="btn btn-primary btn-sm" data-media="approve" data-id="<%= r.id %>">Approve</button> <button type="button" class="btn btn-secondary btn-sm" data-media="deny" data-id="<%= r.id %>">Deny</button><% } else { %><button type="button" class="btn btn-secondary btn-sm" data-media="remove" data-id="<%= r.id %>"><%= r.status === 'playing' ? 'Skip' : 'Remove' %></button><% } %></td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% if (history.length) { %>
+        <details class="sbc-history"><summary>Last 30 requests</summary>
+            <ul class="sbc-history-list"><% history.forEach((r) => { %><li><%= r.title || r.url %> · <%= r.viewerName || 'Someone' %> · <%= _status[r.status] || r.status %></li><% }) %></ul>
+        </details>
+        <% } %>
+    </div>
+</section>
+
+<%- include('_community-commands', { commands, group: 'media', title: 'Media share commands' }) %>
+
+<form id="sbc-tts-form" novalidate>
+<section class="cf-section" aria-labelledby="sbc-tts-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-tts-title">Text to speech</h2>
+        <p class="cf-section-desc">The <strong>Speak text on stream</strong> step reads text aloud on the Media Share source with CertiFried's own voices, made on this server. Links are read as "a link". These are its defaults; a step can pick another voice.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-tts-voice">Voice</label></div>
+            <div class="cf-row-control"><select id="sbc-tts-voice"><% if (!voices.length) { %><option value="<%= t.voice %>"><%= t.voice %></option><% } %><% voices.forEach((v) => { %><option value="<%= v.value %>"<%= _sel(v.value, t.voice) %>><%= v.label %></option><% }) %></select></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-tts-mask">Bleep swear words and slurs</label><p class="cf-row-desc">A built-in list of <%= builtIn %> words, matched even with lookalike letters, plus your own below. Alerts that read a tip or cheer message aloud always bleep the built-in list.</p></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-tts-mask"<%= _on(t.mask) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-tts-words">Your own words to bleep</label><p class="cf-row-desc" id="sbc-tts-words-desc">One per line. A * matches the rest of a word: <code>noob*</code>.</p></div><div class="cf-row-control"><textarea id="sbc-tts-words" rows="4" maxlength="4000" aria-describedby="sbc-tts-words-desc"><%= t.words.join('\n') %></textarea></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-tts-max">Longest message (characters)</label></div><div class="cf-row-control"><input type="number" id="sbc-tts-max" min="<%= limits.ttsChars[0] %>" max="<%= limits.ttsChars[1] %>" step="1" inputmode="numeric" value="<%= t.maxChars %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-tts-vol">Volume</label></div><div class="cf-row-control"><input type="number" id="sbc-tts-vol" min="0" max="100" step="1" inputmode="numeric" value="<%= t.volume %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-tts-test-text">Try it</label><p class="cf-row-desc">Plays on the Media Share source if it is open in OBS (save first).</p></div>
+            <div class="cf-row-control cf-input-group"><input type="text" id="sbc-tts-test-text" maxlength="200" value="This is how messages will sound on stream."><button type="button" class="btn btn-secondary btn-sm" id="sbc-tts-test"<%= running ? '' : ' disabled' %>>Read it</button></div></div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbc-tts-status" role="status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-primary btn-sm"<%= running ? '' : ' disabled' %>>Save</button>
+        </div>
+    </div>
+</section>
+</form>
+
+<%- include('_community-commands', { commands: ttsCommands, group: 'tts', title: 'Let chat use it', desc: 'Adds !tts as an automation, switched off, for moderators and VIPs, once a minute each. Change who may use it, or add a points cost with the Has at least N points condition and a Take points step, on Automations.' }) %>
+
+<script type="application/json" id="sbc-data"><%- _js({ page: 'media' }) %></script>
+<script src="/js/stream-bot-community.js" defer></script>
+<%- include('_foot') %>

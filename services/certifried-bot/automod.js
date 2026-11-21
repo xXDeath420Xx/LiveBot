@@ -6,6 +6,8 @@
 import axios from 'axios';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { parsePermit, grantPermit, hasPermit, permitReply } from './link-permits.js';
+import { evaluateMessage } from './kick-automod.js';
 
 // Cached bot token info (resolved once via token validation)
 let botTokenInfo = null;
@@ -146,7 +148,20 @@ export function isEmoteOnlyMessage(message, emotes) {
  * @param {string} params.message - The raw message text
  * @returns {boolean} True if the message was deleted, false to continue normal processing
  */
-export async function checkAutomod({ channel, tags, message }) {
+export async function checkAutomod({ channel, tags, message, reply = null }) {
+    // !permit @name from a moderator or the broadcaster (stream bot W2.17): links allowed for 60 seconds, only while the
+    // channel's link filter (features_enabled.automod.links, the same setting as Kick) is on.
+    const permitFor = (tags.badges?.moderator || tags.badges?.broadcaster || tags.mod) ? parsePermit(message) : null;
+    if (permitFor) {
+        const feats = await getChannelFeatures(channel.replace('#', '').toLowerCase());
+        if (feats?.automod?.links) {
+            grantPermit(`twitch:${channel.replace('#', '').toLowerCase()}`, permitFor);
+            if (typeof reply === 'function') { try { await reply(permitReply(permitFor)); } catch { /* ignore */ } }
+            return true;
+        }
+        return false;
+    }
+
     // VIPs, mods, and the broadcaster are exempt
     if (tags.badges?.vip || tags.badges?.moderator || tags.badges?.broadcaster || tags.mod) {
         return false;
@@ -156,6 +171,18 @@ export async function checkAutomod({ channel, tags, message }) {
     // Missing row / missing key / explicit `true` all preserve the original behavior.
     const cleanChannel = channel.replace('#', '').toLowerCase();
     const features = await getChannelFeatures(cleanChannel);
+    // Link filter (opt-in, features_enabled.automod.links): a !permit lets one viewer post links for 60 seconds.
+    if (features?.automod?.links && evaluateMessage(message, { links: true })?.rule === 'links'
+        && !hasPermit(`twitch:${cleanChannel}`, tags.username || tags['display-name'])) {
+        try {
+            await deleteMessage(tags['room-id'], tags.id);
+            if (typeof reply === 'function') await reply(`@${tags['display-name'] || tags.username} links are not allowed.`);
+        } catch (error) {
+            logger.warn(`[Automod] Failed to delete a link message in ${channel}`, { error: error.response?.data || error.message });
+        }
+        return true;
+    }
+
     if (features?.emote_filter === false) {
         return false;
     }

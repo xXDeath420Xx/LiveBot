@@ -106,7 +106,7 @@
             </div>
             <% } %>
             <% if ((_yt.enabled && _si && _si !== 'ok') || (_yt.enabled && y && !y.live)) { %><div class="cf-inline sb-kickbot-action">
-                <% if (_si && _si !== 'ok') { %><a class="btn btn-primary btn-sm" href="/stream/connect/youtube?for=bot">Link YouTube again</a><% } %>
+                <% if (_si && _si !== 'ok' && _yt.canLink !== false) { %><a class="btn btn-primary btn-sm" href="/stream/connect/youtube?for=bot">Link YouTube again</a><% } %>
                 <% if (y && !y.live) { %><button type="button" class="btn btn-secondary btn-sm" data-youtube-check>Look for a live broadcast now</button><% } %>
             </div><% } %>
             <% } %>
@@ -145,8 +145,9 @@
         <div class="cf-row">
             <div class="cf-row-text"><span class="cf-row-label">YouTube</span>
                 <p class="cf-row-desc">Signing in with Google links your YouTube channel. CertiFried asks for one permission, to manage your YouTube chat, and uses it to find your live broadcast, read its chat, Super Chats, Super Stickers and memberships, and send, delete, time out or ban in your chat when an automation says so. Super Chats are tracked, never processed. A YouTube chat exists only while you are live.</p>
-                <% if (!_yt.enabled) { %><p class="cf-row-desc"><%= _yt.text %></p><% } %></div>
-            <div class="cf-row-control"><div class="cf-inline"><% if (_yt.enabled) { %><a class="btn btn-primary btn-sm" href="/stream/connect/youtube?for=bot"><%= _hasYouTube ? 'Sign in with another YouTube channel' : 'Link YouTube' %></a><% } else { %><span class="cf-pill">Not available yet</span><% } %></div></div>
+                <p class="cf-row-desc">YouTube viewers do not earn or spend points: YouTube's rules do not allow rewards for subscribing, joining or chatting.</p>
+                <% if (!_yt.enabled) { %><p class="cf-row-desc"><%= _yt.text %></p><% } else if (_yt.canLink === false) { %><p class="cf-row-desc"><%= _yt.inReviewText %></p><% } %></div>
+            <div class="cf-row-control"><div class="cf-inline"><% if (_yt.enabled && _yt.canLink !== false) { %><a class="btn btn-primary btn-sm" href="/stream/connect/youtube?for=bot"><%= _hasYouTube ? 'Sign in with another YouTube channel' : 'Link YouTube' %></a><% } else if (_yt.enabled) { %><span class="cf-pill">In review with Google</span><% } else { %><span class="cf-pill">Not available yet</span><% } %></div></div>
         </div>
     </div>
 </section>
@@ -258,6 +259,40 @@
             <div class="cf-section-foot">
                 <span class="cf-status-line" id="sb-tip-status" role="status" aria-live="polite"></span>
                 <button type="submit" class="btn btn-primary btn-sm">Add</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<% const _hp = (locals.heart && heart.pulsoid) || { configured: false }; const _hs = { new: ['', 'Waiting for the first reading'], listening: ['is-ok', 'Connected'], ok: ['is-ok', 'Working'], reconnecting: ['is-warn', 'Reconnecting'], token_rejected: ['is-bad', 'Token refused: add it again'] }[_hp.status] || ['', _hp.status || '']; %>
+<section class="cf-section" aria-labelledby="sb-heart-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-heart-title">Heart rate</h2>
+        <p class="cf-section-desc">CertiFried Studio reads your heart rate straight from your watch over Bluetooth (Studio, Heart rate). Pulsoid is optional: with a token here, CertiFried uses Pulsoid whenever your watch has sent nothing for 10 seconds. Heart rate is kept in memory only, never in the event log.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><span class="cf-row-label">Reading from</span>
+                <p class="cf-row-desc"><%= locals.heart && heart.source === 'studio' ? 'Your watch, through CertiFried Studio' : locals.heart && heart.source === 'pulsoid' ? 'Pulsoid (no reading from Studio in the last 10 seconds)' : 'Nothing in the last 10 seconds' %></p></div>
+        </div>
+        <% if (_hp.configured) { %>
+        <div class="cf-list">
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title">Pulsoid <span class="cf-pill <%= _hs[0] %>"><%= _hs[1] %></span></p>
+                    <% if (_hp.lastError) { %><p class="cf-list-body"><%= _hp.lastError %></p><% } %>
+                </div>
+                <div class="cf-list-actions"><button type="button" class="btn btn-secondary btn-sm" id="sb-pulsoid-remove">Remove</button></div>
+            </div>
+        </div>
+        <% } %>
+        <form id="sb-pulsoid-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-pulsoid-token"><%= _hp.configured ? 'Replace the Pulsoid token' : 'Pulsoid token (optional)' %></label>
+                    <p class="cf-row-desc" id="sb-pulsoid-desc">Make one at pulsoid.net under Keys (Create new token). It is stored encrypted and never shown again.</p></div>
+                <div class="cf-row-control"><input type="password" id="sb-pulsoid-token" name="token" autocomplete="off" maxlength="200" aria-describedby="sb-pulsoid-desc"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-pulsoid-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
             </div>
         </form>
     </div>

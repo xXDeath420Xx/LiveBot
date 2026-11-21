@@ -16,6 +16,7 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { displayNameFor } from '../utils/display-name.js';
+import { isDiscordUserBlocked } from './streamer-blocklist.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -209,6 +210,8 @@ export function verifyUploadToken(token) {
 export async function ingestWebUpload({ inputPath, name, size, guildId, channelId, creatorId, title }) {
   const kind = classify({ name });
   if (!kind) throw new Error('not audio/video');
+  // The server's blocked streamers list (core/streamer-blocklist.js): their uploads are not reposted.
+  if (await isDiscordUserBlocked(guildId, creatorId)) throw new Error('uploads from this account are not posted in this server');
   const client = global.botManager?.getClientForGuild?.(guildId) || global.client || global.botManager?.getDefaultClient?.();
   if (!client) throw new Error('no client');
   const guild = await client.guilds.fetch(guildId).catch(() => null);
@@ -238,6 +241,8 @@ export async function handleShowcaseMessage(message) {
     if (!message.guild || message.author?.bot) return false;
     if (!message.attachments?.size) return false;
     if (!(await showcaseChannels()).has(message.channelId)) return false;
+    // A streamer on the server's blocked list: leave the message alone, no repost, no "New from" post.
+    if (await isDiscordUserBlocked(message.guildId, message.author.id)) return false;
 
     const media = [...message.attachments.values()]
       .map(a => ({ att: a, kind: classify(a) }))
@@ -287,6 +292,9 @@ export async function handleShowcaseMessage(message) {
 export async function handleShowcaseUploadCommand(interaction) {
   if (!(await isShowcaseChannel(interaction.channelId))) {
     return interaction.reply({ content: 'Run this **in a Creator Showcase channel** — your upload will be posted there as a protected stream.', ephemeral: true });
+  }
+  if (await isDiscordUserBlocked(interaction.guildId, interaction.user.id)) {
+    return interaction.reply({ content: "Uploads from your account are not posted in this server's showcase.", ephemeral: true });
   }
   const att = interaction.options.getAttachment('file');
   const kind = att && classify(att);

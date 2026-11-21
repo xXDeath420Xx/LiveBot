@@ -65,6 +65,9 @@ export const ACTION_TYPES = [   // not frozen: registerActionType() adds feature
         fields: [f('text', 'template', 'Announcement'), f('color', 'select', 'Colour', { options: ['primary', 'blue', 'green', 'orange', 'purple'], default: 'primary' })], templates: ['text'] },
     { type: 'stream.shoutout', label: 'Shout out a channel', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch', 'kick'],
         fields: [f('platform', 'select', 'Where', { options: ['event', 'twitch', 'kick', 'all'], default: 'event' }), f('target', 'template', 'Channel, such as {arg1}')], templates: ['target'] },
+    // 2026-11-20: from the streamer's own account (needs user:write:chat), for lines another bot acts on (!pokecatch, !roll …).
+    { type: 'stream.say', label: 'Send a chat message as you (Twitch)', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch'],
+        fields: [f('text', 'template', 'Message')], templates: ['text'] },
     { type: 'chat.clear', label: 'Clear chat', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch'], fields: [] },
     { type: 'chat.delete', label: 'Delete the message that triggered this', target: 'server', executor: 'stream', group: 'Chat', platforms: ['twitch', 'kick', 'youtube'], fields: [] },
 
@@ -308,6 +311,10 @@ export function validateActions(list, ctx = {}, depth = 0) {
                 out.action = pick(s.action, ['resolve', 'lock', 'cancel'], 'resolve');
                 out.winner = txt(s.winner, 200).trim();
                 if (out.action === 'resolve' && !out.winner) err('enter the winning outcome (its title, or a variable).');
+                break;
+            case 'stream.say':
+                out.text = txt(s.text, LIMITS.template).trim();
+                if (!out.text) err('enter the message.');
                 break;
             case 'stream.announce':
                 out.text = txt(s.text, LIMITS.template).trim();

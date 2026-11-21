@@ -47,6 +47,13 @@ import { pruneServerImageFiles } from '../core/server-image-uploads.js';
  *
  * Finally the private image cache behind deleted-image evidence is pruned
  * (core/evidence-capture.js).
+ *
+ * ## Platform-scoped rows (YouTube, migration 480)
+ *
+ * data_retention_policy has one row per table, but YouTube API data may be kept 30 days at most (YouTube API Services
+ * Developer Policies III.E.4) while the same stream bot tables keep Twitch and Kick rows longer. A policy row named
+ * `<table>__youtube` sweeps only that table's YouTube rows, with a fixed condition from SCOPED_GUARDS (never from the
+ * policy table); the plain `<table>` row keeps sweeping everything else on its own window.
  */
 
 const BATCH_SIZE = 5000;
@@ -66,6 +73,11 @@ const SWEEP_GUARDS = Object.freeze({
     // H-762 (migration 462): historical follows (2026-10-28, no longer collected) are kept while their broadcaster still
     // has a CertiFried Twitch connection, and swept once none is left.
     twitch_user_follows: followsGuard('twitch_user_follows'),
+    // Own voice (migration 476): a recording row is only deleted once the voice janitor has removed its encrypted file
+    // (core/voice-clone/service.js runJanitor, 7 days after training, 30 days at most), and a voice row only once
+    // deleteVoice() has removed its files, key and voiceprint (the janitor deletes voices idle for 365 days).
+    voice_clone_samples: "`status` = 'purged' AND `file_name` IS NULL",
+    voice_clone_voices: "`status` = 'deleted' AND `files_removed_at` IS NOT NULL",
 });
 
 /** The twitch_user_follows guard for a table name (tests sweep a throwaway copy with it). */
@@ -80,6 +92,40 @@ export function followsGuard(table) {
 /** The extra WHERE condition for a table's sweep, or null. */
 export function sweepGuard(tableName) {
     return SWEEP_GUARDS[tableName] ?? null;
+}
+
+/**
+ * `<table>__<scope>` policy rows: the table they sweep and the fixed condition that picks the rows. Only the pairs listed
+ * here exist; any other name with `__` is treated as a stale row and skipped.
+ */
+export const SCOPE_SEPARATOR = '__';
+export const SCOPED_GUARDS = Object.freeze({
+    youtube: Object.freeze({
+        stream_bot_events: "`platform` = 'youtube'",
+        stream_bot_viewers: "`platform` = 'youtube'",
+        stream_bot_viewer_history: "`viewer_id` IN (SELECT `id` FROM `stream_bot_viewers` WHERE `platform` = 'youtube')",
+        stream_bot_store_redemptions: "`platform` = 'youtube'",
+        stream_bot_media_requests: "`platform` = 'youtube'",
+        stream_bot_music_requests: "`platform` = 'youtube'",
+        stream_bot_music_likes: "`platform` = 'youtube'",
+        stream_bot_quotes: "`added_by_platform` = 'youtube'",
+    }),
+});
+
+/**
+ * What a policy row sweeps: { table, guard, scoped } for a plain or a known scoped name, or null for an unknown scoped name.
+ * The scoped guard is combined with the table's own SWEEP_GUARDS condition, if it has one.
+ */
+export function resolvePolicy(name) {
+    const n = String(name || '');
+    const i = n.lastIndexOf(SCOPE_SEPARATOR);
+    if (i <= 0) return { table: n, guard: sweepGuard(n), scoped: null };
+    const table = n.slice(0, i);
+    const scope = n.slice(i + SCOPE_SEPARATOR.length);
+    const g = Object.prototype.hasOwnProperty.call(SCOPED_GUARDS, scope) && Object.prototype.hasOwnProperty.call(SCOPED_GUARDS[scope], table) ? SCOPED_GUARDS[scope][table] : null;
+    if (!g) return null;
+    const base = sweepGuard(table);
+    return { table, guard: base ? `(${base}) AND (${g})` : g, scoped: scope };
 }
 
 // HTML ticket transcripts written by core/ticket-manager.js (transcript-<ticket id>-<guild id>.html).
@@ -135,11 +181,17 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Sweep one policy row (exported for tests: tests/cfx/v2/retention.test.js runs it on throwaway tables).
  * `guard` overrides the table's SWEEP_GUARDS condition (tests/modmail-retention-h687.test.js).
  */
-export async function sweepTable(schema, { table_name: tableName, timestamp_column: column, retain_days: retainDays, guard }) {
-    const extra = guard === undefined ? sweepGuard(tableName) : guard;
+export async function sweepTable(schema, { table_name: policyName, timestamp_column: column, retain_days: retainDays, guard }) {
+    const target = resolvePolicy(policyName);
+    if (!target) {
+        logger.warn(`[Retention] Skipping ${policyName}: not a known scoped policy (stale policy row?)`);
+        return { table: policyName, deleted: 0, skipped: true };
+    }
+    const tableName = target.table;
+    const extra = guard === undefined ? target.guard : guard;
     if (!(await validate(schema, tableName, column))) {
-        logger.warn(`[Retention] Skipping ${tableName}.${column} — no such table/column (stale policy row?)`);
-        return { table: tableName, deleted: 0, skipped: true };
+        logger.warn(`[Retention] Skipping ${policyName} (${tableName}.${column}): no such table/column (stale policy row?)`);
+        return { table: policyName, deleted: 0, skipped: true };
     }
 
     let deleted = 0;
@@ -166,10 +218,10 @@ export async function sweepTable(schema, { table_name: tableName, timestamp_colu
         `UPDATE data_retention_policy
             SET last_swept_at = NOW(), last_deleted = ?
           WHERE table_name = ?`,
-        [deleted, tableName]
+        [deleted, policyName]
     );
 
-    return { table: tableName, deleted, cappedOut };
+    return { table: policyName, deleted, cappedOut };
 }
 
 export async function runRetentionSweep() {

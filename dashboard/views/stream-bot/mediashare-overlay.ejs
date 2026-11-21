@@ -1,0 +1,28 @@
+<%#
+  GET /stream/bot/overlay/mediashare/:key (dashboard/routes/stream-bot-community.js): the "CertiFried Media Share" OBS browser source.
+  It reads text aloud (the Speak text on stream step) and shows media share videos MUTED: a video's sound plays only in the
+  VOD-safe "CertiFried Music" source (core/stream-bot/community/media.js). Locals: preview. A fixed look on a transparent page
+  (stream-facing, like the other OBS overlays). /js/stream-bot-mediashare.js connects to …/events.
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>CertiFried Media Share</title>
+<link rel="stylesheet" href="/css/stream-bot-mediashare.css">
+</head>
+<body class="sbms<%= preview ? ' is-preview' : '' %>">
+<div class="sbms-stage" id="sbms-stage" hidden>
+    <div class="sbms-frame" id="sbms-frame"></div>
+    <div class="sbms-card" id="sbms-card" hidden>
+        <p class="sbms-title" id="sbms-title"></p>
+        <p class="sbms-by" id="sbms-by"></p>
+    </div>
+</div>
+<audio id="sbms-speech" preload="auto"></audio>
+<script src="/js/stream-bot-mediashare.js" defer></script>
+</body>
+</html>

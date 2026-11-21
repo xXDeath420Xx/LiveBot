@@ -58,6 +58,7 @@ export const PAGE_HELP = Object.freeze({
     'avatar-protection': { help: 'Catches members using a copy of a staff member\'s avatar or a known scam profile picture.' },
     'nsfw-protection': { help: 'Checks avatars and posted images for adult content and either removes them or holds them for a moderator to review.' },
     'message-threats': { help: 'Looks inside messages for disguised scam links, mass mentions, QR codes and text hidden in images.' },
+    'ai-moderation': { help: 'Has an AI look again at messages the other filters were unsure about, and learns from what your moderators confirm or mark as fine.' },
     phishing: { help: 'Deletes messages that link to known phishing and scam sites, using a list that updates on its own.' },
     'link-filter': { help: 'Controls which links members may post: allow the sites you trust, block the rest, and approve new ones from a queue.' },
     'domain-reports': { help: 'Report a phishing site the filters missed, or dispute a block on a site that is safe. Reviewed reports update the shared list.' },
@@ -260,6 +261,7 @@ export const PAGE_HELP = Object.freeze({
     // ---------------------------------------------------------------- creators
     feeds: { help: 'Posts new uploads from YouTube channels, new posts from X and Bluesky accounts, and new items from RSS feeds such as blogs and podcasts, into channels you pick. Reddit feeds are paused because Reddit no longer lets bots read subreddits.' },
     'community-support': { help: 'Raids, shoutouts and a leaderboard of the members who support other streamers most.' },
+    'streamer-blocklist': { help: 'Streamers listed here are never announced in this server: no go-live posts, no auto-track, no monthly shoutout, no points or replies in the support channels, and no showcase reposts.' },
     throne: { help: 'Announces gifts, contributions and wishlist changes for the Throne creators you track.' },
     kofi: { help: 'Gives roles to people who tip or subscribe on Ko-fi, and announces their support if you want.' },
     shoutout: { help: 'Announces the streams of your top community supporters each month, and of streamers added with /alerts shoutout add.' },

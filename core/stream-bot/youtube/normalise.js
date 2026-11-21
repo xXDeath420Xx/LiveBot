@@ -143,7 +143,16 @@ export function broadcastEvent(type, { channelId, broadcastId, title = null, sta
     });
 }
 
+/** A new subscriber to the streamer's channel (subscriptions.list myRecentSubscribers): a YouTube "follow". */
+export function subscriberEvent({ channelId, subscriber }) {
+    const s = subscriber || {};
+    return make('follow', {
+        channelId, user: { id: String(s.channelId).slice(0, 64), login: str(String(s.name || '').toLowerCase()), name: str(s.name || s.channelId), roles: [] },
+        occurredAt: s.at, dedupeKey: `yt:subscribe:${channelId}:${s.channelId}`, metadata: { subscriber: true }, raw: { channelId: s.channelId, name: s.name },
+    });
+}
+
 /** Messages that mean the chat is over. */
 export const isChatEnded = (item) => item?.snippet?.type === 'chatEndedEvent';
 
-export default { normaliseYouTubeMessage, broadcastEvent, ytRoles, ytUser, isChatEnded };
+export default { normaliseYouTubeMessage, broadcastEvent, subscriberEvent, ytRoles, ytUser, isChatEnded };

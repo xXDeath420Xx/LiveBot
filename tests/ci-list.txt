@@ -205,3 +205,7 @@ tests/critters-migration.test.js
 tests/critters-rules.test.js
 tests/critters-surfaces.test.js
 tests/sql-reserved-aliases.test.js
+tests/throne-price-logic.test.js
+tests/streamer-blocklist.test.js
+tests/youtube-no-rewards.test.js
+tests/feed-ping-roles.test.js

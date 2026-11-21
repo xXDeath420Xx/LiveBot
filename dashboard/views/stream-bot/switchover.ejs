@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/css/stream-bot-switchover.css">
 <%
   const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
-  const _status = { applied: 'Switched over', partial: 'Switched over, OBS or Studio did not answer', undone: 'Undone' };
+  const _status = { applying: 'Started, not finished', applied: 'Switched over', partial: 'Switched over, OBS or Studio did not answer', undone: 'Undone' };
 %>
 <div class="cf-page-head">
     <div>
@@ -38,7 +38,7 @@
         <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbs-obs">Swap the overlays in OBS</label><p class="cf-row-desc">Shows each CertiFried source where the one it replaces is showing, and hides the old one. Sound Alerts and Blerp are never touched.</p></div>
             <div class="cf-row-control"><input type="checkbox" id="sbs-obs" checked></div></div>
         <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbs-close">Close Firebot and Streamer.bot</label>
-            <p class="cf-row-desc"><% if (studio.canClose) { %>CertiFried Studio asks them to close, like pressing their close button. Nothing else is closed, OBS never. If one stays open in the tray, quit it from there.<% } else { %>Needs CertiFried Studio 0.2.7 or later connected. Otherwise close them yourself: quit Firebot and Streamer.bot from the Windows tray.<% } %></p></div>
+            <p class="cf-row-desc"><% if (studio.canClose) { %>CertiFried Studio asks them to close, like pressing their close button. Nothing else is closed, OBS never. Streamer.bot is only closed once CertiFried Studio is listening for your voice commands. If one stays open in the tray, quit it from there.<% } else { %>Needs CertiFried Studio 0.2.7 or later connected. Otherwise close them yourself: quit Firebot and Streamer.bot from the Windows tray.<% } %></p></div>
             <div class="cf-row-control"><input type="checkbox" id="sbs-close"<%= studio.canClose ? '' : ' disabled' %>></div></div>
         <div class="cf-section-foot">
             <span class="cf-status-line" id="sbs-go-status" role="status" aria-live="polite"></span>

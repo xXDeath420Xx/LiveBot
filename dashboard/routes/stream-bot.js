@@ -9,7 +9,8 @@
  *           GET /stream/bot/automations/:id     editor (existing)
  *           GET /stream/bot/runs                run history (status and automation filters)
  *           GET /stream/bot/runs/:id            one run: checks, steps, dispatches
- *           GET /stream/bot/connections         channels, Twitch grant, coverage, tip sources, settings
+ *           GET /stream/bot/connections         channels, Twitch grant, coverage, tip sources, heart rate (Pulsoid), settings
+ *           POST / DELETE /stream/bot/api/heart/pulsoid   save or remove the optional Pulsoid token (Studio 0.2.14)
  *           GET /stream/bot/devices             paired devices, pairing code, overlay token
  *           GET /stream/bot/sounds              the sound library CertiFried Studio syncs (Phase 2)
  *   API     /stream/bot/api/...                 see each route below; 401 JSON without a session
@@ -29,6 +30,7 @@ import logger from '../../utils/logger.js';
 import { getStreamBot } from '../../core/stream-bot/index.js';
 import { EVENT_TYPES, ROLES, PLATFORMS, TIP_SOURCES, eventType, isEventType, sampleEvent, publicEvent, describeEvent } from '../../core/stream-bot/events.js';
 import { CONDITION_TYPES, validateTrigger, validateConditions } from '../../core/stream-bot/conditions.js';
+import { withOwnVoiceOption } from '../../core/voice-clone/policy.js';
 import { ACTION_TYPES, actionType, validateActions, childLists } from '../../core/stream-bot/actions.js';
 import { reapproveNeeded } from '../../core/stream-bot/scopes.js';
 import { templateWarnings } from '../../core/stream-bot/render.js';
@@ -37,6 +39,7 @@ import { normaliseAllowList } from '../../core/stream-bot/webhook-out.js';
 import { newPairingCode, newDeviceToken, hashSecret, tokenHint, normaliseCode, isTokenShape, CODE_TTL_MS } from '../../core/stream-bot/pairing.js';
 import { SOUND_LIMITS } from '../../core/stream-bot/sounds.js';
 import { closeDockStreams } from '../../core/stream-bot/dock.js';
+import { teachFromDashboard, VoiceLearnError } from '../../core/stream-bot/voice-learn.js';
 
 /** Phase 2c: connected Studios refresh their automation list and voice phrases. */
 const automationsChanged = (sb, profileId) => { try { sb.hub.notify(profileId, 'studio', { type: 'automations_changed' }); } catch { /* not attached */ } };
@@ -45,6 +48,16 @@ import {
     PLATFORM_LABEL, TIP_LABEL, managedGuilds, eventView, catalog, guildIdsIn, automationSummary, runView, dispatchView, deviceView,
     tipSourceView, connectionNotice, scopeRows, studioView, soundView, youtubePanel,
 } from '../services/stream-bot-view.js';
+import { youtubeGate } from '../../core/stream-bot/youtube/gate.js';
+
+/** "My own voice" in the Speak text step, only for a person whose own voice (core/voice-clone, invite-only) is active. */
+async function withOwnVoice(cat, userId) {
+    try {
+        const vc = await (await import('../../core/voice-clone/index.js')).getVoiceClone();
+        const on = vc ? await vc.synth.available(String(userId)) : false;
+        return withOwnVoiceOption(cat, on);
+    } catch { return cat; }
+}
 
 const router = express.Router();
 const LOG = '[StreamBotUI]';
@@ -256,6 +269,7 @@ router.get('/stream/bot/automations', needPage, pageRoute(async (req, res) => {
     res.render('stream-bot/automations', {
         user: req.user, active: 'automations', pageTitle: 'Automations', profile,
         automations: list.map((a) => automationSummary(a, online)), max: MAX_AUTOMATIONS,
+        hasVoice: list.some((a) => a.trigger_type === 'voice.phrase'),
     });
 }));
 
@@ -272,7 +286,7 @@ async function renderEditor(req, res, automation) {
         editorData: {
             automation: automation ? { id: automation.id, name: automation.name, enabled: automation.enabled, trigger_type: automation.trigger_type,
                 trigger_config: automation.trigger_config || {}, conditions: automation.conditions || [], actions: automation.actions || [] } : null,
-            catalog: catalog(onlineOf(sb, profile.id)),
+            catalog: await withOwnVoice(catalog(onlineOf(sb, profile.id)), req.user.id),
             automations: list.map((a) => ({ id: a.id, name: a.name })),
             guilds: guilds.map(({ id, name }) => ({ id, name })), guildChannels,
             linkedPlatforms: [...new Set(channels.map((c) => c.platform))],
@@ -386,8 +400,11 @@ router.get('/stream/bot/connections', needPage, pageRoute(async (req, res) => {
         reapprove: grant && grant.status === 'active' ? reapproveNeeded(grant.scopes) : [],
         tipSources: tipSources.map((s) => tipSourceView(s, guildNames)),
         tipOptions: options,
+        // Heart rate (Studio 0.2.14): the Pulsoid fallback's state (never the token) and where the readings come from now.
+        heart: { pulsoid: await store.heartPulsoidView(profile.id).catch(() => ({ configured: false })), source: sb.heart?.service.currentSource(profile.id) || null },
         botSettings: { storeChat: profile.storeChat, webhookAllowHosts: profile.webhookAllowHosts || [] },
-        youtube: youtubePanel(sb.youtube, profile.id),   // YouTube Live (H-741): off and why, or live state and quota
+        // YouTube Live (H-741): off and why, or live state and quota; canLink false while Google reviews the app (youtube/gate.js)
+        youtube: youtubePanel(sb.youtube, profile.id, { canLink: await youtubeGate().then((g) => g.allows(req.user.id)).catch(() => false) }),
     });
 }));
 
@@ -457,7 +474,7 @@ router.get('/stream/bot/api/events', needApi, apiRoute(async (req, res) => {
 
 router.get('/stream/bot/api/catalog', needApi, apiRoute(async (req, res) => {
     const { sb, profile } = await load(req);
-    res.json({ ok: true, ...catalog(onlineOf(sb, profile.id)) });
+    res.json({ ok: true, ...(await withOwnVoice(catalog(onlineOf(sb, profile.id)), req.user.id)) });
 }));
 
 // ── automations ──
@@ -524,6 +541,12 @@ router.put('/stream/bot/api/automations/:id', needApi, apiRoute(async (req, res)
     if (!existing) return res.status(404).json({ ok: false, error: 'That automation does not exist.' });
     const r = await checkAutomation(req, sb, profile, req.body, id);
     if (r.errors.length) return res.status(400).json({ ok: false, errors: r.errors, warnings: r.warnings });
+    // Studio 0.2.13: what Studio learned (aliases, "not a command" examples, when it was taught) is changed through
+    // /stream/bot/api/voice/learn and /unlearn, so an editor save that does not send them keeps them.
+    if (r.value.trigger_type === 'voice.phrase' && existing.trigger_type === 'voice.phrase') {
+        const sent = req.body?.trigger_config || {};
+        for (const k of ['aliases', 'negatives', 'trained']) if (!(k in sent) && existing.trigger_config?.[k] != null) r.value.trigger_config[k] = existing.trigger_config[k];
+    }
     await sb.store.updateAutomation(profile.id, id, r.value);
     automationsChanged(sb, profile.id);
     res.json({ ok: true, id, warnings: r.warnings });
@@ -537,6 +560,46 @@ router.delete('/stream/bot/api/automations/:id', needApi, apiRoute(async (req, r
     automationsChanged(sb, profile.id);
     res.json({ ok: true });
 }));
+
+// ── voice log (Studio 0.2.10): what Studio heard, kept in memory by core/stream-bot/studio.js ──
+router.get('/stream/bot/api/voice/log', needApi, apiRoute(async (req, res) => {
+    const { sb, profile } = await load(req);
+    const entries = sb.studio?.voiceLog ? sb.studio.voiceLog(profile.id) : [];
+    const list = await sb.store.listAutomations(profile.id);
+    const names = Object.fromEntries(list.filter((a) => a.trigger_type === 'voice.phrase').map((a) => [a.id, a.name]));
+    const st = sb.hub.connected(profile.id).filter((c) => c.kind === 'studio').sort((a, b) => b.connectedAt - a.connectedAt)[0];
+    const v = st?.state?.voice || null;
+    res.json({ ok: true, entries, names,
+        studio: { connected: !!st, version: st?.client?.version ? String(st.client.version).slice(0, 20) : null, voiceLog: !!v?.voiceLog, threshold: v?.threshold ?? null, enabled: v ? !!v.enabled : null, state: v?.state || null } });
+}));
+
+router.delete('/stream/bot/api/voice/log', needApi, apiRoute(async (req, res) => {
+    const { sb, profile } = await load(req);
+    sb.studio?.clearVoiceLog?.(profile.id);
+    res.json({ ok: true });
+}));
+
+// ── Studio 0.2.13: teaching voice commands from the voice log and the automation page (core/stream-bot/voice-learn.js) ──
+//   POST /stream/bot/api/voice/learn    { automationId, kind: 'alias' | 'negative', text, entryId?, undo?: { kind, text } }
+//                                       adds the words as "heard as" or "not a command"; `undo` takes one back at the same time
+//                                       ("Wrong, undo learning": forget the alias that matched, remember the words as not it)
+//   POST /stream/bot/api/voice/unlearn  { automationId, kind, text, entryId? }  removes one (the Remove buttons, Undo)
+// The log line (entryId) remembers what was learned from it, so the voice log can offer Undo.
+async function voiceTeach(req, res, adding) {
+    const { sb, profile } = await load(req);
+    try {
+        const { result, entryId, learned } = await teachFromDashboard(sb.store, profile.id, req.body, adding);
+        if (entryId) sb.studio?.markVoiceLog?.(profile.id, entryId, learned);
+        automationsChanged(sb, profile.id);
+        logger.info(`${LOG} voice command taught`, { profileId: profile.id, automationId: result.automationId, kind: req.body?.kind, adding });
+        res.json({ ok: true, ...result });
+    } catch (e) {
+        if (e instanceof VoiceLearnError) return res.status(e.code === 'not_found' ? 404 : 400).json({ ok: false, error: e.message, code: e.code });
+        throw e;
+    }
+}
+router.post('/stream/bot/api/voice/learn', needApi, apiRoute((req, res) => voiceTeach(req, res, true)));
+router.post('/stream/bot/api/voice/unlearn', needApi, apiRoute((req, res) => voiceTeach(req, res, false)));
 
 router.post('/stream/bot/api/automations/:id/toggle', needApi, apiRoute(async (req, res) => {
     const id = idOf(req.params.id);
@@ -714,6 +777,25 @@ router.post('/stream/bot/api/tip-sources', needApi, apiRoute(async (req, res) =>
     if (source === 'streamelements' || source === 'streamlabs') sb.tipFeeds?.refresh?.()?.catch?.(() => {});
     logger.info(`${LOG} tip source added`, { profileId: profile.id, source });
     res.json({ ok: true, id });
+}));
+
+// ── heart rate: the optional Pulsoid token (Studio 0.2.14) ──
+const PULSOID_TOKEN = /^[A-Za-z0-9-]{20,200}$/;
+router.post('/stream/bot/api/heart/pulsoid', needApi, apiRoute(async (req, res) => {
+    const { sb, profile } = await load(req);
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!PULSOID_TOKEN.test(token)) return res.status(400).json({ ok: false, error: 'Paste your Pulsoid token. It looks like 8c4da3ce-7ed7-4a19-a1f1-058498661e45.' });
+    await sb.store.setHeartPulsoid(profile.id, token);
+    sb.heart?.pulsoid.refresh().catch(() => {});
+    logger.info(`${LOG} Pulsoid token saved`, { profileId: profile.id });
+    res.json({ ok: true });
+}));
+router.delete('/stream/bot/api/heart/pulsoid', needApi, apiRoute(async (req, res) => {
+    const { sb, profile } = await load(req);
+    await sb.store.clearHeartPulsoid(profile.id);
+    sb.heart?.pulsoid.refresh().catch(() => {});
+    logger.info(`${LOG} Pulsoid token removed`, { profileId: profile.id });
+    res.json({ ok: true });
 }));
 
 async function tipSourceRow(store, profileId, id) {

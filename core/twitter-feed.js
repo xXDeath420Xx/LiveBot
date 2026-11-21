@@ -3,6 +3,7 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { getUserTweets, getUserProfile } from '../utils/platforms/twitter-api.js';
 import { buildFeedContent } from './feed-message.js';
+import { resolveFeedTarget, pingProblem } from './feed-target.js';
 import { pollsGuild } from './guild-presence-logic.js';
 
 // Cache for profile avatars
@@ -74,11 +75,14 @@ async function processTwitterFeed(feed, client) {
             return;
         }
 
-        const channel = await guild.channels.fetch(feed.channel_id).catch(() => null);
+        // Threads too (an archived one is reopened first): see core/feed-target.js.
+        const { channel, problem } = await resolveFeedTarget(client, feed.channel_id, { guildId: feed.guild_id });
         if (!channel) {
-            logger.warn(`[TwitterFeed] Channel ${feed.channel_id} not found in guild ${guild.name}`);
+            logger.warn(`[TwitterFeed] Feed ${feed.id} in ${guild.name}: ${problem}`);
             return;
         }
+        const pingIssue = pingProblem(guild, channel, feed.ping_role_id);
+        if (pingIssue) logger.warn(`[TwitterFeed] Feed ${feed.id}: ${pingIssue}`);
 
         // Post new tweets — track last SUCCESSFUL post so we don't skip tweets
         // if posting fails (missing emoji access, rate limits, perm issues, etc.)

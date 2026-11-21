@@ -19,6 +19,7 @@
  *   devices/       Phase 5: lights (Studio's and Govee / LIFX cloud), Voicemeeter and Stream Deck actions and requests
  *   viewers/       viewer stats and loyalty points (H-747): records, watch time, points, ranks, the points commands
  *   youtube/       YouTube Live (H-741): live detection, chat through streamList, Super Chats, memberships, quota guard
+ *   heart/         heart rate (Studio 0.2.14): the watch over Bluetooth through Studio, Pulsoid as a fallback; memory only
  *
  *   getStreamBot()             → { store, feed, hub, engine, ingest, io, render, sounds, studio, auth, helix, kick, streamInfo,
  *                                  streamActions } (built on first use)
@@ -80,6 +81,13 @@ async function build() {
     let onRequest = (conn, method, params) => (String(method).startsWith('music.') && box.music ? box.music.service.onStudioRequest(conn, method, params) : studio.onRequest(conn, method, params));
     hub.use({ onState: studio.onState, onEvent: studio.onEvent, onRequest, onConnect: studio.onConnect });
     Object.assign(box, { io, engine, ingest, sounds, studio, auth, helix, kick, streamInfo, streamActions });
+    // One-off Studio jobs (studio-jobs.js, 2026-11-20): run when the streamer's Studio is connected, new enough and they are not live.
+    try {
+        const { ownerLiveCheck } = await import('./studio-jobs.js');
+        await studio.attachJobs({ hub, isLive: ownerLiveCheck({ db: pool, store }) });
+    } catch (err) {
+        logger.warn?.(`[StreamBot] Studio jobs did not load: ${err?.message}`);
+    }
     // Song requests through CertiFried's music pipeline (core/stream-bot/music, migration 457): the "Song requests" action,
     // the "Song changed" trigger and {music.*} variables register through the hooks in actions.js, events.js and render.js.
     try {
@@ -120,6 +128,16 @@ async function build() {
     } catch (err) {
         logger.warn?.(`[StreamBot] YouTube did not load: ${err?.message}`);
     }
+    // Heart rate (Studio 0.2.14; core/stream-bot/heart): Studio's 'heart.rate' readings, the optional Pulsoid fallback, the
+    // "Heart rate" trigger, the "Heart rate now" condition and {heart.*}. Kept in memory only. Before the overlays, so their
+    // request wrapper hands 'heart.*' on to this one; the Heart rate overlay reads box.heart when a page opens.
+    try {
+        const { attachHeart } = await import('./heart/index.js');
+        box.heart = await attachHeart(box, { onRequest });
+        onRequest = box.heart.onRequest;
+    } catch (err) {
+        logger.warn?.(`[StreamBot] heart rate did not load: ${err?.message}`);
+    }
     // Overlays and alerts (Phase 3; core/stream-bot/overlays, migration 459): OBS browser-source pages fed over SSE. It wraps
     // hub.dispatch / hasDevice (target 'overlay'), feed.publish, ingest.twitch / kick (chat) and Studio's requests ('overlays.*').
     try {
@@ -127,6 +145,23 @@ async function build() {
         box.overlays = await attachOverlays(box, { onRequest });
     } catch (err) {
         logger.warn?.(`[StreamBot] overlays did not load: ${err?.message}`);
+    }
+    // Community (Wave 2 group B; core/stream-bot/community, migration 475): text to speech, quotes, chat games on points, the
+    // loyalty store and media share. Registers its actions and trigger; reads box.viewers (points) and box.music (VOD-safe audio).
+    try {
+        const { attachCommunity } = await import('./community/index.js');
+        box.community = await attachCommunity(box);
+    } catch (err) {
+        logger.warn?.(`[StreamBot] community features did not load: ${err?.message}`);
+    }
+    // Wave 2 group A (core/stream-bot/control, 2026-11-20): moderation triggers and steps, conditions (live, time, category,
+    // viewers, follow, stored value), action queues, on/off steps, rewards, marker / snooze / cancel raid / YouTube title,
+    // reply, run program, first words, viewer arrived, viewer count, upcoming ad, goals, Kick extras and chat polls.
+    try {
+        const { attachControl } = await import('./control/index.js');
+        box.control = await attachControl(box);
+    } catch (err) {
+        logger.warn?.(`[StreamBot] control features did not load: ${err?.message}`);
     }
     return box;
 }
@@ -146,6 +181,8 @@ export async function startStreamBot(server) {
     sb.music?.service.boot(new Date()).catch(() => {});   // song requests: plays cut off by the restart, the VOD gate sweep
     sb.viewers?.service.start();                           // viewer watch time: a sample every 5 minutes while a channel is live
     sb.youtube?.service?.start();                          // YouTube Live: live checks and the chat reader (only when set up)
+    sb.control?.service.start();                           // viewer count steps and upcoming ads (only for profiles that use them)
+    sb.heart?.start().catch((err) => sb.logger.warn?.(`[StreamBot] Pulsoid did not start: ${err.message}`));   // only profiles with a Pulsoid token
     sb.tipFeeds = createTipFeeds({ store: sb.store, ingest: sb.ingest, logger: sb.logger });
     sb.tipFeeds.start().catch((err) => sb.logger.warn?.(`[StreamBot] tip feeds did not start: ${err.message}`));
     sb.logger.info?.(`[StreamBot] realtime endpoint on ${WS_PATH}; tip feeds started`);

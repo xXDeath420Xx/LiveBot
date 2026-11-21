@@ -152,15 +152,19 @@ export function createViewerStore({ db, prefix = 'stream_bot_', now = () => Date
         /**
          * Change one person's points (the primary row of a linked person). mode 'add' (delta may be negative) or 'set'.
          * strict: refuse a change that would go below 0 ({ ok: false, error: 'not_enough' }); otherwise stop at 0.
+         * A YouTube record, or a person whose primary record is YouTube, never gains points ({ ok: false, error: 'youtube' }):
+         * YouTube API policy III.F.3.c, no rewards for engaging with YouTube (youtube/policy.js). Taking points away still works.
          */
         async changePoints(profileId, viewerId, amount, { mode = 'add', strict = false, kind = 'points', note = null, actor = null, history = true } = {}) {
             return inTransaction(async (tq) => {
-                const row = (await tq(`SELECT id, person_id FROM ${V} WHERE profile_id = ? AND id = ?`, [profileId, viewerId]))[0];
+                const row = (await tq(`SELECT id, person_id, platform FROM ${V} WHERE profile_id = ? AND id = ?`, [profileId, viewerId]))[0];
                 if (!row) return { ok: false, error: 'no_viewer' };
                 const target = Number(row.person_id || row.id);
-                const cur = Number((await tq(`SELECT points FROM ${V} WHERE id = ? FOR UPDATE`, [target]))[0]?.points) || 0;
+                const locked = (await tq(`SELECT points, platform FROM ${V} WHERE id = ? FOR UPDATE`, [target]))[0];
+                const cur = Number(locked?.points) || 0;
                 let next = mode === 'set' ? Math.round(Number(amount)) : cur + Math.round(Number(amount));
                 if (!Number.isFinite(next)) return { ok: false, error: 'bad_amount' };
+                if (next > cur && (row.platform === 'youtube' || locked?.platform === 'youtube')) return { ok: false, error: 'youtube', balance: cur };
                 if (next < 0) { if (strict) return { ok: false, error: 'not_enough', balance: cur }; next = 0; }
                 next = Math.min(NUM_MAX, next);
                 if (next !== cur) await tq(`UPDATE ${V} SET points = ? WHERE id = ?`, [next, target]);
@@ -176,13 +180,15 @@ export function createViewerStore({ db, prefix = 'stream_bot_', now = () => Date
             const n = Math.round(Number(amount));
             if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'bad_amount' };
             return inTransaction(async (tq) => {
-                const rows = await tq(`SELECT id, person_id FROM ${V} WHERE profile_id = ? AND id IN (?, ?)`, [profileId, fromId, toId]);
+                const rows = await tq(`SELECT id, person_id, platform FROM ${V} WHERE profile_id = ? AND id IN (?, ?)`, [profileId, fromId, toId]);
                 const find = (id) => rows.find((r) => Number(r.id) === Number(id));
                 if (!find(fromId) || !find(toId)) return { ok: false, error: 'no_viewer' };
+                if (rows.some((r) => r.platform === 'youtube')) return { ok: false, error: 'youtube' };   // no points on YouTube (III.F.3.c)
                 const a = Number(find(fromId).person_id || fromId);
                 const b = Number(find(toId).person_id || toId);
                 if (a === b) return { ok: false, error: 'same' };
-                const locked = await tq(`SELECT id, points FROM ${V} WHERE id IN (?, ?) ORDER BY id FOR UPDATE`, [a, b]);
+                const locked = await tq(`SELECT id, points, platform FROM ${V} WHERE id IN (?, ?) ORDER BY id FOR UPDATE`, [a, b]);
+                if (locked.some((r) => r.platform === 'youtube')) return { ok: false, error: 'youtube' };
                 const pa = Number(locked.find((r) => Number(r.id) === a)?.points) || 0;
                 const pb = Number(locked.find((r) => Number(r.id) === b)?.points) || 0;
                 if (pa < n) return { ok: false, error: 'not_enough', balance: pa };
@@ -194,13 +200,13 @@ export function createViewerStore({ db, prefix = 'stream_bot_', now = () => Date
                 return { ok: true, from: a, to: b, fromBalance: pa - n, toBalance: nb };
             });
         },
-        /** Watch-time earnings for many people at once (no history rows: they would be one per viewer every few minutes). */
+        /** Watch-time earnings for many people at once (no history rows: they would be one per viewer every few minutes). Never YouTube records. */
         async addPointsBulk(profileId, awards) {
             const list = [...awards.entries()].filter(([, n]) => n > 0);
             for (let i = 0; i < list.length; i += CHUNK) {
                 const chunk = list.slice(i, i + CHUNK);
                 await q(`UPDATE ${V} SET points = LEAST(points + CASE id ${chunk.map(() => 'WHEN ? THEN ?').join(' ')} ELSE 0 END, ${NUM_MAX})
-                         WHERE profile_id = ? AND id IN (${chunk.map(() => '?').join(', ')})`,
+                         WHERE profile_id = ? AND platform <> 'youtube' AND id IN (${chunk.map(() => '?').join(', ')})`,
                 [...chunk.flatMap(([id, n]) => [id, n]), profileId, ...chunk.map(([id]) => id)]);
             }
             return list.length;
@@ -339,24 +345,30 @@ export function createViewerStore({ db, prefix = 'stream_bot_', now = () => Date
         },
 
         // ── linking (by hand only) ──
-        /** Link b to a (a keeps the points; b's points move to a). Different platforms, neither linked yet. */
+        /**
+         * Link b to a (a keeps the points; b's points move to a). Different platforms, neither linked yet.
+         * A YouTube record is never the one that keeps the points, and points on a YouTube record never move (they stay
+         * frozen there and cannot be spent: YouTube API policy III.F.3.c); a YouTube a and a Twitch or Kick b swap places.
+         */
         async link(profileId, aId, bId, { actor = null } = {}) {
             if (Number(aId) === Number(bId)) return { ok: false, error: 'same' };
             return inTransaction(async (tq) => {
                 const rows = await tq(`SELECT id, platform, person_id, points FROM ${V} WHERE profile_id = ? AND id IN (?, ?) ORDER BY id FOR UPDATE`, [profileId, aId, bId]);
-                const a = rows.find((r) => Number(r.id) === Number(aId));
-                const b = rows.find((r) => Number(r.id) === Number(bId));
+                let a = rows.find((r) => Number(r.id) === Number(aId));
+                let b = rows.find((r) => Number(r.id) === Number(bId));
                 if (!a || !b) return { ok: false, error: 'no_viewer' };
                 if (a.platform === b.platform) return { ok: false, error: 'same_platform' };
                 const kids = Number((await tq(`SELECT COUNT(*) AS n FROM ${V} WHERE person_id IN (?, ?)`, [aId, bId]))[0].n);
                 if (a.person_id || b.person_id || kids) return { ok: false, error: 'already_linked' };
-                const moved = Number(b.points) || 0;
+                if (a.platform === 'youtube') [a, b] = [b, a];
+                const moved = b.platform === 'youtube' ? 0 : Number(b.points) || 0;
                 const balance = Math.min(NUM_MAX, (Number(a.points) || 0) + moved);
                 await tq(`UPDATE ${V} SET points = ? WHERE id = ?`, [balance, a.id]);
-                await tq(`UPDATE ${V} SET points = 0, person_id = ? WHERE id = ?`, [a.id, b.id]);
+                if (b.platform === 'youtube') await tq(`UPDATE ${V} SET person_id = ? WHERE id = ?`, [a.id, b.id]);
+                else await tq(`UPDATE ${V} SET points = 0, person_id = ? WHERE id = ?`, [a.id, b.id]);
                 await tq(`INSERT INTO ${H} (profile_id, viewer_id, kind, delta, balance, note, actor) VALUES (?, ?, 'link', ?, ?, ?, ?), (?, ?, 'link', ?, 0, ?, ?)`,
                     [profileId, a.id, moved, balance, `Linked with their ${({ kick: 'Kick', youtube: 'YouTube' })[b.platform] || 'Twitch'} account`, str(actor, 100),
-                        profileId, b.id, -moved, `Linked to their ${({ kick: 'Kick', youtube: 'YouTube' })[a.platform] || 'Twitch'} account; points moved there`, str(actor, 100)]);
+                        profileId, b.id, -moved, `Linked to their ${({ kick: 'Kick', youtube: 'YouTube' })[a.platform] || 'Twitch'} account${moved ? '; points moved there' : ''}`, str(actor, 100)]);
                 return { ok: true, primaryId: Number(a.id), moved };
             });
         },
@@ -385,6 +397,7 @@ export function createViewerStore({ db, prefix = 'stream_bot_', now = () => Date
          */
         async importRows(profileId, platform, rows, source) {
             const out = { created: 0, updated: 0, unchanged: 0 };
+            const noPoints = platform === 'youtube';   // imported YouTube viewers bring no points (III.F.3.c)
             const src = String(source || 'import').slice(0, 20);
             const clean = [];
             const seenIds = new Set();
@@ -397,7 +410,7 @@ export function createViewerStore({ db, prefix = 'stream_bot_', now = () => Date
                 const d = (v) => { const x = v ? new Date(v) : null; return x && Number.isFinite(x.getTime()) && x.getFullYear() > 2000 ? new Date(Math.round(x.getTime() / 1000) * 1000) : null; };
                 const last = d(r.lastSeen) || d(r.firstSeen);
                 clean.push({ id, login: str(r.login && String(r.login).toLowerCase(), 100), name: str(r.name, 100), first: d(r.firstSeen) || last, last,
-                    minutes: n(r.minutes), messages: n(r.messages), points: n(r.points) });
+                    minutes: n(r.minutes), messages: n(r.messages), points: noPoints && r.points !== undefined ? 0 : n(r.points) });
             }
             for (let i = 0; i < clean.length; i += CHUNK) {
                 const chunk = clean.slice(i, i + CHUNK);

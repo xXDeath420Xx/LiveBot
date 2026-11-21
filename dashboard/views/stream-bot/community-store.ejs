@@ -1,0 +1,105 @@
+<%#
+  GET /stream/bot/community/store (dashboard/routes/stream-bot-community.js). Locals: ready, currency, items, redemptions, automations
+  [{ id, name, enabled }], windows [{ value, label }], commands. The item form, Edit, Delete and Refund run in /js/stream-bot-community.js.
+%>
+<%- include('_head', { pageTitle: 'Store', active: 'community', sbPage: 'community-store' }) %>
+<link rel="stylesheet" href="/css/stream-bot-community.css">
+<%
+  const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
+  const _fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const _auto = new Map(automations.map((a) => [a.id, a]));
+  const _when = (d) => { const x = new Date(d); return Number.isFinite(x.getTime()) ? x.toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : ''; };
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Store</h1>
+        <p class="cf-page-sub">Viewers type <code>!store</code> to see the items and <code>!redeem</code> with a name or number to spend their <%= currency %>. An item can run one of your automations, such as showing text on stream or playing a sound. Nothing here is bought with money. The store is for Twitch and Kick: YouTube's API rules do not allow rewards for YouTube viewers.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'community' }) %>
+<%- include('_community-nav', { section: 'store' }) %>
+
+<div class="cf-notice" id="sbc-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbc-msg-text"></div></div>
+<% if (!ready) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">The store starts after the next CertiFried update.</div></div>
+<% } %>
+
+<section class="cf-section" aria-labelledby="sbc-items-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-items-title">Items</h2>
+        <p class="cf-section-desc">Up to 50. The order here is the order of the numbers in <code>!store</code>.</p></div></header>
+    <div class="cf-rows">
+        <% if (!items.length) { %><p class="cf-muted" id="sbc-items-empty">No items yet. Add the first one below.</p><% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">Item</th><th scope="col">Cost</th><th scope="col">Stock</th><th scope="col">Limit per viewer</th><th scope="col">Runs</th><th scope="col">State</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    <% items.forEach((it) => { const a = it.automationId ? _auto.get(it.automationId) : null; %>
+                    <tr>
+                        <td data-label="Item"><strong><%= it.name %></strong><% if (it.description) { %><br><span class="cf-cell-muted"><%= it.description %></span><% } %></td>
+                        <td data-label="Cost"><%= _fmt(it.cost) %></td>
+                        <td data-label="Stock"><%= it.stock == null ? 'No limit' : _fmt(it.stock) %></td>
+                        <td data-label="Limit per viewer"><%= it.perUserLimit ? `${it.perUserLimit} ${it.limitWindow === 'ever' ? 'ever' : 'a day'}` : 'None' %><% if (it.cooldownSec) { %><br><span class="cf-cell-muted"><%= it.cooldownSec %> s between redeems</span><% } %></td>
+                        <td data-label="Runs"><% if (a) { %><a href="/stream/bot/automations/<%= a.id %>"><%= a.name %></a><% } else if (it.automationId) { %><span class="cf-cell-muted">A deleted automation</span><% } else { %><span class="cf-cell-muted">Nothing</span><% } %></td>
+                        <td data-label="State"><%= it.enabled ? 'On' : 'Off' %></td>
+                        <td><button type="button" class="btn btn-secondary btn-sm" data-item-edit="<%= it.id %>">Edit</button> <button type="button" class="btn btn-secondary btn-sm" data-item-delete="<%= it.id %>" data-name="<%= it.name %>">Delete</button></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<form id="sbc-item-form" novalidate>
+<section class="cf-section" aria-labelledby="sbc-item-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-item-title">Add an item</h2></div></header>
+    <div class="cf-rows">
+        <div class="cf-notice is-bad" id="sbc-errors" role="alert" tabindex="-1" hidden><div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sbc-errors-list"></ul></div></div>
+        <input type="hidden" id="sbc-item-id" value="">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-name">Name</label><p class="cf-row-desc">What viewers type after <code>!redeem</code>, such as Hydrate.</p></div><div class="cf-row-control"><input type="text" id="sbc-item-name" maxlength="60" autocomplete="off" required></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-desc">Description</label><p class="cf-row-desc">Optional, shown here only.</p></div><div class="cf-row-control"><input type="text" id="sbc-item-desc" maxlength="200" autocomplete="off"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-cost">Cost (<%= currency %>)</label></div><div class="cf-row-control"><input type="number" id="sbc-item-cost" min="0" max="1000000000" step="1" inputmode="numeric" value="100"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-stock">Stock</label><p class="cf-row-desc">Empty for no limit. Each redeem takes one; a refund puts it back.</p></div><div class="cf-row-control"><input type="number" id="sbc-item-stock" min="0" max="1000000" step="1" inputmode="numeric"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-limit">Limit per viewer</label><p class="cf-row-desc">Empty for no limit.</p></div>
+            <div class="cf-row-control cf-input-group"><input type="number" id="sbc-item-limit" min="1" max="1000" step="1" inputmode="numeric">
+                <label class="sr-only" for="sbc-item-window">Counted</label><select id="sbc-item-window"><% windows.forEach((w) => { %><option value="<%= w.value %>"><%= w.label %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-cool">Time between redeems (seconds)</label><p class="cf-row-desc">For everyone. 0 for none.</p></div><div class="cf-row-control"><input type="number" id="sbc-item-cool" min="0" max="86400" step="1" inputmode="numeric" value="0"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-automation">Run this automation</label><p class="cf-row-desc">It runs even while switched off, so keep it off and let only the store start it. In it, <code>{args.item}</code> is the item and <code>{user.name}</code> the viewer. Automations with the trigger <strong>Loyalty store: item redeemed</strong> also run.</p></div>
+            <div class="cf-row-control"><select id="sbc-item-automation"><option value="">Nothing</option><% automations.forEach((a) => { %><option value="<%= a.id %>"><%= a.name %><%= a.enabled ? '' : ' (off)' %></option><% }) %></select></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbc-item-on">On</label></div><div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sbc-item-on" checked></div></div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbc-item-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="sbc-item-cancel" hidden>Cancel</button>
+            <button type="submit" class="btn btn-primary btn-sm" id="sbc-item-save"<%= ready ? '' : ' disabled' %>>Add the item</button>
+        </div>
+    </div>
+</section>
+</form>
+
+<section class="cf-section" aria-labelledby="sbc-red-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-red-title">Recent redemptions</h2>
+        <p class="cf-section-desc">The last 50. A refund gives the <%= currency %> back and puts one back in stock; it does not undo what the automation did. Kept for 400 days.</p></div></header>
+    <div class="cf-rows">
+        <% if (!redemptions.length) { %><p class="cf-muted">Nothing redeemed yet.</p><% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">When</th><th scope="col">Viewer</th><th scope="col">Item</th><th scope="col">Cost</th><th scope="col">State</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    <% redemptions.forEach((r) => { %>
+                    <tr><td data-label="When"><%= _when(r.createdAt) %></td><td data-label="Viewer"><%= r.viewerName || 'Someone' %> <span class="cf-cell-muted">(<%= ({ twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' })[r.platform] || r.platform %>)</span></td><td data-label="Item"><%= r.itemName %></td><td data-label="Cost"><%= _fmt(r.cost) %></td>
+                        <td data-label="State"><%= r.status === 'refunded' ? 'Refunded' : 'Done' %></td>
+                        <td><% if (r.status === 'done') { %><button type="button" class="btn btn-secondary btn-sm" data-refund="<%= r.id %>">Refund</button><% } %></td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('_community-commands', { commands, group: 'store', title: 'Chat commands' }) %>
+
+<script type="application/json" id="sbc-data"><%- _js({ page: 'store', items }) %></script>
+<script src="/js/stream-bot-community.js" defer></script>
+<%- include('_foot') %>

@@ -48,7 +48,7 @@
         try {
             const kind = req.kind === 'audioinput' ? 'audioinput' : 'audiooutput';
             const list = await navigator.mediaDevices.enumerateDevices();
-            bridge.reply(req.id, list.filter((d) => d.kind === kind).map((d, i) => ({ id: d.deviceId, label: d.label || (d.deviceId === 'default' ? 'Windows default' : `${kind === 'audioinput' ? 'Input' : 'Output'} ${i + 1}`) })));
+            bridge.reply(req.id, list.filter((d) => d.kind === kind).map((d, i) => ({ id: d.deviceId, groupId: d.groupId || null, label: d.label || (d.deviceId === 'default' ? 'Windows default' : `${kind === 'audioinput' ? 'Input' : 'Output'} ${i + 1}`) })));
         } catch (e) {
             bridge.reply(req.id, []);
         }
@@ -68,6 +68,7 @@
         await stopMic();
         try {
             const constraints = { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true };
+            // 0.2.12: main always names a device (a saved one, or 'communications'); 'default' only from an older main
             if (req && req.deviceId && req.deviceId !== 'default') constraints.deviceId = { exact: req.deviceId };
             const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints, video: false });
             const ctx = new AudioContext({ sampleRate: 16000 });

@@ -10,7 +10,7 @@ const ACTION_LABELS = Object.freeze({
     'light.color': 'Set a light colour', 'light.white': 'Set a light to white', 'light.brightness': 'Light brightness', 'light.power': 'Light on or off',
     'light.scene': 'Light scene', 'light.flash': 'Flash a light', 'light.preset': 'Light preset', 'voicemeeter.mute': 'Voicemeeter mute',
     'voicemeeter.gain': 'Voicemeeter gain', 'voicemeeter.profile': 'Voicemeeter settings file', 'voicemeeter.macro': 'Voicemeeter macro button',
-    'music.prepare': 'Check VOD-safe music', 'devices.check': 'Look for lights and Voicemeeter',
+    'voice.enable': 'Turn on voice commands', 'voice.set': 'Change voice command settings', 'obs.alert_audio': 'Manage Sound Alerts and Blerp audio', 'system.run': 'Run a program', 'music.prepare': 'Check VOD-safe music', 'devices.check': 'Look for lights and Voicemeeter',
 });
 
 const EVENT_LABELS = Object.freeze({
@@ -54,6 +54,7 @@ function summarise(action, p = {}) {
         case 'voicemeeter.mute': return pick('target', 'state');
         case 'voicemeeter.gain': return `${p.target} · ${p.mode === 'adjust' ? (p.gain > 0 ? '+' : '') : ''}${p.gain} dB`;
         case 'voicemeeter.profile': return pick('profile');
+        case 'system.run': return pick('program');
         case 'voicemeeter.macro': return `button ${p.button} · ${p.state}`;
         default: return '';
     }

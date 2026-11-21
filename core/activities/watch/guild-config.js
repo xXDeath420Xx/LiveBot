@@ -44,7 +44,7 @@ export async function loadWatchConfig(pool, guildId) {
     if (!row) return null;
     return {
         enabled: Number(row.enabled) === 1,
-        mode: row.watch_mode === 'activity' ? 'activity' : 'stream',
+        mode: 'activity', // the Go Live stream (the CertiFried-Cinema selfbot) was retired on 2026-11-20
         libraryId: row.jellyfin_library_id ? String(row.jellyfin_library_id) : null,
         controlRoleId: row.control_role_id ? String(row.control_role_id) : null,
     };

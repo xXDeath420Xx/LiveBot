@@ -4,6 +4,7 @@ import {
     getConfig, extractTwitchUsernames, checkAffiliateStatus,
     resolveTwitchUsername, recordEntry, findBestTwitchMatch
 } from '../core/community-support-manager.js';
+import { findBlockedStreamer, isDiscordUserBlocked } from '../core/streamer-blocklist.js';
 
 export default {
     name: 'messageCreate',
@@ -43,6 +44,8 @@ export default {
             while ((match = mentionRegex.exec(message.content)) !== null) {
                 const mentionedId = match[1];
                 if (mentionedId === message.author.id) continue; // Skip self-mentions
+                // A streamer on the server's blocked list is not counted, guessed or named (core/streamer-blocklist.js).
+                if (await isDiscordUserBlocked(guildId, mentionedId)) continue;
 
                 // Try to resolve to Twitch username
                 const resolved = await resolveTwitchUsername(guildId, mentionedId);
@@ -145,6 +148,9 @@ export default {
                     // API failure — default to non-affiliate
                 }
 
+                // On the server's blocked streamers list: not counted and not named in the reply.
+                if (await findBlockedStreamer(guildId, { platform: 'twitch', platformUserId: twitchId, username: displayUsername })) continue;
+
                 // Record the entry
                 const points = await recordEntry(
                     guildId, message.author.id, entryType, displayUsername,
@@ -154,6 +160,8 @@ export default {
                 totalPoints += points;
                 results.push({ username: displayUsername, isAffiliate, points });
             }
+
+            if (results.length === 0) return; // every streamer in the post is blocked
 
             // React to confirm tracking
             await message.react('\u2705').catch(err => {

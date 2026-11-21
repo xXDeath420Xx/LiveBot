@@ -23,12 +23,18 @@
  *
  * .cjs because package.json declares "type": "module" and PM2 requires CommonJS.
  */
+// CF_NODE: node binary for the apps (deploy/switch scripts set it; default = the pm2 daemon's own node).
+// Logs go under PM2_HOME (death's ~/.pm2 before the 2026-11 app-user switch, /var/lib/certifried/.pm2 after).
+const PM2_LOGS = `${process.env.PM2_HOME || `${process.env.HOME}/.pm2`}/logs`;
+const NODE = process.env.CF_NODE || undefined;
+
 module.exports = {
     apps: [
         {
             name: 'CertiFriedUtility',
             script: 'index.js',
             cwd: '/home/death/CertiFriedUtility',
+            interpreter: NODE,
             exec_mode: 'fork',
             instances: 1,
 
@@ -56,8 +62,8 @@ module.exports = {
                 UV_THREADPOOL_SIZE: '32',
             },
 
-            error_file: '/home/death/.pm2/logs/CertiFriedUtility-error.log',
-            out_file: '/home/death/.pm2/logs/CertiFriedUtility-out.log',
+            error_file: `${PM2_LOGS}/CertiFriedUtility-error.log`,
+            out_file: `${PM2_LOGS}/CertiFriedUtility-out.log`,
             time: true,
         },
         {
@@ -66,6 +72,7 @@ module.exports = {
             name: 'greenhouse-tycoon',
             script: 'services/cfx/server.js',
             cwd: '/home/death/CertiFriedUtility',
+            interpreter: NODE,
             exec_mode: 'fork',
             instances: 1,
             node_args: '--max-old-space-size=512',

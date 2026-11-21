@@ -11,6 +11,7 @@ function loadConfig(env = process.env) {
   return {
     rtmpPort: int(env.RTMP_PORT, 1936),
     statusPort: int(env.STATUS_PORT, 4090),
+    httpPort: int(env.RELAY_HTTP_PORT, 8935),   // node-media-server HTTP (loopback pull only; not opened in ufw)
     publicHost: env.PUBLIC_HOST || 'certifriedmultitool.com',
     maxDestinationsPerKey: int(env.MAX_DESTINATIONS, 8),
     maxConcurrentStreams: int(env.MAX_CONCURRENT, 10),

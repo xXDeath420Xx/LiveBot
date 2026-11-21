@@ -1,0 +1,55 @@
+# Internal CI on the private Forgejo (git.certifriedmultitool.com). Runs on every push.
+# Runner: box-docker (rootless docker, node:22-bookworm, 4 CPUs, 6 GB). Jobs clone from Forgejo at $CF_FORGEJO
+# (host loopback via slirp4netns); a per-uid nft guard blocks every other local service.
+# The public GitHub repo keeps its own .github/workflows/ci.yml; Forgejo reads only this directory.
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    name: Secret scan (no new findings vs baseline)
+    runs-on: docker
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        run: |
+          set -euo pipefail
+          git clone -q --no-tags --depth 1 --branch "${GITHUB_REF_NAME}" "http://cf-ci:${{ github.token }}@${CF_FORGEJO#http://}/${GITHUB_REPOSITORY}.git" src
+          cd src && git fetch -q --depth 1 origin "${GITHUB_SHA}" && git checkout -q "${GITHUB_SHA}"
+          git log --oneline -1
+      - name: Scanner + gitleaks against scripts/internal-git/scan-baseline.txt
+        working-directory: src
+        run: |
+          set -euo pipefail
+          V=8.30.1; base="https://github.com/gitleaks/gitleaks/releases/download/v$V"
+          curl -sSfL -o /tmp/gl.tgz "$base/gitleaks_${V}_linux_x64.tar.gz"
+          curl -sSfL -o /tmp/gl.sums "$base/gitleaks_${V}_checksums.txt"
+          (cd /tmp && grep " gitleaks_${V}_linux_x64.tar.gz$" gl.sums | sed 's/ .*/  gl.tgz/' | sha256sum -c -)
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks
+          bash scripts/internal-git/scan-check.sh /tmp/gitleaks
+
+  app:
+    name: Bot and dashboard (Node 22, DB-free tests)
+    runs-on: docker
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        run: |
+          set -euo pipefail
+          git clone -q --no-tags --depth 1 --branch "${GITHUB_REF_NAME}" "http://cf-ci:${{ github.token }}@${CF_FORGEJO#http://}/${GITHUB_REPOSITORY}.git" src
+          cd src && git fetch -q --depth 1 origin "${GITHUB_SHA}" && git checkout -q "${GITHUB_SHA}"
+          git log --oneline -1
+      - name: Tools the tests shell out to (zip)
+        run: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq zip >/dev/null
+      - name: Install (npm ci)
+        working-directory: src
+        run: npm ci --no-audit --no-fund
+      - name: Syntax check
+        working-directory: src
+        run: node --experimental-vm-modules --no-warnings scripts/publish/syntax-check.mjs .
+      - name: Tests (tests/ci-list.txt)
+        working-directory: src
+        run: node --test --test-force-exit --test-timeout=60000 $(grep -v '^#' tests/ci-list.txt)

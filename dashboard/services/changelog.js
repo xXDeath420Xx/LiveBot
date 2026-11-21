@@ -68,6 +68,10 @@ export const USER_NOTES = Object.freeze({
         title: 'Moderation records, tickets and raid lockdowns are no longer kept forever',
         desc: 'Moderation records are deleted after two years (warnings after one), closed tickets and their transcripts a year after closing, and ended raid lockdowns after 180 days.',
     },
+    480: {
+        title: 'YouTube: no points for YouTube viewers, and YouTube data kept 30 days',
+        desc: 'YouTube viewers no longer earn or spend points: points, the loyalty store, raffles, points games and media share are for Twitch and Kick, because YouTube\'s API rules do not allow rewards for subscribing, joining or chatting. Data that came from YouTube is deleted after 30 days. Linking a YouTube channel is paused for most accounts while Google reviews CertiFried.',
+    },
     450: {
         title: 'Sound drop volume is a percentage everywhere',
         desc: 'The VC sound drops page and /admin vcsounds volume both set the volume from 1 to 100%. Volumes saved the old way were converted, and the default is 50%.',

@@ -118,7 +118,7 @@ export async function streamBotPages(demo, { root, editId = 32 }) {
     };
     // H-787: the Kick channel bot sign-in, made before channel:write was added (the row shows the missing permission and the button).
     const kickBot = (await imp('core/stream-bot/kick-scopes.js')).kickBotStatus({ hasToken: true, needsRelink: false, defenderEnabled: true,
-        scopes: 'user:read chat:write events:subscribe channel:read moderation:ban moderation:chat_message:manage' });
+        scopes: 'user:read chat:write events:subscribe channel:read moderation:ban moderation:chat_message:manage channel:rewards:write' });
     const kickHealth = { ok: true, grants: null, eventsub: null, coverage: null, webhook: { known: true, chat: true, missing: [], error: null }, lastChatAt: iso(2026, 11, 18, 20, 39), chatSend: true, kickBot };
 
     const common = { profile };

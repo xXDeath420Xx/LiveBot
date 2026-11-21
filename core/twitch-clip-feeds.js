@@ -14,12 +14,18 @@
 import { PermissionsBitField } from 'discord.js';
 import pool from '../utils/db.js';
 import { resolveBroadcaster, clipsSince } from '../utils/platforms/twitch-clips.js';
+import { normalizePingRole } from './feed-ping.js';
 
 export const CREATOR_FILTERS = ['anyone', 'broadcaster_only'];
 const MAX_MIN_VIEWS = 1000000;
 
 export class ClipFeedError extends Error {
     constructor(message, status = 400) { super(message); this.status = status; }
+}
+
+/** A ping role as stored (core/feed-ping.js), as a ClipFeedError when it is not one. */
+export function cleanPingRole(raw, guild = null) {
+    try { return normalizePingRole(raw, guild); } catch (e) { throw new ClipFeedError(e.message); }
 }
 
 function clampViews(v) {
@@ -89,18 +95,19 @@ async function lookup(streamer) {
  * @param {number} [opts.minViews]
  * @param {import('discord.js').Client|null} [opts.client]
  */
-export async function createFeed({ guildId, channelId, streamer, creatorsFilter = 'anyone', minViews = 0, client = null }) {
+export async function createFeed({ guildId, channelId, streamer, creatorsFilter = 'anyone', minViews = 0, pingRoleId = null, client = null }) {
     if (!channelId) throw new ClipFeedError('A channel is required');
     if (!CREATOR_FILTERS.includes(creatorsFilter)) throw new ClipFeedError('Unknown creator filter');
+    const ping = cleanPingRole(pingRoleId, client?.guilds?.cache?.get(guildId) || null);
     await checkChannel(client, guildId, channelId);
     const user = await lookup(streamer);
 
     try {
         const [r] = await pool.execute(
             `INSERT INTO twitch_clip_feeds
-               (guild_id, channel_id, broadcaster_id, username, enabled, posted_from, creators_filter, min_views)
-             VALUES (?, ?, ?, ?, 1, NOW(), ?, ?)`,
-            [guildId, channelId, user.id, user.login, creatorsFilter, clampViews(minViews)]
+               (guild_id, channel_id, broadcaster_id, username, enabled, posted_from, creators_filter, min_views, ping_role_id)
+             VALUES (?, ?, ?, ?, 1, NOW(), ?, ?, ?)`,
+            [guildId, channelId, user.id, user.login, creatorsFilter, clampViews(minViews), ping]
         );
         return { ...user, id: r.insertId, broadcaster_id: user.id };
     } catch (e) {
@@ -114,7 +121,7 @@ export async function createFeed({ guildId, channelId, streamer, creatorsFilter 
 /**
  * Partial update. Only the keys present in `changes` are touched.
  *
- * @param {object} changes  { enabled?, channelId?, streamer?, creatorsFilter?, minViews? }
+ * @param {object} changes  { enabled?, channelId?, streamer?, creatorsFilter?, minViews?, pingRoleId? }
  * @returns {Promise<{row: object, watermarkMoved: boolean}>}
  */
 export async function updateFeed(guildId, id, changes, { client = null } = {}) {
@@ -144,6 +151,7 @@ export async function updateFeed(guildId, id, changes, { client = null } = {}) {
         push('creators_filter', changes.creatorsFilter);
     }
     if (changes.minViews !== undefined) push('min_views', clampViews(changes.minViews));
+    if (changes.pingRoleId !== undefined) push('ping_role_id', cleanPingRole(changes.pingRoleId, client?.guilds?.cache?.get(guildId) || null));
     if (changes.enabled !== undefined) {
         const on = changes.enabled ? 1 : 0;
         if (on && !row.enabled) restart = true; // don't replay what piled up while paused

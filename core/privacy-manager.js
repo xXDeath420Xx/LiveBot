@@ -258,6 +258,19 @@ async function buildExportNow(userId) {
         logger.warn('[Privacy] Export skipped the game data', { error: error.message });
     }
 
+    // Own voice (core/voice-clone, invite-only): the consent records, the list of recordings and the voice's status.
+    // Never the model, the voiceprints or the keys.
+    try {
+        const vc = await (await import('./voice-clone/index.js')).getVoiceClone();
+        const ov = vc ? await vc.service.exportFor(userId) : null;
+        if (ov && (ov.voice || ov.consents.length)) {
+            sections.own_voice = { total: (ov.voice ? 1 : 0) + ov.samples.length + ov.consents.length, truncated: false, rows: [{ voice: ov.voice, consents: ov.consents, recordings: ov.samples, note: ov.note || null }] };
+        }
+    } catch (error) {
+        errors.push('own_voice');
+        logger.warn('[Privacy] Export skipped the own-voice data', { error: error.message });
+    }
+
     // Stream bot: the member's streamer profile (no secrets) and events about them as a viewer.
     let streamBot = null;
     try {
@@ -408,6 +421,19 @@ export async function deleteUserData(userId) {
     } catch (error) {
         failed.push('greenhouse_tycoon');
         logger.error('[Privacy] Game data delete failed', { userId, error: error.message });
+    }
+
+    // Own voice (core/voice-clone): deleteVoice() stops it at once and removes its recordings, model, voiceprint and key;
+    // the consent record (no audio or voiceprint) stays, marked withdrawn.
+    try {
+        const vc = await (await import('./voice-clone/index.js')).getVoiceClone();
+        if (vc) {
+            const r = await vc.service.deleteAllForUser(userId, 'privacy_delete');
+            if (r.voices) deleted.voice_clone_voices = (deleted.voice_clone_voices || 0) + r.voices;
+        }
+    } catch (error) {
+        failed.push('own_voice');
+        logger.error('[Privacy] Own-voice delete failed', { userId, error: error.message });
     }
 
     // H-820: the stream bot delete ends with the member's Twitch and Kick sign-ins (stream_platform_accounts), so the

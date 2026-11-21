@@ -1,6 +1,7 @@
 /*
  * Stream bot: the stream management actions (Phase 4 pulled forward): clips, title, category, ads, raids, polls,
- * predictions, announcements, shoutouts, clearing chat and deleting the triggering message.
+ * predictions, announcements, shoutouts, clearing chat and deleting the triggering message, and (2026-11-20) a chat line
+ * sent from the streamer's own Twitch account (stream.say).
  *
  *   createStreamActions({ helix, kick, streamInfo?, sendChat, shoutoutText? })
  *     .run(step, ctx) → { status: 'ok'|'failed'|'skipped'|'dry', detail, vars? }
@@ -126,6 +127,15 @@ export function createStreamActions({ helix, kick, streamInfo = null, sendChat, 
                     if (dryRun) return { status: 'dry', detail: `would announce (${step.color}): ${short(message, 300)}` };
                     await helix.announce(pid, { message, color: step.color });
                     return { status: 'ok', detail: `announced: ${short(message, 300)}` };
+                }
+                case 'stream.say': {
+                    // Twitch only: a line from the streamer's own account (Firebot "chat as Streamer", Streamer.bot "not as bot").
+                    const message = (await render(step.text)).trim();
+                    if (!message) return { status: 'skipped', detail: 'the message came out empty' };
+                    if (!(ctx.channels || []).some((c) => c.platform === 'twitch')) return { status: 'skipped', detail: 'no linked Twitch channel' };
+                    if (dryRun) return { status: 'dry', detail: `would say as you on Twitch: ${short(message, 300)}` };
+                    await helix.sayAsBroadcaster(pid, message);
+                    return { status: 'ok', detail: `said as you on Twitch: ${short(message, 300)}` };
                 }
                 case 'stream.shoutout': {
                     const target = (await render(step.target)).trim().replace(/^@/, '').split(/\s+/)[0] || '';

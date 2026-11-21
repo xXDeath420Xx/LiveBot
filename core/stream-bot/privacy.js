@@ -30,6 +30,7 @@ import { musicExport, musicDelete } from './music/privacy.js';
 import { overlaysExport, overlaysDelete } from './overlays/privacy.js';
 import { devicesExport, devicesDelete } from './devices/privacy.js';
 import { viewersExport, viewersDelete } from './viewers/privacy.js';
+import { communityExport, communityDelete } from './community/privacy.js';
 import { youtubeExport, youtubeDelete, youtubeAccountExport, youtubeAccountDelete } from './youtube/privacy.js';
 import { createTimerStore } from './timers.js';
 import { platformAccountsExport, platformAccountsDelete } from './platform-accounts-privacy.js';
@@ -91,6 +92,8 @@ export function createStreamBotPrivacy({ store, db, rowLimit = 1000, soundsDir =
         for (const [name, rows] of Object.entries(music.tables)) tables[name] = { total: rows.length, rows };
         // Viewer records (migration 464): their watch time, messages and points in every streamer's channel.
         for (const [name, rows] of Object.entries((await viewersExport(db, { accounts, prefix: store.prefix, rowLimit })).tables)) tables[name] = { total: rows.length, rows };
+        // Community (migration 475): their store redemptions and media share requests, and quotes they added.
+        for (const [name, rows] of Object.entries((await communityExport(db, { accounts, prefix: store.prefix, rowLimit })).tables)) tables[name] = { total: rows.length, rows };
         return { tables, note: `Stream bot data keyed to your Twitch or Kick account in every streamer's channel, and other people's events that name you (without who wrote them) (the newest ${rowLimit} rows per table).` };
     }
     async function deleteForAccounts(accounts) {
@@ -98,6 +101,7 @@ export function createStreamBotPrivacy({ store, db, rowLimit = 1000, soundsDir =
         await withRedaction(accounts, deleted, async () => {
             Object.assign(deleted, await store.deleteViewer(accounts));
             for (const [t, n] of Object.entries(await viewersDelete(db, { accounts, prefix: store.prefix }))) deleted[t] = (deleted[t] || 0) + n;   // viewer records (migration 464)
+            for (const [t, n] of Object.entries(await communityDelete(db, { accounts, prefix: store.prefix }))) deleted[t] = (deleted[t] || 0) + n;   // community (migration 475)
             const music = await musicDelete(db, { profileId: null, accounts, prefix: store.prefix, ...(store.prefix === 'stream_bot_' ? {} : { playLogTable: `${store.prefix}play_log` }) });
             for (const [t, n] of Object.entries(music)) deleted[t] = (deleted[t] || 0) + n;
         });
@@ -115,6 +119,8 @@ export function createStreamBotPrivacy({ store, db, rowLimit = 1000, soundsDir =
             const namedCount = await namedTables(await viewerAccounts(userId), namedOut);
             // Viewer records (migration 464): the profile's viewers as the streamer; their own records as a viewer anywhere.
             const viewerRecords = (await viewersExport(db, { profileId: own?.profile?.id || null, accounts: await viewerAccounts(userId), prefix: store.prefix, rowLimit })).tables;
+            // Community (migration 475): quotes, store, media share; as the streamer and as a viewer.
+            Object.assign(viewerRecords, (await communityExport(db, { profileId: own?.profile?.id || null, accounts: await viewerAccounts(userId), prefix: store.prefix, rowLimit })).tables);
             // H-820: Twitch and Kick sign-ins (multicast "Connect") and the destinations made from them, with or without a profile.
             const signInRows = signIns && db ? await platformAccountsExport(db, userId, signIns).catch(() => ({})) : {};
             const youtubeSignIn = store.prefix === 'stream_bot_' ? await youtubeAccountExport(db, userId).catch(() => []) : [];
@@ -169,6 +175,7 @@ export function createStreamBotPrivacy({ store, db, rowLimit = 1000, soundsDir =
             const overlayRows = own?.id ? await overlaysDelete(db, own.id, store.prefix, { mediaDir }) : {};
             const deviceRows = own?.id ? await devicesDelete(db, own.id, store.prefix) : {};   // cloud light keys (migration 461)
             const viewerRows = own?.id ? await viewersDelete(db, { profileId: own.id, prefix: store.prefix }) : {};   // the profile's viewer records (migration 464)
+            Object.assign(viewerRows, own?.id ? await communityDelete(db, { profileId: own.id, prefix: store.prefix }) : {});   // quotes, store, media share (migration 475)
             const youtubeRows = own?.id ? await youtubeDelete(db, own.id, store.prefix) : {};   // YouTube live state and quota use (migration 470)
             const deleted = { ...overlayRows, ...deviceRows, ...viewerRows, ...youtubeRows, ...(await store.deleteOwner(userId)) };
             if (timerRows) deleted[store.prefix === 'stream_bot_' ? 'tokes_timers' : `${store.prefix}timers`] = timerRows;
@@ -178,6 +185,7 @@ export function createStreamBotPrivacy({ store, db, rowLimit = 1000, soundsDir =
             await withRedaction(accounts, deleted, async () => {
                 const viewer = await store.deleteViewer(accounts);
                 for (const [t, n] of Object.entries(await viewersDelete(db, { accounts, prefix: store.prefix }))) deleted[t] = (deleted[t] || 0) + n;   // their viewer records
+                for (const [t, n] of Object.entries(await communityDelete(db, { accounts, prefix: store.prefix }))) deleted[t] = (deleted[t] || 0) + n;   // their redemptions and media requests
                 for (const [t, n] of Object.entries(viewer)) deleted[t] = (deleted[t] || 0) + n;
                 // Song requests (migration 457): the streamer's stream plays in music_play_log; a viewer's likes and identity on requests.
                 const music = await musicDelete(db, { profileId: own?.id || null, accounts, prefix: store.prefix, ...(store.prefix === 'stream_bot_' ? {} : { playLogTable: `${store.prefix}play_log` }) });

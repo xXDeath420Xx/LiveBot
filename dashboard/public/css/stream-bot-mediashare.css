@@ -1,0 +1,17 @@
+/*
+ * "CertiFried Media Share" in OBS (/stream/bot/overlay/mediashare/<key>). Stream-facing, so a fixed look on a transparent page
+ * (theme: fixed, like the other OBS overlays): it must read over any scene, not follow the site theme.
+ */
+html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+body.sbms { font-family: "Segoe UI", system-ui, sans-serif; color: #f4f4f5; width: 100vw; height: 100vh; }
+body.sbms.is-preview { background: #1b1c20; }
+.sbms-stage { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(60vw, 1152px); }
+.sbms-stage[hidden] { display: none; }
+.sbms-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
+.sbms-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.sbms-card { margin-top: 10px; padding: 10px 14px; border-radius: 10px; background: rgba(17, 18, 22, 0.86); border: 1px solid rgba(255, 255, 255, 0.08); }
+.sbms-card[hidden] { display: none; }
+.sbms-title, .sbms-by { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sbms-title { font-size: 20px; font-weight: 600; line-height: 1.3; }
+.sbms-by { font-size: 15px; color: #b9b9c1; line-height: 1.4; }
+.sbms-by:empty { display: none; }

@@ -2,7 +2,8 @@
   The edit panel under one feed on the Social feeds page (partials/manage/feeds.ejs): channel, custom
   message, ping role and the filters that feed type has. Saved by the page script with
   PATCH /api/guilds/:guildId/feeds/:kind/:id (dashboard/routes/api/features/feeds.js); the controls
-  carry data-f (the API field) instead of a form name. Locals: kind ('reddit', 'youtube', 'twitter', 'bluesky' or 'rss'), feed, channels, roles.
+  carry data-f (the API field) instead of a form name. Locals: kind ('reddit', 'youtube', 'twitter', 'bluesky' or 'rss'), feed,
+  channels (the Post-to targets: { id, label } with threads as "#channel › thread"), roles, pingWarning (text or null).
 %>
 <%
 const _feed = feed || {};
@@ -15,6 +16,7 @@ const _vars = {
     twitter: '{username}, {name} and {url}',
     bluesky: '{handle}, {name} and {url}',
     rss: '{feed}, {title}, {author} and {url}',
+    fortnite: '',
 }[kind];
 const _source = {
     reddit: 'r/' + (_feed.subreddit || 'subreddit'),
@@ -22,6 +24,7 @@ const _source = {
     twitter: _feed.twitter_username || 'username',
     bluesky: _feed.bluesky_handle || 'name.bsky.social',
     rss: _feed.feed_title || (String(_feed.feed_url || '').replace(/^https?:\/\//, '').split('/')[0]) || 'The feed',
+    fortnite: 'Fortnite',
 }[kind];
 const _varList = {
     reddit: 'subreddit,title,author,flair,url',
@@ -43,8 +46,8 @@ const _placeholder = {
         <div class="cf-field">
             <label class="fd-ctl"><span>Post to</span>
                 <select class="form-select" data-f="channel_id">
-                    <% if (!(channels || []).some(function (c) { return String(c.id) === String(_channelId); })) { %><option value="" selected>Choose a channel</option><% } %>
-                    <%- include('../kit/_options', { items: channels, selected: _channelId, prefix: '#', empty: null }) %>
+                    <% if (!(channels || []).some(function (c) { return String(c.id) === String(_channelId); })) { %><option value="" selected>Choose a channel or thread</option><% } %>
+                    <%- include('../kit/_options', { items: channels, selected: _channelId, prefix: '', empty: null }) %>
                 </select>
             </label>
         </div>
@@ -53,19 +56,22 @@ const _placeholder = {
                 <select class="form-select" data-f="ping_role_id">
                     <option value="">No ping</option>
                     <option value="everyone"<% if (_feed.ping_role_id === 'everyone') { %> selected<% } %>>@everyone</option>
-                    <% _roles.forEach(function (r) { %><option value="<%= r.id %>" data-kind="role" data-color="<%= r.hexColor || '' %>"<% if (String(_feed.ping_role_id || '') === String(r.id)) { %> selected<% } %>>@<%= r.name %></option>
+                    <% _roles.forEach(function (r) { %><option value="<%= r.id %>" data-kind="role" data-color="<%= r.hexColor || '' %>" data-mentionable="<%= r.mentionable ? '1' : '0' %>"<% if (String(_feed.ping_role_id || '') === String(r.id)) { %> selected<% } %>>@<%= r.name %></option>
                     <% }); %>
                 </select>
             </label>
             <span class="cf-field-hint">Mentioned in front of the message.</span>
+            <span class="cf-status-line is-warn" data-fd-ping-warn<% if (!(typeof pingWarning !== 'undefined' && pingWarning)) { %> hidden<% } %>><%= (typeof pingWarning !== 'undefined' && pingWarning) || '' %></span>
         </div>
     </div>
+    <% if (kind !== 'fortnite') { %>
     <div class="cf-field fd-wide">
         <label class="fd-ctl"><span>Message</span>
             <textarea class="form-control" rows="2" maxlength="1500" data-f="custom_message" data-vars="<%= _varList %>" placeholder="<%= _placeholder %>"><%= _feed.custom_message || '' %></textarea>
         </label>
         <span class="cf-field-hint">Sent above the post. You can use <%= _vars %>. <%= kind === 'youtube' ? 'Leave blank for the standard line.' : 'Leave blank to post the card on its own.' %></span>
     </div>
+    <% } %>
     <% if (kind === 'reddit' || kind === 'rss') { %>
     <div class="cf-fields">
         <div class="cf-field">

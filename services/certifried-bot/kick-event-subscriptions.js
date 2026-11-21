@@ -26,6 +26,11 @@ export const KICK_EVENT_TYPES = Object.freeze([
     // Bans and timeouts (docs.kick.com/events/event-types: moderation.banned v1; expires_at null = permanent). The
     // stream bot's Chat overlay removes the banned viewer's lines (core/stream-bot/overlays/chat.js kickChat, H-773).
     { name: 'moderation.banned', version: 1 },
+    // Stream bot wave 2 group A (core/stream-bot/control/events.js, docs.kick.com/events/event-types, checked 2026-11-20):
+    // Kicks gifted, channel reward redemptions (pending = new, accepted / rejected) and title or category changes.
+    { name: 'kicks.gifted', version: 1 },
+    { name: 'channel.reward.redemption.updated', version: 1 },
+    { name: 'livestream.metadata.updated', version: 1 },
 ]);
 
 const API = 'https://api.kick.com/public/v1/events/subscriptions';

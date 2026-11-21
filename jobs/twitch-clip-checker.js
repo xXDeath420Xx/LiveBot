@@ -16,6 +16,8 @@ import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { resolveFeedTarget } from '../core/feed-target.js';
+import { buildFeedContent } from '../core/feed-message.js';
 import { clipsSince, gameNames, thumbnailUrl } from '../utils/platforms/twitch-clips.js';
 
 let task = null;
@@ -74,20 +76,23 @@ async function runFeed(feed, defaultClient) {
     const fresh = clips.filter(c => !known.has(c.id)).slice(0, MAX_PER_CYCLE);
     if (!fresh.length) return 0;
 
-    const channel = await client.channels.fetch(feed.channel_id).catch(() => null);
-    if (!channel?.isTextBased?.()) {
+    // Threads too (an archived one is reopened first): see core/feed-target.js.
+    const { channel, problem } = await resolveFeedTarget(client, feed.channel_id, { guildId: feed.guild_id });
+    if (!channel) {
         logger.warn(
-            `[TwitchClips] ${feed.username}: bot ${client?.user?.id || 'unknown'} cannot see channel `
-            + `${feed.channel_id} in guild ${feed.guild_id} — ${clips.length} clip(s) waiting`,
+            `[TwitchClips] ${feed.username}: bot ${client?.user?.id || 'unknown'} cannot post to `
+            + `${feed.channel_id} in guild ${feed.guild_id} (${problem}) — ${clips.length} clip(s) waiting`,
             { category: 'twitch' });
         return 0;
     }
 
     const names = await gameNames(fresh.map(c => c.game_id));
+    // The feed's ping role (migration 480): a role, 'everyone' or none, let through and nothing else.
+    const { content, allowedMentions } = buildFeedContent({ template: null, vars: {}, pingRoleId: feed.ping_role_id });
     let posted = 0;
     for (const clip of fresh) {
         try {
-            await channel.send({ embeds: [clipEmbed(clip, names[clip.game_id])] });
+            await channel.send({ content, allowedMentions, embeds: [clipEmbed(clip, names[clip.game_id])] });
             // Record only after the post actually lands, or a failed send is never retried.
             await pool.execute(
                 'INSERT IGNORE INTO twitch_clip_seen (feed_id, clip_id) VALUES (?, ?)', [feed.id, clip.id]

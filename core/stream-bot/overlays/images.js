@@ -8,12 +8,18 @@
  *        kick-emote [id]            files.kick.com/emotes/<id>/fullsize
  *        tw-badge   [set, version]  the image Twitch lists for that badge (channel badges first, then global), read with
  *                                   the app token from Helix GET /chat/badges and /chat/badges/global (cached 6 hours)
+ *        7tv-emote  [id]            cdn.7tv.app/emote/<id>/2x.webp
+ *        bttv-emote [id]            cdn.betterttv.net/emote/<id>/2x
+ *        ffz-emote  [id]            cdn.frankerfacez.com/emote/<id>/2
  *
- * Only those two hosts are fetched (also after redirects), 5 s timeout, images only, at most 512 KB each. A small
- * in-memory cache (400 images or 24 MB, 6 hours) keeps a busy chat from fetching the same emote twice.
+ * Only those hosts are fetched (also after redirects), 5 s timeout, images only, at most 1 MB each (animated 7TV emotes).
+ * A small in-memory cache (400 images or 32 MB, 6 hours) keeps a busy chat from fetching the same emote twice.
  */
-export const IMAGE_LIMITS = Object.freeze({ items: 400, bytes: 24 * 1024 * 1024, ttlMs: 6 * 60 * 60 * 1000, fileBytes: 512 * 1024, timeoutMs: 5000, badgeTtlMs: 6 * 60 * 60 * 1000 });
-const HOSTS = new Set(['static-cdn.jtvnw.net', 'files.kick.com']);
+export const IMAGE_LIMITS = Object.freeze({ items: 400, bytes: 32 * 1024 * 1024, ttlMs: 6 * 60 * 60 * 1000, fileBytes: 1024 * 1024, timeoutMs: 5000, badgeTtlMs: 6 * 60 * 60 * 1000 });
+const HOSTS = new Set(['static-cdn.jtvnw.net', 'files.kick.com', 'cdn.7tv.app', 'cdn.betterttv.net', 'cdn.frankerfacez.com', 'cdn2.frankerfacez.com']);
+const STV = /^[A-Za-z0-9]{1,40}$/;
+const BTTV = /^[a-f0-9]{24}$/;
+const FFZ = /^\d{1,12}$/;
 const TW_EMOTE = /^[A-Za-z0-9_]{1,80}$/;
 const KICK_EMOTE = /^\d{1,12}$/;
 const BADGE_PART = /^[A-Za-z0-9_-]{1,40}$/;
@@ -96,6 +102,9 @@ export function createImageProxy({ fetchImpl = (...a) => fetch(...a), appToken =
             const [a, b] = parts;
             if (kind === 'tw-emote' && TW_EMOTE.test(String(a))) return fetchImage(`https://static-cdn.jtvnw.net/emoticons/v2/${a}/default/dark/2.0`);
             if (kind === 'kick-emote' && KICK_EMOTE.test(String(a))) return fetchImage(`https://files.kick.com/emotes/${a}/fullsize`);
+            if (kind === '7tv-emote' && STV.test(String(a))) return fetchImage(`https://cdn.7tv.app/emote/${a}/2x.webp`);
+            if (kind === 'bttv-emote' && BTTV.test(String(a))) return fetchImage(`https://cdn.betterttv.net/emote/${a}/2x`);
+            if (kind === 'ffz-emote' && FFZ.test(String(a))) return fetchImage(`https://cdn.frankerfacez.com/emote/${a}/2`);
             if (kind === 'tw-badge' && BADGE_PART.test(String(a)) && BADGE_PART.test(String(b))) {
                 const key = `${a}/${b}`;
                 let url = null;

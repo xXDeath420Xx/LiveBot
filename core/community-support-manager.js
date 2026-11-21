@@ -2,6 +2,7 @@ import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import { isSnowflake } from './streamer-departure.js';
 import { getStreamEndDefaults } from './stream-end-defaults.js';
+import { findBlockedStreamer } from './streamer-blocklist.js';
 
 // In-memory config cache per guild
 const configCache = new Map();
@@ -460,7 +461,16 @@ export async function performMonthlyRotation(guildId, client) {
     for (let i = 0; i < leaderboard.length; i++) {
         const entry = leaderboard[i];
         const resolved = await resolveTwitchUsername(guildId, entry.user_id);
-        const twitchUsername = resolved ? resolved.username : null;
+        let twitchUsername = resolved ? resolved.username : null;
+
+        // On the server's blocked streamers list (core/streamer-blocklist.js): they keep their rank on the
+        // leaderboard, but their stream is not added to the shoutout channel and their name is not posted.
+        if (twitchUsername && await findBlockedStreamer(guildId, {
+            platform: 'twitch', platformUserId: resolved.twitchId || null, username: twitchUsername,
+        })) {
+            logger.info(`[CommunitySupport] Rotation ${monthKey}: rank ${i + 1} is on the blocked streamers list; no shoutout`, { guildId });
+            twitchUsername = null;
+        }
 
         let streamerId = null;
 

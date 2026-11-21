@@ -11,9 +11,11 @@ export function canControl(member, state, config) {
   return member.permissions?.has?.(PermissionFlagsBits.ManageGuild) === true;
 }
 
+// The Go Live stream (the CertiFried-Cinema selfbot) was retired on 2026-11-20: every server plays films with Watch
+// Together (the Discord Activity), whatever an old row's watch_mode says.
 export async function getConfig(guildId) {
   const [rows] = await pool.execute('SELECT * FROM cinema_config WHERE guild_id = ?', [guildId]);
-  return rows[0] || null;
+  return rows[0] ? { ...rows[0], watch_mode: 'activity' } : null;
 }
 
 /**

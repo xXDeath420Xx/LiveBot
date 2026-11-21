@@ -1,0 +1,368 @@
+<%# AI moderation (core/ai-moderation.js): settings, per-category actions, privacy and models, catches with the AI's reason
+    and Confirm / This was fine, the weekly precision / recall report, signal weights and a "try a message" box. API-driven
+    (dashboard/routes/api/features/ai-moderation.js); needs `guild` in locals. Built on the settings-row kit
+    (dashboard/public/css/cf-settings.css). %>
+<div class="page-section" id="aiModPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-microchip"></i>
+                <span>AI moderation</span>
+            </div>
+            <div class="page-section-subtitle">A second look at messages the other filters let through. The AI is only asked when cheap checks are unsure, and every category starts as a mod card, never a punishment.</div>
+        </div>
+    </div>
+
+    <div id="amError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="amNotice" class="cf-notice is-info" role="status" hidden></div>
+    <div id="amMigrate" class="cf-notice is-warn" hidden>The database update for this page has not been applied yet; settings cannot be saved.</div>
+
+    <dl class="cf-kpis" id="amStats" aria-label="AI moderation at a glance">
+        <div class="cf-kpi"><dt>Status</dt><dd class="cf-kpi-value is-small">Loading</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="am-general-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-general-title">General</h2>
+                <p class="cf-section-desc">Catches post to the evidence channel set on <a href="/manage/<%= guild.id %>?page=message-threats">Message threats</a> and wait in its review queue.
+                    Staff, allowlisted members, ignored channels and age-restricted channels are never checked.</p>
+            </div>
+            <div class="cf-section-actions"><span id="amOnBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amEnabled">Check messages with AI moderation</label>
+                    <p class="cf-row-desc" id="amEnabled-desc">Until you change this it follows Phishing detection: on when that is on.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="amEnabled" aria-describedby="amEnabled-desc"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amConfidence">Confidence bar</label>
+                    <p class="cf-row-desc">Answers less sure than this are not shown as catches. Higher means fewer false alarms and more misses.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="amConfidence" type="number" min="50" max="99" class="form-control"><span class="cf-unit">%</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used by categories set to Delete + timeout.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="amTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amImages">Read text in images</label>
+                    <p class="cf-row-desc">Screenshots from new accounts, or posted alongside other warning signs, are read (OCR) and included.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="amImages"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amCap">Daily limit</label>
+                    <p class="cf-row-desc">Most AI checks per day. Repeats of the same message are answered from memory and do not count.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="amCap" type="number" min="10" max="5000" class="form-control"><span class="cf-unit">checks</span></div></div>
+            </div>
+            <div class="cf-section-foot"><button type="button" class="btn btn-primary" data-save="general">Save</button></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="am-actions-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-actions-title">What happens for each category</h2>
+                <p class="cf-section-desc">Log + mod card leaves the message up and posts it with Ban and Dismiss. A ban also needs very high confidence and strong independent evidence;
+                    otherwise it becomes a timeout or a delete. Self-harm is only ever a card, so someone can reach out.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="amActionRows"></div>
+        <div class="cf-section-foot"><button type="button" class="btn btn-primary" data-save="actions">Save</button></div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="am-privacy-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-privacy-title">Privacy and models</h2>
+                <p class="cf-section-desc">Messages are checked on CertiFried's own GPUs first. DMs are never checked. Members who opted out of message logging are never sent to the cloud model,
+                    and their text is not kept with verdicts.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amCloud">Cloud fallback (Google Gemini)</label>
+                    <p class="cf-row-desc" id="amCloud-desc">Used only when both of our own GPUs are unavailable.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="amCloud" class="form-select" aria-describedby="amCloud-desc">
+                        <option value="inherit">Same as the AI second opinion setting</option>
+                        <option value="allow">Allow</option>
+                        <option value="deny">Never send messages to the cloud</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amUseNetwork">Use the network scam list</label>
+                    <p class="cf-row-desc">Scams other servers confirmed are recognised here at once, without an AI call.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="amUseNetwork"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="amShare">Share confirmed scams with the network</label>
+                    <p class="cf-row-desc">When you confirm a scam, a fingerprint of the text (not the text), its links and the invite's server go on the shared list.
+                        Scam domains also reach the Twitch and Kick defenders.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="amShare"></div>
+            </div>
+            <div class="cf-section-foot"><button type="button" class="btn btn-primary" data-save="privacy">Save</button></div>
+            <div class="cf-rows-head">Models</div>
+            <div class="cf-list" id="amProviders"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="am-catches-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-catches-title">Catches</h2>
+                <p class="cf-section-desc">Confirm or mark as fine. Confirmed scams are recognised instantly next time; "This was fine" lowers the weight of the warning signs behind the catch.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row"><div class="cf-segmented" id="amTabs" role="group" aria-label="Show"></div></div>
+            <div class="am-catches" id="amCatches"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="am-report-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-report-title">Weekly accuracy</h2>
+                <p class="cf-section-desc">Precision: of the catches someone reviewed, how many were right. Recall: of the problems found (confirmed catches plus messages a moderator
+                    removed or banned for that the AI let through), how many it caught.</p>
+            </div>
+        </header>
+        <div class="cf-table-wrap"><table class="cf-table" id="amReport" aria-describedby="am-report-title"></table></div>
+        <div class="cf-rows-head">Warning signs your verdicts have changed</div>
+        <div class="cf-list" id="amSignals"></div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="am-try-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-try-title">Try a message</h2>
+                <p class="cf-section-desc">See what the checks and the AI make of a message. Nothing is posted, recorded or acted on.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text"><label class="cf-row-label" for="amTryText">Message</label></div>
+                <div class="cf-row-control"><textarea id="amTryText" rows="3" maxlength="1500" class="form-control"></textarea></div>
+            </div>
+            <div class="cf-section-foot"><button type="button" class="btn btn-secondary" id="amTryBtn">Check</button></div>
+            <div class="am-try" id="amTryOut"></div>
+        </div>
+    </section>
+</div>
+
+<style>
+  #aiModPage .cf-pill:empty, #aiModPage .cf-list:empty, #aiModPage .am-try:empty { display: none; }
+  #aiModPage .cf-rows-head:has(+ .cf-list:empty) { display: none; }
+  #aiModPage .am-catches > * + * { border-top: 1px solid var(--cf-border); }
+  #aiModPage .am-catch { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); min-width: 0; }
+  #aiModPage .am-catch-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+  #aiModPage .am-catch-title { font-weight: 600; color: var(--cf-text); }
+  #aiModPage .am-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #aiModPage .am-reason { color: var(--cf-text-2); }
+  #aiModPage .am-content { font-family: var(--cf-mono); font-size: 0.9em; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--cf-surface-2, transparent);
+    border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm, 6px); padding: var(--cf-2) var(--cf-3); max-height: 9rem; overflow: auto; margin: 0; }
+  #aiModPage .am-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); }
+  #aiModPage .am-num { font-variant-numeric: tabular-nums; text-align: right; }
+  #aiModPage .am-try { padding: var(--cf-4) var(--cf-5); display: grid; gap: var(--cf-2); }
+  #aiModPage .am-action-select { width: auto; min-width: 12rem; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('aiModPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/ai-moderation${p}`;
+  const $ = (id) => document.getElementById(id);
+  const OUTCOME = { banned: 'Banned', timeout: 'Timed out', deleted: 'Deleted', flagged: 'Flagged', review: 'Card posted', logged: 'Logged', held: 'Held (exempt / paused)', staff: 'Logged (staff)', failed: 'Could not act', skipped: 'Skipped' };
+  let state = null;
+  let tab = 'all';
+
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const pct = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const post = (p, body) => req(api(p), { method: 'POST', body: JSON.stringify(body || {}) });
+  const showError = (m) => { const e = $('amError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('amNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done) {
+    showError('');
+    try { const out = await fn(); if (done) notice(done); await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+  const stateRow = (title) => el('div', { class: 'cf-state cf-state--empty cf-state--compact' }, el('p', { class: 'cf-state-title', text: title }));
+
+  function renderStats() {
+    const c = state.config;
+    const weeks = state.report.ai || [];
+    const last = weeks[weeks.length - 1] || {};
+    const caught7 = Object.values(state.report.caughtByWeek || {}).slice(-1)[0] || 0;
+    const tile = (label, value, small) => el('div', { class: 'cf-kpi' }, el('dt', { text: label }), el('dd', { class: 'cf-kpi-value' + (small ? ' is-small' : ''), text: String(value) }));
+    const today = state.usage?.today || {};
+    $('amStats').replaceChildren(
+      tile('Status', c.enabled ? 'On' : 'Off', true),
+      tile('Catches this week', caught7),
+      tile('Precision this week', pct(last.precision)),
+      tile('Recall this week', pct(last.recall)),
+      tile('AI checks today', `${(today.local || 0) + (today.cloud || 0)} / ${c.dailyCap}`),
+    );
+    const b = $('amOnBadge'); b.className = 'cf-pill' + (c.enabled ? ' is-ok' : ''); b.textContent = c.enabled ? 'On' : 'Off';
+  }
+
+  function renderGeneral() {
+    const c = state.config;
+    $('amEnabled').checked = c.enabled;
+    $('amConfidence').value = Math.round(c.minConfidence * 100);
+    $('amTimeout').value = c.timeoutMinutes;
+    $('amImages').checked = c.scanImages;
+    $('amCap').value = c.dailyCap;
+    $('amCloud').value = c.cloudSetting;
+    $('amCloud-desc').textContent = `Used only when both of our own GPUs are unavailable. Right now: ${c.cloudAllowed ? 'allowed' : 'never used'} for this server.`;
+    $('amUseNetwork').checked = c.useNetwork;
+    $('amShare').checked = c.shareNetwork;
+  }
+
+  function renderActions() {
+    const order = state.actions.map(a => a.id);
+    const rows = state.categories.map(cat => {
+      const allowed = state.actions.filter(a => order.indexOf(a.id) <= order.indexOf(cat.max));
+      const sel = el('select', { class: 'form-select am-action-select', id: `amAct-${cat.id}`, 'data-cat': cat.id, 'aria-label': `${cat.label} action` },
+        allowed.map(a => el('option', { value: a.id, text: a.label })));
+      sel.value = state.config.actions[cat.id] && allowed.some(a => a.id === state.config.actions[cat.id]) ? state.config.actions[cat.id] : 'log';
+      return el('div', { class: 'cf-row' },
+        el('div', { class: 'cf-row-text' }, el('label', { class: 'cf-row-label', for: `amAct-${cat.id}`, text: cat.label }),
+          cat.max !== 'ban' ? el('p', { class: 'cf-row-desc', text: `At most: ${state.actions.find(a => a.id === cat.max)?.label}.` }) : null),
+        el('div', { class: 'cf-row-control' }, sel));
+    });
+    $('amActionRows').replaceChildren(...rows);
+  }
+
+  function renderProviders() {
+    const p = state.providers;
+    const line = (role, x) => el('div', { class: 'cf-list-item' },
+      el('div', { class: 'cf-list-main' },
+        el('div', { class: 'cf-list-title', text: `${role}: ${x.model}` }),
+        el('div', { class: 'cf-list-meta', text: x.down ? `Unavailable${x.lastError ? ` (${x.lastError})` : ''}` : x.lastOkAt ? `Answered ${when(x.lastOkAt)}${x.lastMs ? `, ${x.lastMs} ms` : ''}` : 'Not used yet since the last restart' })),
+      el('span', { class: 'cf-pill' + (x.down ? '' : ' is-ok'), text: x.down ? 'Down' : 'Ready' }));
+    const items = [
+      ...p.triage.map((x, i) => line(i === 0 ? 'Triage (fast)' : 'Triage fallback', x)),
+      ...p.escalate.map(x => line('Escalation (strong)', x)),
+      line('Cloud fallback', { ...p.cloud, model: p.cloud.configured ? p.cloud.model : 'not configured', down: p.cloud.down || !p.cloud.configured }),
+    ];
+    $('amProviders').replaceChildren(...items);
+  }
+
+  function renderCatches() {
+    const tabs = [['all', 'All'], ['unreviewed', 'Not reviewed'], ['confirmed', 'Confirmed'], ['fine', 'Marked fine']];
+    $('amTabs').replaceChildren(...tabs.map(([k, label]) => el('button', { type: 'button', class: 'cf-segment' + (tab === k ? ' active' : ''), 'aria-pressed': String(tab === k), onclick: () => { tab = k; load(); } }, label)));
+    const list = state.catches || [];
+    if (!list.length) { $('amCatches').replaceChildren(stateRow(tab === 'all' ? 'No catches yet.' : 'Nothing here.')); return; }
+    const can = state.actor.canReview;
+    $('amCatches').replaceChildren(...list.map(c => el('div', { class: 'am-catch' },
+      el('div', { class: 'am-catch-head' },
+        el('span', { class: 'am-catch-title', text: c.categoryLabel || 'Catch' }),
+        c.confidence != null ? el('span', { class: 'cf-pill', text: pct(c.confidence) }) : null,
+        el('span', { class: 'cf-pill', text: OUTCOME[c.outcome] || c.outcome || '' }),
+        c.label ? el('span', { class: 'cf-pill' + (c.label === 'confirmed' ? ' is-ok' : ''), text: c.label === 'confirmed' ? 'Confirmed' : 'Marked fine' }) : null,
+        el('span', { class: 'am-muted', text: `#${c.id} · ${when(c.at)}` })),
+      el('div', { class: 'am-muted', text: `${c.user?.name || c.userId}${c.channelName ? ` in #${c.channelName}` : ''}${c.model ? ` · ${c.model}${c.tier === 'escalate' ? ' (escalated)' : ''}` : c.provider === 'signature' ? ' · confirmed signature' : ''}` }),
+      c.reason ? el('div', { class: 'am-reason', text: c.reason }) : null,
+      c.content ? el('pre', { class: 'am-content', text: c.content }) : null,
+      c.signals?.length ? el('div', { class: 'cf-chips' }, c.signals.map(s => el('span', { class: 'cf-chip', text: s.replace(/_/g, ' ') }))) : null,
+      can ? el('div', { class: 'am-actions' },
+        el('button', { type: 'button', class: 'btn btn-primary btn-sm', disabled: c.label === 'confirmed', onclick: () => act(() => post(`/catches/${c.id}/label`, { label: 'confirmed' }), 'Confirmed. Similar messages will be caught faster.') }, 'Confirm'),
+        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', disabled: c.label === 'fine', onclick: () => act(() => post(`/catches/${c.id}/label`, { label: 'fine' }), 'Marked as fine. The signs behind it now count for less.') }, 'This was fine')) : null,
+    )));
+  }
+
+  function renderReport() {
+    const rows = state.report.ai || [];
+    const head = el('thead', {}, el('tr', {}, ['Week of', 'Catches', 'Confirmed', 'Marked fine', 'Missed', 'Precision', 'Recall'].map((h, i) => el('th', { scope: 'col', class: i ? 'am-num' : null, text: h }))));
+    const body = el('tbody', {}, rows.length ? rows.slice().reverse().map(r => el('tr', {},
+      el('td', { text: r.week }), el('td', { class: 'am-num', text: r.caught }), el('td', { class: 'am-num', text: r.confirmed }), el('td', { class: 'am-num', text: r.fine }),
+      el('td', { class: 'am-num', text: r.missed }), el('td', { class: 'am-num', text: pct(r.precision) }), el('td', { class: 'am-num', text: pct(r.recall) })))
+      : el('tr', {}, el('td', { colspan: '7', class: 'cf-cell-muted', text: 'No reviewed catches yet. Confirm or mark catches as fine to see accuracy here.' })));
+    $('amReport').replaceChildren(head, body);
+    const sig = (state.signals || []).filter(s => s.weight !== 1);
+    $('amSignals').replaceChildren(...sig.map(s => el('div', { class: 'cf-list-item' },
+      el('div', { class: 'cf-list-main' }, el('div', { class: 'cf-list-title', text: s.id.replace(/^detector:/, 'detector: ').replace(/_/g, ' ') }),
+        el('div', { class: 'cf-list-meta', text: `Here: ${s.tp} confirmed, ${s.fp} fine. Network: ${s.netTp} confirmed, ${s.netFp} fine.` })),
+      el('span', { class: 'cf-pill' + (s.weight >= 1 ? ' is-ok' : ''), text: `× ${s.weight.toFixed(2)}` }))));
+  }
+
+  function render() {
+    $('amMigrate').hidden = state.migrated;
+    renderStats(); renderGeneral(); renderActions(); renderProviders(); renderCatches(); renderReport();
+    const can = state.actor.canConfigure;
+    root.querySelectorAll('[data-save], #amTryBtn').forEach(b => { b.disabled = !can || !state.migrated; });
+  }
+
+  async function load() {
+    try { state = await req(api(`/?status=${encodeURIComponent(tab)}`)); render(); } catch (err) { showError(err.message); }
+  }
+
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-save]');
+    if (!b) return;
+    const kind = b.dataset.save;
+    let body = {};
+    if (kind === 'general') body = { enabled: $('amEnabled').checked, minConfidence: Number($('amConfidence').value) / 100, timeoutMinutes: Number($('amTimeout').value), scanImages: $('amImages').checked, dailyCap: Number($('amCap').value) };
+    if (kind === 'actions') body = { actions: Object.fromEntries([...root.querySelectorAll('[data-cat]')].map(s => [s.dataset.cat, s.value])) };
+    if (kind === 'privacy') body = { cloud: $('amCloud').value, useNetwork: $('amUseNetwork').checked, shareNetwork: $('amShare').checked };
+    act(() => post('/settings', body), 'Saved.');
+  });
+
+  $('amTryBtn').addEventListener('click', async () => {
+    showError('');
+    const out = $('amTryOut');
+    out.replaceChildren(el('p', { class: 'am-muted', text: 'Checking…' }));
+    try {
+      const r = await post('/try', { text: $('amTryText').value });
+      const c = r.ai?.classification;
+      out.replaceChildren(
+        el('div', {}, el('strong', { text: r.decision?.catch ? `Would catch: ${state.categories.find(x => x.id === r.decision.category)?.label} (${pct(r.decision.confidence)}), action ${state.actions.find(a => a.id === r.decision.action)?.label}` : 'Would not catch' })),
+        el('div', { class: 'am-muted', text: `Warning-sign score ${r.score} (${r.band}). ${c ? `AI: ${c.labels.length ? c.labels.map(l => `${l.category} ${pct(l.confidence)}`).join(', ') : 'nothing found'}${r.ai.model ? ` · ${r.ai.model}` : ''}` : `AI: no answer (${r.ai?.status})`}` }),
+        c?.reason ? el('div', { class: 'am-reason', text: c.reason }) : null,
+        r.signals?.length ? el('div', { class: 'cf-chips' }, r.signals.map(s => el('span', { class: 'cf-chip', text: s.id.replace(/_/g, ' ') }))) : null,
+        el('div', { class: 'am-muted', text: `Read as: ${r.folded}` }),
+      );
+    } catch (err) { out.replaceChildren(); showError(err.message); }
+  });
+
+  load();
+})();
+</script>

@@ -161,7 +161,8 @@ export class TwitchBot {
                 const deleted = await checkAutomod({
                     channel,
                     tags,
-                    message
+                    message,
+                    reply: (text) => this.say(channel, text)
                 });
                 if (deleted) return;
 

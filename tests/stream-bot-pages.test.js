@@ -123,9 +123,9 @@ test('the scope table covers every Stream bot scope and marks the Phase 4 ones',
     assert.deepEqual(rows.map((r) => r.scope), [...STREAM_BOT_SCOPES]);
     for (const r of rows) assert.ok(r.enables.length > 3, `${r.scope}: says what it is for`);
     const later = rows.filter((r) => r.later).map((r) => r.scope).sort();
-    // The stream actions use the manage scopes now (2026-11-19); only redemption management is still to come.
-    assert.deepEqual(later, ['channel:manage:redemptions']);
-    assert.equal(rows.find((r) => r.scope === 'user:read:chat').enables, 'Chat messages');
+    // The stream actions use the manage scopes now (2026-11-19) and the Redemptions queue uses channel:manage:redemptions (2026-11-20).
+    assert.deepEqual(later, []);
+    assert.equal(rows.find((r) => r.scope === 'user:read:chat').enables, 'Chat messages, Message deleted, chat cleared and chat mode triggers');
 });
 
 test('managed servers: Manage Server or owner only, from the session', () => {

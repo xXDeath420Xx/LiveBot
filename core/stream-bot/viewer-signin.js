@@ -19,6 +19,7 @@
  *     .finish(provider, { code, error, state }, saved) → { platform, id, login, name }   throws ViewerSignInError(reason)
  */
 import crypto from 'node:crypto';
+import { assertAllowedScopes } from './youtube/config.js';
 
 export const VIEWER_PROVIDERS = Object.freeze({
     twitch: Object.freeze({
@@ -78,7 +79,8 @@ export function createViewerSignIn({ creds = {}, baseUrl, fetchImpl = globalThis
         url.searchParams.set('client_id', creds[provider].clientId);
         url.searchParams.set('redirect_uri', redirectUri(provider));
         url.searchParams.set('response_type', 'code');
-        url.searchParams.set('scope', p.scope);
+        // Google: only the scopes CertiFried may ask for (youtube/config.js ALLOWED_GOOGLE_SCOPES); anything else throws.
+        url.searchParams.set('scope', provider === 'youtube' ? assertAllowedScopes(p.scope).join(' ') : p.scope);
         url.searchParams.set('state', state);
         if (provider === 'twitch') url.searchParams.set('force_verify', 'true');   // pick the account, every time
         if (provider === 'youtube') url.searchParams.set('prompt', 'select_account');   // pick the Google account, every time
@@ -112,7 +114,7 @@ export function createViewerSignIn({ creds = {}, baseUrl, fetchImpl = globalThis
             || !crypto.timingSafeEqual(Buffer.from(saved.state), Buffer.from(state))) fail('expired');
         if (saved.at && Date.now() - saved.at > 10 * 60_000) fail('expired');
         if (error) fail('denied');
-        if (typeof code !== 'string' || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) fail('no_code');
+        if (typeof code !== 'string' || !/^[A-Za-z0-9._~/-]{1,1024}$/.test(code)) fail('no_code');
         const p = VIEWER_PROVIDERS[provider];
         const form = new URLSearchParams({ client_id: creds[provider].clientId, client_secret: creds[provider].clientSecret, code,
             grant_type: 'authorization_code', redirect_uri: redirectUri(provider) });

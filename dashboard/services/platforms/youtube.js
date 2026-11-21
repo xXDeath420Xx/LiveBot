@@ -1,17 +1,21 @@
 import fetch from 'node-fetch';
+import { BOT_SCOPES, assertAllowedScopes } from '../../../core/stream-bot/youtube/config.js';
 
 const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 const BASE_URL = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/+$/, '');
 const REDIRECT_URI = `${BASE_URL}/stream/connect/youtube/callback`;
-const SCOPE = 'https://www.googleapis.com/auth/youtube';
+// youtube.force-ssl, never the broad `youtube` scope: liveStreams.insert and liveBroadcasts.insert / bind accept force-ssl
+// (Google OAuth verification, 2026-11-21). Any scope outside core/stream-bot/youtube/config.js ALLOWED_GOOGLE_SCOPES is refused.
+const SCOPE = BOT_SCOPES.join(' ');
 const API = 'https://www.googleapis.com/youtube/v3';
 
 // opts.scope: the stream bot's "Link YouTube" asks for youtube.force-ssl only (core/stream-bot/youtube/config.js BOT_SCOPES, H-741).
 // opts.codeChallenge: PKCE (S256), which stream-connect.js sends for every platform; handleCallback sends the verifier.
 export function getAuthUrl(state, opts = {}) {
+  const scope = assertAllowedScopes(opts.scope || SCOPE).join(' ');
   const params = new URLSearchParams({
-    client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: opts.scope || SCOPE,
+    client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope,
     access_type: 'offline', prompt: 'consent', state,
   });
   if (opts.codeChallenge) { params.set('code_challenge', opts.codeChallenge); params.set('code_challenge_method', 'S256'); }

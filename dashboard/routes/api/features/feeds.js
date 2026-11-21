@@ -1,4 +1,5 @@
-// Content feeds API (Reddit / YouTube / Twitter / Bluesky / RSS).
+// Content feeds API (Reddit / YouTube / Twitter / Bluesky / RSS), plus the Post-to picker (GET /targets) and
+// feed threads (POST /threads).
 // Mounted at /api/guilds/:guildId/feeds by the main API router.
 
 import express from 'express';
@@ -7,8 +8,59 @@ import logger from '../../../../utils/logger.js';
 import { cleanList, FEED_MESSAGE_MAX, FEED_KEYWORDS_MAX } from '../../../../core/feed-message.js';
 import { fetchFeed, RSS_MAX_PER_GUILD } from '../../../../core/rss-feed.js';
 import { checkUrl } from '../../../../utils/safe-fetch.js';
+import { isFeedTarget, loadFeedTargets, createFeedThread, pingProblem, FeedTargetError, targetLabel } from '../../../../core/feed-target.js';
 
 const router = express.Router({ mergeParams: true });
+
+/** The guild as the bot that serves it sees it, or null. */
+function feedGuild(guildId) {
+    return global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
+}
+
+/**
+ * A channel id a feed may post to in this guild: a text or announcement channel, or a thread in one (or a
+ * forum post). Threads are often not cached, so the API is asked when the cache misses.
+ */
+async function feedTargetIn(guild, raw) {
+    const id = String(raw || '').trim();
+    if (!guild || !/^\d{17,20}$/.test(id)) return null;
+    const ch = guild.channels?.cache?.get(id) || await guild.channels?.fetch?.(id).catch(() => null);
+    return ch && String(ch.guildId ?? guild.id) === String(guild.id) && isFeedTarget(ch) ? ch : null;
+}
+
+// ─────────────── POST-TO PICKER ───────────────
+// GET /targets: the channels and active threads a feed can post into ("#channel › thread"), and whether the
+// bot can ping any role (Mention @everyone, @here and All Roles) or only mentionable ones.
+router.get('/targets', async (req, res) => {
+    const guild = feedGuild(req.params.guildId);
+    if (!guild) return res.status(503).json({ error: 'The bot for this server is not connected right now.' });
+    try {
+        const targets = await loadFeedTargets(guild);
+        res.json({ targets, canMentionAll: !pingProblem(guild, null, 'everyone') });
+    } catch (e) {
+        logger.error('[API Feeds] targets error', { err: e.message });
+        res.status(500).json({ error: 'Could not list the channels' });
+    }
+});
+
+// POST /threads { channel_id, name }: the server's bot makes a public thread (one-week auto-archive) under that
+// channel for a feed to post into, or returns the existing one with that name.
+router.post('/threads', async (req, res) => {
+    const guild = feedGuild(req.params.guildId);
+    if (!guild) return res.status(503).json({ error: 'The bot for this server is not connected right now.' });
+    try {
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const { thread, reused } = await createFeedThread(guild, body.channel_id, body.name,
+            { reason: `Feed thread, requested on the dashboard by ${req.user?.username || req.user?.id || 'an admin'}` });
+        const label = targetLabel(thread, thread.parent || guild.channels.cache.get(thread.parentId));
+        logger.info(`[API Feeds] ${reused ? 'Reused' : 'Created'} feed thread ${thread.id} (${label}) in ${guild.id}`);
+        res.json({ success: true, reused, thread: { id: String(thread.id), name: thread.name, label, parentId: String(thread.parentId) } });
+    } catch (e) {
+        if (e instanceof FeedTargetError) return res.status(e.status).json({ error: e.message });
+        logger.error('[API Feeds] thread create error', { err: e.message });
+        res.status(500).json({ error: 'Discord would not create the thread' });
+    }
+});
 
 // ─────────────── REDDIT ───────────────
 router.post('/reddit', async (req, res) => {
@@ -152,10 +204,10 @@ router.delete('/bluesky/:id', async (req, res) => {
 router.post('/rss', async (req, res) => {
     const { guildId } = req.params;
     try {
-        const guild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
+        const guild = feedGuild(guildId);
         const channelId = String(req.body?.channel_id || '').trim();
-        const channel = /^\d{17,20}$/.test(channelId) ? guild?.channels?.cache?.get(channelId) : null;
-        if (!channel || ![0, 5].includes(channel.type)) return res.status(400).json({ error: 'Choose a text or announcement channel in this server.' });
+        const channel = await feedTargetIn(guild, channelId);
+        if (!channel) return res.status(400).json({ error: 'Choose a text or announcement channel, or a thread in one, in this server.' });
         let url;
         try {
             url = checkUrl(req.body?.feed_url).href;
@@ -246,6 +298,13 @@ const FEED_KINDS = {
             include_reposts: { col: 'filter_reposts', type: 'bool', invert: true },
         },
     },
+    // The Fortnite feed (jobs/fortnite-feed-checker.js): channel and ping only; it has no message template.
+    fortnite: {
+        table: 'fortnite_feeds', channelCol: 'channel_id',
+        fields: {
+            ping_role_id: { col: 'ping_role_id', type: 'ping' },
+        },
+    },
     rss: {
         table: 'rss_feeds', channelCol: 'channel_id',
         fields: {
@@ -260,10 +319,6 @@ const FEED_KINDS = {
 class FeedInputError extends Error {}
 
 const asBool = (v) => v === true || v === 1 || v === '1' || v === 'true' || v === 'on';
-
-function feedGuild(guildId) {
-    return global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
-}
 
 /** One field's value as stored, or a FeedInputError explaining what is wrong with it. */
 function feedValue(spec, raw, guild) {
@@ -305,9 +360,9 @@ router.patch('/:kind/:id', async (req, res) => {
         const values = [];
         if (body.channel_id !== undefined) {
             const ch = String(body.channel_id || '').trim();
-            const channel = /^\d{17,20}$/.test(ch) ? guild?.channels?.cache?.get(ch) : null;
-            if (!channel || ![0, 5].includes(channel.type)) {
-                return res.status(400).json({ error: 'Choose a text or announcement channel in this server.' });
+            const channel = await feedTargetIn(guild, ch);
+            if (!channel) {
+                return res.status(400).json({ error: 'Choose a text or announcement channel, or a thread in one, in this server.' });
             }
             sets.push(`\`${def.channelCol}\` = ?`);
             values.push(ch);
@@ -326,7 +381,13 @@ router.patch('/:kind/:id', async (req, res) => {
         if (!result.affectedRows) return res.status(404).json({ error: 'Feed not found' });
         const [[feed]] = await pool.execute(`SELECT * FROM \`${def.table}\` WHERE id = ? AND guild_id = ?`, [id, guildId]);
         logger.info(`[API Feeds] ${kind} feed ${id} updated in ${guildId}: ${sets.map(s => s.split('`')[1]).join(', ')}`);
-        res.json({ success: true, feed });
+        // Tell the page when the saved ping cannot notify anyone (role not mentionable and no Mention Everyone).
+        let pingWarning = null;
+        if (feed?.ping_role_id && guild) {
+            const target = await feedTargetIn(guild, feed[def.channelCol]);
+            pingWarning = pingProblem(guild, target, feed.ping_role_id);
+        }
+        res.json({ success: true, feed, pingWarning });
     } catch (e) {
         if (e instanceof FeedInputError) return res.status(400).json({ error: e.message });
         if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'This server already has that feed posting in that channel.' });

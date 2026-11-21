@@ -87,6 +87,10 @@ export function sbTriggerName(code) {
 }
 
 const STATE3 = (s, a, b, c) => (Number(s) === 0 ? a : Number(s) === 1 ? b : c);
+const STATE3_STRICT = (s, a, b, c) => ({ 0: a, 1: b, 2: c })[Number(s)] || null;
+// Stored state numbers (evidence in convertSubActions): streaming is 1 Start / 0 Stop, the replay buffer 0 Start / 1 Stop / 2 Save.
+export const SB_STREAMING = Object.freeze({ 1: 'start', 0: 'stop' });
+export const SB_REPLAY = Object.freeze({ 0: 'start', 1: 'stop', 2: 'save' });
 
 const asText = (buf) => (Buffer.isBuffer(buf) ? buf.toString('utf8').replace(/^﻿/, '') : String(buf ?? ''));
 function json(files, path) {
@@ -140,9 +144,24 @@ export function convertSubActions(subs, ctx = {}, depth = 0, randomPick = false)
         const before = out.actions.length;
         const type = num(s.type, -1);
         if (s.enabled === false) { out.notes.push('A turned-off sub-action was left out'); continue; }
-        // Type numbers and names: Streamer.bot.exe's sub-action enum (streamerbot-types.js). State numbers follow the order
-        // of each sub-action's dropdown in Streamer.bot's documentation (docs.streamer.bot/api/sub-actions/…):
-        //   visibility  0 Visible, 1 Hidden, 2 Toggle        mute  0 Muted, 1 Not muted, 2 Toggle        streaming  0 Start, 1 Stop
+        // Type numbers and names: Streamer.bot.exe's sub-action enum (streamerbot-types.js). State numbers (2026-11-20; the
+        // docs' dropdown order is NOT the stored number, it had streaming inverted), each with its evidence:
+        //   visibility (30, 401)  0 Visible, 1 Hidden, 2 Toggle. Owner's actions.json: "Kill Counters" hides Firebot with 1,
+        //                         "Lets Have Counters" shows it with 0; "I'm Not Here (Work)" hides Camera with 1 and shows
+        //                         "Gone to Work" with 0.
+        //   mute (42, 413)        0 Mute, 1 Unmute, 2 Toggle. Streamer.bot.exe's C# proxy (CPH): ObsSourceMute passes 0,
+        //                         ObsSourceUnMute 1, ObsSourceMuteToggle 2 to ObsSetSourceMuteState. Owner's file: the four
+        //                         "Toggle …" actions use 2, "I'm HERE" unmutes Base Mic with 1, "I'm Not Here" mutes it with 0.
+        //   streaming (33)        1 Start, 0 Stop. The owner's "Go Live" ({"type":33,"state":1}) shows "Start Streaming" in
+        //                         Streamer.bot's UI (checked by the owner). 0 is the only other value seen; a Stop step is held
+        //                         for review by the switchover anyway. Any other number is not guessed (reported as a gap).
+        //   replay buffer (321)   0 Start, 1 Stop, 2 Save. CPH: ObsReplayBufferStart passes 0, ObsReplayBufferStop 1,
+        //                         ObsReplayBufferSave 2 to ObsSetReplayBufferState. (Note: the opposite way round to streaming.)
+        //   filter (35, 47)       0 On, 1 Off, 2 Toggle. CPH: ObsShowFilter passes 0, ObsHideFilter 1, ObsToggleFilter 2 to
+        //                         ObsSetFilterState. Mapped only when the step names its source/scene and filter.
+        //   recording (45, 415)   not mapped: no recording step in the owner's file, and CPH's Start/StopRecording do not go
+        //                         through a numbered state, so there is nothing to read the numbers from. Reported as a gap.
+        //   Streamer.bot 1.0.x has no virtual camera sub-action.
         const name = sbSubActionName(type);
         const label = `${name} (${type})`;
         const slobs = () => out.notes.push('A Streamlabs Desktop step became an OBS step with the same scene and source names (CertiFried Studio controls OBS)');
@@ -151,7 +170,15 @@ export function convertSubActions(subs, ctx = {}, depth = 0, randomPick = false)
             case 'Message': { // Twitch: send message to channel
                 const text = tr(str(s.text, 2000));
                 if (/^\s*\/clear\b/i.test(text)) { out.actions.push({ type: 'chat.clear' }); break; }
-                if (text.trim()) out.actions.push({ type: 'chat.send', platform: 'twitch', text, ...(/^![^\s]+$/.test(text.trim()) ? { _commandText: text.trim() } : {}) });
+                if (!text.trim()) break;
+                // "Use bot" off: Streamer.bot sent it from the streamer's account. Other bots act on such lines for whoever sent
+                // them (!pokecatch, !cheers …), so they become "Send a chat message as you" (stream.say, 2026-11-20).
+                if (s.useBot === false) {
+                    out.actions.push({ type: 'stream.say', text, ...(/^![^\s]+$/.test(text.trim()) ? { _commandText: text.trim() } : {}) });
+                    out.notes.push('Streamer.bot sent this from your account ("Use bot" off), so it is sent as you: "Send a chat message as you" (re-approve Twitch on Connections once)');
+                    break;
+                }
+                out.actions.push({ type: 'chat.send', platform: 'twitch', text, ...(/^![^\s]+$/.test(text.trim()) ? { _commandText: text.trim() } : {}) });
                 break;
             }
             case 'TwitchAnnounce': {
@@ -183,9 +210,25 @@ export function convertSubActions(subs, ctx = {}, depth = 0, randomPick = false)
                 if (name.startsWith('Slobs')) slobs();
                 break;
             case 'ObsStreaming': {
-                const state = Number(s.state) === 1 ? 'stop' : 'start';
+                const state = SB_STREAMING[Number(s.state)];
+                if (!state) { gap('unknown.effect', label, ` (state ${String(s.state).slice(0, 10)})`); break; }
                 out.actions.push({ type: 'obs.stream', state });
-                out.notes.push(`Streamer.bot had this set to ${state === 'stop' ? 'Stop' : 'Start'} streaming; check that is what you want before turning it on`);
+                // A Stop step is held by the switchover ("It stops your stream"); Start is what a Go Live action is for.
+                if (state === 'stop') out.notes.push('Streamer.bot had this set to Stop streaming; check that is what you want before turning it on');
+                break;
+            }
+            case 'ObsSetReplayBufferState': {
+                const state = SB_REPLAY[Number(s.state)];
+                if (state) out.actions.push({ type: 'obs.replay', state });
+                else gap('unknown.effect', label, ` (state ${String(s.state).slice(0, 10)})`);
+                break;
+            }
+            case 'ObsSourceFilterState': case 'ObsSceneFilterState': {
+                const source = name === 'ObsSceneFilterState' ? s.sceneName : s.sourceName;
+                const state = STATE3_STRICT(s.state, 'enable', 'disable', 'toggle');
+                if (typeof source === 'string' && source && typeof s.filterName === 'string' && s.filterName && state) {
+                    out.actions.push({ type: 'obs.filter', source: str(source, 200), filter: str(s.filterName, 200), state });
+                } else gap('unknown.effect', label, fieldHint(s));
                 break;
             }
             case 'ObsSetBrowserSourceUrl':
@@ -413,6 +456,11 @@ export function parseStreamerbot({ files = null, exported = null, wantViewers = 
     }
     if (bundle.automations.some((a) => /spotify/i.test(a.group || a.name)) || bundle.dropped.some((d) => /spotify/i.test(d.name))) used.add('spotify');
     for (const s of [...used].sort()) if (s !== 'speech') bundle.integrations.push({ service: s, detail: '' });
+    // Speech-to-text: how sure Streamer.bot wanted to be before a phrase counted (0 to 1). The switchover suggests it for Studio.
+    const stt = settings?.speechToText;
+    if (stt && stt.confidenceThreshold != null && stt.confidenceThreshold !== '' && Number.isFinite(Number(stt.confidenceThreshold))) {
+        bundle.speech = { confidenceThreshold: Math.max(0, Math.min(1, Number(stt.confidenceThreshold))) };
+    }
     const obs = data ? null : clean(json(fm, 'obs.json'));
     const conn = list(obs?.connections).find((c) => c?.default) || list(obs?.connections)[0];
     if (conn) bundle.obs = { host: str(conn.host || '127.0.0.1', 100), port: num(conn.port, 4455) };
@@ -488,12 +536,15 @@ function triggerOf(code, t, stt) {
         }
         trigger.config = { phrases };
     } else if (code === 196 || code === 496) {
-        // Power-ups come through "Power-up or Bits used" (bits.used, EventSub channel.bits.use). Twitch reports a power-up
-        // by kind, not by Streamer.bot's custom power-up id, so the mapper matches it by its Bits cost when the power-up's
-        // definition is in the import (Firebot power-ups.json), and says so.
+        // Power-ups come through "Power-up or Bits used" (bits.used, EventSub channel.bits.use). A custom power-up (496) is
+        // reported as type custom_power_up with custom_power_up.reward_id, the id Streamer.bot keys it on (metadata.powerUpId,
+        // events.js, 2026-11-20), so it is matched by that id. The built-in ones (196) are matched by kind.
         kind = 'power_up';
         rewardId = str(t.customPowerUpId || '', 64) || null;
-        trigger.config.bitsKind = 'power_up';
+        if (code === 496 && rewardId) {
+            trigger.config.bitsKind = 'custom_power_up';
+            trigger.conditions.push({ type: 'metadata', path: 'powerUpId', op: 'eq', value: rewardId });
+        } else trigger.config.bitsKind = 'power_up';
     } else if (code === 706) {
         kind = 'app_started';
         notes.push('Streamer.bot started → CertiFried Studio connected');

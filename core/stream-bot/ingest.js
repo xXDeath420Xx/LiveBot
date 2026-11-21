@@ -26,6 +26,9 @@ const CHAT_DEDUPE_MS = 10 * 60_000;
 
 // Not stored in the event log (like chat when the profile keeps none): they can be very frequent.
 const UNSTORED = new Set(['variable.changed']);
+// Events feature modules raise themselves on a viewer's platform (ingest.allowInternal; core/stream-bot/control: first words,
+// viewer arrived, viewer count, upcoming ad, chat polls).
+const INTERNAL = new Set();
 
 export function createIngest({ store, engine, feed, hub = null, logger = null, now = () => Date.now(), ignoreLogins = [], onChatLine = null } = {}) {
     const log = (level, msg, meta) => { try { logger?.[level]?.(`[StreamBot] ${msg}`, meta); } catch { /* ignore */ } };
@@ -132,7 +135,7 @@ export function createIngest({ store, engine, feed, hub = null, logger = null, n
             return 1;
         }),
         internal: safe('internal', async (profileId, ev) => {
-            if (!ev || !(['studio', 'bot'].includes(ev.platform) || (ev.internal === true && ev.type === 'viewer.rank_up'))) return 0;
+            if (!ev || !(['studio', 'bot'].includes(ev.platform) || (ev.internal === true && (ev.type === 'viewer.rank_up' || INTERNAL.has(ev.type))))) return 0;
             await accept({ profileId: Number(profileId) }, ev);
             return 1;
         }),
@@ -145,6 +148,8 @@ export function createIngest({ store, engine, feed, hub = null, logger = null, n
         },
         noteSent,
         isEcho,
+        /** Let internal(profileId, ev) take this event type when ev.internal is true; store: false keeps it out of the event log. */
+        allowInternal(type, { store = true } = {}) { INTERNAL.add(String(type)); if (!store) UNSTORED.add(String(type)); },
         invalidate(profileId = null) {
             channelCache.clear();
             if (profileId == null) profileCache.clear(); else profileCache.delete(Number(profileId));

@@ -23,6 +23,12 @@
     <div class="cf-kpi"><dt>Rank</dt><dd class="cf-kpi-value"><%= viewer.rank || 'None' %></dd></div>
 </dl>
 
+<% if (!viewer.pointsAllowed) { %>
+<section class="cf-section" aria-labelledby="sbv-points-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-points-title"><%= viewer.currency.charAt(0).toUpperCase() + viewer.currency.slice(1) %></h2>
+        <p class="cf-section-desc">This is a YouTube viewer. YouTube viewers do not earn or spend <%= viewer.currency %>: YouTube's API rules do not allow rewards for subscribing, joining or chatting. Their record is deleted 30 days after they were last seen.</p></div></header>
+</section>
+<% } else { %>
 <section class="cf-section" aria-labelledby="sbv-points-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-points-title">Change <%= viewer.currency %></h2>
         <p class="cf-section-desc">The change and your note go into the history below.</p></div></header>
@@ -47,10 +53,11 @@
         </div>
     </form>
 </section>
+<% } %>
 
 <section class="cf-section" aria-labelledby="sbv-acc-title">
     <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbv-acc-title">Accounts</h2>
-        <p class="cf-section-desc"><% if (viewer.linkable) { %>If this person also watches on <%= viewer.otherPlatform === 'kick' ? 'Kick' : 'Twitch' %>, link the two accounts: their <%= viewer.currency %> are added together and their watch time and messages are shown as one. Only link accounts you know belong to the same person.<% } else { %>You linked these accounts as one person: their <%= viewer.currency %> are kept on the first one, and watch time and messages are added up.<% } %></p></div></header>
+        <p class="cf-section-desc"><% if (viewer.linkable && viewer.youtube) { %>If this person also watches on Twitch, link the two accounts: their watch time and messages are shown as one, and their <%= viewer.currency %> stay with the Twitch account. Only link accounts you know belong to the same person.<% } else if (viewer.linkable) { %>If this person also watches on <%= viewer.otherPlatform === 'kick' ? 'Kick' : 'Twitch' %>, link the two accounts: their <%= viewer.currency %> are added together and their watch time and messages are shown as one. Only link accounts you know belong to the same person.<% } else { %>You linked these accounts as one person: their <%= viewer.currency %> are kept on the first one, and watch time and messages are added up.<% } %></p></div></header>
     <div class="cf-rows">
         <div class="cf-table-wrap">
             <table class="cf-table cf-table--stack">

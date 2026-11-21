@@ -8,6 +8,8 @@
  *   updater.js        electron-updater feed     logger.js   rotating, redacted log
  *   lights/           Phase 5: Govee LAN, Hue, LIFX, Nanoleaf, Elgato, Litra (found on the LAN / USB only after Find lights)
  *   voicemeeter.js    Phase 5: Voicemeeter Remote API (off until turned on)
+ *   heart-rate.js     0.2.14: heart rate from a watch or strap over Bluetooth LE (off until a device is chosen), sent to
+ *                     CertiFried at most once a second for overlays and automations
  *   bridge-server.js  Phase 5: the Stream Deck plugin's connection, 127.0.0.1 only (off until turned on)
  *   sandbox.js        tests: CF_STUDIO_DEVICE_SANDBOX points every device at 127.0.0.1 mocks (never the real LAN or USB)
  *
@@ -16,6 +18,8 @@
  *
  * Environment for testing only: CF_STUDIO_USER_DATA puts settings, logs and sounds in another folder.
  */
+// 0.2.13: onnxruntime (the voice detector) has Microsoft's 1DS telemetry built in; off for this process before anything loads it.
+process.env.ORT_DISABLE_TELEMETRY = '1';
 const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow, Tray, Menu, ipcMain, safeStorage, globalShortcut, shell, nativeImage, session, dialog, clipboard } = require('electron');
@@ -43,8 +47,22 @@ const { obsDir, locateDockConfig, readDocks, isObsRunning, addDocks, backupProfi
 const { themesDirFor, themeInstalled, installTheme, planStarterScenes, createStarterScenes, STARTER_SCENES } = require('./obs-setup');
 const { cleanOverlays, browserInputs, planOverlay, addOverlay } = require('./obs-overlays');
 const { sourceHandlers } = require('./obs-sources');
-const { createVoice } = require('./voice');
+const { createVoice, clampThreshold } = require('./voice');
+// 0.2.12: Silero voice activity detection + Whisper (voice-vad.js, whisper-engine.js, voice-whisper.js); voice.js (System.Speech)
+// is kept only as the last resort when Whisper cannot run on this PC.
+const { createWhisperVoice, clampMatch } = require('./voice-whisper');
+// 0.2.13: "Teach Studio how you say it" (voice-train.js) and learning from the voice log: "heard as" aliases and
+// "not a command" examples, saved on the automation through CertiFried (voice.learn) and synced back through voice.phrases.
+const { createVoiceTrainer, clampTakes } = require('./voice-train');
+const { scorePhrase, normalise: normaliseWords } = require('./voice-match');
+const { wavBytes } = require('./whisper-engine');
+const { createWhisperEngine } = require('./whisper-engine');
+const { createSileroVad } = require('./voice-vad');
+const { readWav, playInto } = require('./voice-file');
 const { createVodSafe } = require('./vod-safe');
+const { createHeartRate, createSender } = require('./heart-rate');
+const { createAlertAudio } = require('./alert-audio');
+const { validateProgram, createProgramRunner, MAX_PROGRAMS } = require('./programs');
 const { parseKeys } = require('./hotkeys');
 const { createLights } = require('./lights');
 const { loadSandbox, fakeHid } = require('./sandbox');
@@ -126,9 +144,12 @@ function uiState() {
         app: s.app, update: updater?.status || { state: 'idle' },
         keySending: keys.available,
         voice: voiceView(),
+        alertAudio: alertAudio ? alertAudio.status() : null,
+        programs: (s.programs || []).map((p) => ({ id: p.id, name: p.name, path: p.path, args: p.args || [] })),
         vod: vodSafe ? { ...vodSafe.status(), kickMusic: s.music.kickMusic } : null,
         docks: { ready: !!dockUrls, titles: DOCKS.map((d) => d.title) },
         lights: lightsView(),
+        heart: heartView(),
         voicemeeter: vmView(),
         streamdeck: streamdeckView(),
         activity: activity.slice(-150),
@@ -145,6 +166,25 @@ function storageView() {
 function obsSummary() {
     const snap = obs.snapshot();
     return { connected: snap.connected, version: snap.version, currentScene: snap.currentScene, scenes: snap.scenes, sources: snap.sources, inputs: snap.inputs, filters: snap.filters, studioMode: snap.studioMode, streaming: snap.streaming, recording: snap.recording };
+}
+
+// ── heart rate (0.2.14) ──────────────────────────────────────────────────────────────────────
+function heartView() {
+    const h = config.get().heart || {};
+    const st = heart ? heart.status() : { state: 'off', device: null, bpm: null, lastAt: null, battery: null, history: [] };
+    return { enabled: !!h.enabled, share: h.share !== false, ...st, device: st.device || h.device || null, sent: heartSentAt };
+}
+let heartSentAt = null;
+function sendHeart(r) {
+    if (config.get().heart?.share === false || !engine?.supports('request')) return;
+    engine.request('heart.rate', { bpm: r.bpm, at: r.at, contact: r.contact, rr: r.rr, battery: r.battery }, 4000)
+        .then(() => { heartSentAt = Date.now(); })
+        .catch(() => { /* not connected or an older server: the next reading tries again */ });
+}
+function onHeartReading(r) {
+    heartSender?.push(r);
+    const t = Date.now();
+    if (t - heartPushAt >= 900) { heartPushAt = t; send('heart', heartView()); }
 }
 
 let pushTimer = null;
@@ -165,6 +205,17 @@ function fitState(obsSnap, sounds) {
         state.music = { vodSafe: !!v.vodSafe, reason: v.reason || null, vodTrack: v.vodTrack || null, liveTrack: v.liveTrack || null, sourceReady: !!v.sourceReady, live: !!v.live, checkedAt: v.checkedAt || null };
     }
     state.devices = devicesReport();
+    if (alertAudio) state.alertAudio = alertAudio.status();
+    // Voice commands: the switchover reads this to know whether Studio is listening before it lets Streamer.bot close.
+    if (voice) {
+        const vs = voice.status();
+        const vc = config.get().voice;
+        // 0.2.10: thresholdSet says whether the person (or the switchover) ever set the confidence, so the server can tell a
+        // 0.7 default from a chosen value; voiceLog says this Studio sends its voice log (request voice.log).
+        state.voice = { enabled: !!vc.enabled, state: vs.state, error: vs.error ? String(vs.error).slice(0, 200) : null, phrases: vs.phrases || 0, threshold: clampThreshold(vc.threshold),
+            thresholdSet: !!vc.thresholdSetAt, thresholdSetAt: vc.thresholdSetAt || null, catchAll: vs.catchAll || null, voiceLog: true,
+            engine: vs.engine || (voice === windowsVoice ? 'windows' : null) };
+    }
     const size = () => Buffer.byteLength(JSON.stringify(state));
     if (size() > 58000) for (const l of state.devices.lights) { l.caps.scenes = []; l.caps.effects = []; }
     if (size() > 58000) state.obs.filters = {};
@@ -215,6 +266,8 @@ function buildEngine() {
     engine.on('welcome', () => {
         addActivity({ kind: 'info', title: 'Connected to CertiFried', ok: true });
         reportState();
+        voiceLogServer = true;
+        sendVoiceLog({ replace: true });
         if (engine.supports('request')) {
             refreshAutomations().catch(() => {});
             refreshVoicePhrases().catch(() => {});
@@ -329,8 +382,23 @@ function setupStatus() {
 // ── lights, Voicemeeter and the Stream Deck (Phase 5) ────────────────────────────────────────────
 let sandbox = null;
 let lights = null;
+let cloudMacs = new Map();   // Bluetooth address → { id, name } of the streamer's Govee cloud lights (0.2.11)
+async function refreshCloudMacs() {
+    if (!engine?.supports('request')) return cloudMacs;
+    try {
+        const { macFromCloudId } = require('./lights/govee-ble');
+        const r = await engine.request('lights.cloud', {}, 15000);
+        const m = new Map();
+        for (const l of r?.lights || []) { const mac = macFromCloudId(l.id); if (mac) m.set(mac, { id: String(l.id), name: String(l.name || '').slice(0, 80) }); }
+        cloudMacs = m;
+    } catch (e) { log.info('cloud lights not read for Bluetooth matching', { error: e?.code || e?.message }); }
+    return cloudMacs;
+}
 let lightsBusy = null;     // 'finding' | 'pairing' while one runs
 let voicemeeter = null;
+let heart = null;          // 0.2.14: the Bluetooth heart-rate reader (heart-rate.js)
+let heartSender = null;
+let heartPushAt = 0;
 let vmInfo = null;         // the last detect()
 let bridge = null;
 let bridgeError = null;
@@ -367,6 +435,7 @@ function lightsChanged() { reportState(); pushState(); }
 async function findLights() {
     if (lightsBusy) throw new Error('Studio is already looking for lights.');
     lightsBusy = 'finding';
+    await refreshCloudMacs();
     pushState();
     try {
         const list = await lights.discover({ timeoutMs: 4000 });
@@ -407,6 +476,16 @@ function bridgeHandlers() {
     const obsCall = async (type, data) => { need(obs.connected, 'obs_off', 'OBS is not connected'); return obs.call(type, data); };
     return {
         status: async () => ({ studio: app.getVersion(), engine: engine?.status || 'idle', obs: { connected: obs.connected, currentScene: obs.snapshot().currentScene || null } }),
+        // 0.2.12: push to talk from the Stream Deck (down/up while a button is held, or tap: listen for the next phrase)
+        'voice.ptt': async (p) => {
+            need(voice && config.get().voice.enabled, 'voice_off', 'Voice commands are off in Studio');
+            const st = ['down', 'up', 'tap'].includes(p?.state) ? p.state : 'tap';
+            if (st === 'down') voice.setHeld(true);
+            else if (st === 'up') voice.setHeld(false);
+            else { voice.setHeld(false); voice.tap?.(); }
+            pushState();
+            return { listening: !!voice.held };
+        },
         'automations.list': async () => ({ automations: (automations.length ? automations : await refreshAutomations().catch(() => [])).filter((a) => a.enabled).map((a) => ({ id: a.id, name: a.name })) }),
         'automations.run': async (p) => {
             const id = Number(p?.automationId);
@@ -485,6 +564,8 @@ function sdPluginPath() {
 
 // ── voice commands ─────────────────────────────────────────────────────────────────────────────
 let vodSafe = null;
+let alertAudio = null;
+let programRunner = null;
 let musicUrl = null;
 let overlayCache = new Map();   // overlay id -> { url, sourceName, … } from the last overlays:list (addresses stay in the main process)
 
@@ -529,16 +610,28 @@ function onVodChange(v) {
     pushState();
 }
 
-let voice = null;
+let voice = null;            // the engine in use: whisperVoice, or windowsVoice (System.Speech) as the last resort
+let whisperVoice = null;
+let windowsVoice = null;
+let voiceFallback = null;    // { reason, at } while Windows speech recognition stands in because Whisper could not start
+let lastVoiceState = null;
 let micState = 'off';
 let micError = null;
 let lastLevel = 0;
 let levelTimer = null;
 let ptt = null;        // { keycode } while the push-to-talk hook runs
+let trainer = null;    // 0.2.13 voice-train.js
 
 function voiceView() {
     const v = config.get().voice;
-    return { settings: v, status: voice ? voice.status() : { state: 'off' }, mic: micState, micError, level: lastLevel, phrases: (v.phrases || []).slice(0, 500), available: process.platform === 'win32', held: voice ? voice.held : false };
+    const commands = (Array.isArray(v.commands) && v.commands.length ? v.commands : (v.phrases || []).map((text) => ({ text }))).slice(0, 500);
+    return { settings: { ...v, commands: undefined, phrases: undefined }, status: voice ? voice.status() : { state: 'off' }, mic: micState, micError, level: lastLevel,
+        engine: voice === windowsVoice ? 'windows' : 'whisper', fallback: voiceFallback, input: inputView, vadDropped,
+        phrases: commands.map((c) => c.text),
+        commands: commands.map((c) => ({ text: c.text, key: c.text.toLowerCase(), automationId: c.automationId || null, automationName: c.automationName || null, confidence: c.confidence ?? null, cooldownMs: c.cooldownMs ?? null,
+            aliases: (c.aliases || []).map((a) => a.text).slice(0, 50), negatives: (c.negatives || []).length, trained: c.trained || null })),
+        log: voiceLog.slice(0, VOICE_LOG_MAX), available: process.platform === 'win32', held: voice ? voice.held : false,
+        training: trainer ? trainer.view() : null, canLearn: !!engine?.supports('request') };
 }
 
 const MIC_ERRORS = {
@@ -548,6 +641,46 @@ const MIC_ERRORS = {
     NotReadableError: 'Another program is using the microphone in a way that blocks it, or Windows could not open it.',
 };
 
+/*
+ * Microphone safety (0.2.12). Studio never silently uses "default": on first use, or while the setting is still "default",
+ * it picks the device that is Windows' default communications microphone and saves that device. A Voicemeeter bus, Stereo Mix
+ * or a virtual cable carries game sound and music, which is what made commands fire by themselves; when the chosen input looks
+ * like one, the Voice tab says so and offers the microphone with one click.
+ */
+const BUS_INPUT = /voicemeeter|vb-audio|stereo mix|what u hear|wave out|\bcable\b|virtual audio|virtual cable|loopback|\bline\b|\bmix\b/i;
+const stripDefault = (l) => String(l || '').replace(/^(Default|Communications)\s*-\s*/i, '').trim();
+let inputView = { id: null, label: null, bus: false, missing: false, suggestion: null, pickedBy: null };
+let vadDropped = { count: 0, lastAt: null };
+
+async function resolveVoiceInput() {
+    const v = config.get().voice;
+    const list = (await audioRequest('devices', { kind: 'audioinput' })) || [];
+    const real = list.filter((d) => d && d.id && d.id !== 'default' && d.id !== 'communications');
+    const comm = list.find((d) => d && d.id === 'communications');
+    const commReal = comm ? (real.find((d) => comm.groupId && d.groupId === comm.groupId) || real.find((d) => stripDefault(d.label) === stripDefault(comm.label)) || null) : null;
+    const isBus = (d) => !!d && BUS_INPUT.test(stripDefault(d.label));
+    const mic = commReal && !isBus(commReal) ? commReal : (real.find((d) => !isBus(d) && /mic/i.test(d.label)) || real.find((d) => !isBus(d)) || null);
+    let id = v.inputDeviceId;
+    if (!id || id === 'default' || id === 'communications') {
+        const pick = commReal || mic || null;
+        if (pick) {
+            config.update({ voice: { inputDeviceId: pick.id, inputDeviceLabel: stripDefault(pick.label), inputPickedBy: pick === commReal ? 'communications' : 'microphone', inputPickedAt: Date.now() } });
+            id = pick.id;
+            addActivity({ kind: 'info', title: `Voice commands use ${stripDefault(pick.label)}`, detail: pick === commReal ? "Your Windows communications microphone. Change it in Studio, Voice." : 'Change it in Studio, Voice.', ok: true });
+            log.info('voice input picked', { by: pick === commReal ? 'communications' : 'microphone' });
+        } else {
+            id = 'communications';   // the device list is not available yet: still the communications device, never "default"
+        }
+    }
+    const cur = real.find((d) => d.id === id);
+    if (cur && stripDefault(cur.label) !== config.get().voice.inputDeviceLabel) config.update({ voice: { inputDeviceLabel: stripDefault(cur.label) } });
+    const label = cur ? stripDefault(cur.label) : (config.get().voice.inputDeviceLabel || null);
+    const bus = BUS_INPUT.test(label || '');
+    inputView = { id, label, bus, missing: !cur && real.length > 0 && id !== 'communications', pickedBy: config.get().voice.inputPickedBy || null,
+        suggestion: bus && mic && mic.id !== id ? { id: mic.id, label: stripDefault(mic.label) } : null };
+    return id;
+}
+
 function startPtt() {
     stopPtt();
     const v = config.get().voice;
@@ -555,8 +688,10 @@ function startPtt() {
     try {
         const { uIOhook, UiohookKey } = require('uiohook-napi');
         const { key } = parseKeys(v.pttKey || 'F13', UiohookKey);
-        const down = (e) => { if (e.keycode === key && !voice.held) { voice.setHeld(true); pushState(); } };
-        const up = (e) => { if (e.keycode === key) { voice.setHeld(false); pushState(); } };
+        let downAt = 0;
+        const down = (e) => { if (e.keycode === key && !voice.held) { downAt = Date.now(); voice.setHeld(true); pushState(); } };
+        // A press shorter than TAP_PRESS_MS (a Stream Deck Hotkey button sends a press, not a hold) listens for the next phrase.
+        const up = (e) => { if (e.keycode === key) { voice.setHeld(false); if (Date.now() - downAt < TAP_PRESS_MS) voice.tap?.(); pushState(); } };
         uIOhook.on('keydown', down);
         uIOhook.on('keyup', up);
         uIOhook.start();
@@ -574,35 +709,286 @@ function stopPtt() {
     voice?.setHeld(false);
 }
 
+const TAP_PRESS_MS = 350;
+
+/** Whisper unless the person chose Windows speech recognition, or Whisper could not start this session (the last resort). */
+function pickVoice() {
+    const next = config.get().voice.engine === 'windows' || voiceFallback ? windowsVoice : whisperVoice;
+    if (voice && voice !== next) voice.stop();
+    voice = next;
+}
+
+let applying = Promise.resolve();
+let filePlay = null;
+/** Voice on or off with the current settings. Calls are queued, so a burst of setting changes applies in order. */
 function applyVoice() {
+    applying = applying.then(applyVoiceNow).catch((e) => log.warn('voice settings could not be applied', { error: e?.message }));
+    return applying;
+}
+
+async function applyVoiceNow() {
+    if (!whisperVoice) return;
+    pickVoice();
     const v = config.get().voice;
-    if (!voice) return;
-    voice.setPhrases(v.phrases || []);
+    voice.setPhrases(voiceCommands(v));
     if (v.enabled && process.platform === 'win32') {
+        const deviceId = await resolveVoiceInput();
         voice.start();
-        if (audioWindow && !audioWindow.isDestroyed()) audioWindow.webContents.send('voice:start', { deviceId: v.inputDeviceId || 'default' });
+        const file = process.env.CF_STUDIO_VOICE_FILE;
+        if (file) {
+            // testing only: a WAV file instead of the microphone, played once at the pace of real time
+            if (!filePlay) {
+                filePlay = new AbortController();
+                const ctl = filePlay;
+                const wait = async () => { for (let i = 0; i < 600 && voice.status().state !== 'listening' && !ctl.signal.aborted; i++) await new Promise((r) => setTimeout(r, 250)); };
+                wait().then(() => playInto(readWav(file), (b) => voice?.feed(b), { signal: ctl.signal })).catch((e) => log.warn('voice file input failed', { error: e.message }));
+            }
+        } else if (audioWindow && !audioWindow.isDestroyed()) audioWindow.webContents.send('voice:start', { deviceId });
         startPtt();
     } else {
         stopPtt();
+        filePlay?.abort();
+        filePlay = null;
         if (audioWindow && !audioWindow.isDestroyed()) audioWindow.webContents.send('voice:stop');
-        voice.stop();
+        whisperVoice.stop();
+        windowsVoice.stop();
         lastLevel = 0;
     }
     pushState();
 }
 
+/** Whisper could not start (no files, no download, no model): Windows speech recognition stands in for this session. */
+function onWhisperFailed(e) {
+    if (!config.get().voice.enabled || config.get().voice.engine === 'windows' || voiceFallback) return;
+    voiceFallback = { reason: String(e?.message || 'Whisper could not start.').slice(0, 300), at: Date.now() };
+    addActivity({ kind: 'info', title: 'Whisper could not start. Voice commands use Windows speech recognition for now.', detail: voiceFallback.reason, ok: false });
+    log.warn('voice: falling back to Windows speech recognition', { error: e?.code || e?.message });
+    applyVoice();
+}
+
+/** The commands to listen for: from the server's voice.phrases (0.2.10 sends each command's confidence and cooldown). */
+function voiceCommands(v) {
+    return Array.isArray(v.commands) && v.commands.length ? v.commands : (v.phrases || []);
+}
+
 async function refreshVoicePhrases() {
     if (!engine?.supports('request')) return null;
     const r = await engine.request('voice.phrases', {});
-    const list = [...new Set((r?.phrases || []).map((p) => String(p.text || '').trim()).filter(Boolean))].slice(0, 500);
-    config.update({ voice: { phrases: list } });
-    if (voice) voice.setPhrases(list);
+    const commands = [];
+    const seen = new Set();
+    for (const p of r?.phrases || []) {
+        const text = String(p?.text || '').trim().slice(0, 100);
+        if (!text || seen.has(text.toLowerCase()) || commands.length >= 500) continue;
+        seen.add(text.toLowerCase());
+        const conf = Number(p.confidence);
+        const cd = Number(p.cooldownSec);
+        // 0.2.13: the automation's "heard as" aliases and "not a command" examples (text only), and when it was taught
+        const words = (list, withCount) => (Array.isArray(list) ? list : []).slice(0, withCount ? 50 : 100).map((x) => {
+            const t = normaliseWords(typeof x === 'string' ? x : x?.text).slice(0, 100);
+            if (!t) return null;
+            const n = Number(x?.count);
+            return withCount ? { text: t, count: Number.isInteger(n) && n > 0 ? Math.min(1000, n) : 1 } : { text: t };
+        }).filter(Boolean);
+        const tr = p.trained && typeof p.trained === 'object' ? { at: String(p.trained.at || '').slice(0, 40) || null, takes: Number(p.trained.takes) || null } : null;
+        commands.push({ text, automationId: Number(p.automationId) || null, automationName: String(p.automationName || '').slice(0, 100),
+            confidence: Number.isFinite(conf) && conf > 0 ? clampThreshold(conf) : null,
+            cooldownMs: Number.isFinite(cd) && cd >= 0 ? Math.min(3600, cd) * 1000 : null,
+            aliases: words(p.aliases, true), negatives: words(p.negatives, false), trained: tr });
+    }
+    const list = commands.map((c) => c.text);
+    config.replace('voice', { ...config.get().voice, phrases: list, commands });
+    if (voice) voice.setPhrases(commands);
     pushState();
     return list;
 }
 
+// ── voice log (0.2.10): every recognition with its outcome, like Streamer.bot's Speech-to-Text tab ────────────────────
+// Newest first, the last 200, in memory only (gone when Studio closes). The server gets a summary (time, matched phrase,
+// confidence, threshold, outcome), batched every few seconds; the words of speech that was not a command are only kept
+// while "log all speech" is on, and only sent to CertiFried when "show the words on the dashboard" is on as well.
+const VOICE_LOG_MAX = 200;
+const voiceLog = [];
+let voiceOutbox = [];
+let voiceFlushTimer = null;
+let voiceLogServer = true;   // false after a server answered unknown_method (older than 0.2.10); tried again at reconnect
+
+// 0.2.12: 'short' (a burst the voice detector dropped) and 'wake' stay on this PC; 'nowake' is ordinary speech to the server.
+const SERVER_OUTCOME = { fired: 'fired', below: 'below', cooldown: 'cooldown', noise: 'noise', disabled: 'disabled', nowake: 'noise' };
+
+function voiceSummary(e) {
+    const v = config.get().voice;
+    const outcome = SERVER_OUTCOME[e.outcome];
+    // 0.2.13: the id (so the dashboard can teach from a line), the closest command also for "not a command", and whether an
+    // alias matched. The words go only with both "log all speech" and "show the words on the dashboard", for every outcome,
+    // so the dashboard can learn from near misses and undo a wrong run.
+    return { id: e.id || null, t: e.t, phrase: outcome === 'noise' ? null : (e.phrase || null), confidence: e.confidence ?? 0, threshold: e.threshold ?? null, outcome, automationId: e.automationId || null,
+        heard: v.logAllSpeech && v.shareSpeechText ? (e.heard || null) : null,
+        closest: e.closest || null, closestAutomationId: e.closestAutomationId || null, via: e.via || null, alias: e.via === 'alias' ? (e.alias || null) : null };
+}
+
+function onVoiceLog(entry) {
+    const t = entry.t || Date.now();
+    if (entry.outcome === 'short') {
+        // clicks and keys come in bursts: one line that counts them, not two hundred
+        vadDropped = { count: vadDropped.count + 1, lastAt: t };
+        const top = voiceLog[0];
+        if (top && top.outcome === 'short' && t - (top.lastT || top.t) < 15000) {
+            top.count = (top.count || 1) + 1;
+            top.lastT = t;
+            send('voice-log', top);
+            return;
+        }
+    }
+    const e = { ...entry, id: `${t}-${Math.random().toString(36).slice(2, 7)}`, count: entry.outcome === 'short' ? 1 : undefined };
+    if ((e.outcome === 'noise' || e.outcome === 'nowake' || e.outcome === 'below') && !config.get().voice.logAllSpeech && e.engine !== undefined) e.heard = null;
+    if (e.outcome === 'noise' && !config.get().voice.logAllSpeech) e.heard = null;
+    voiceLog.unshift(e);
+    if (voiceLog.length > VOICE_LOG_MAX) voiceLog.length = VOICE_LOG_MAX;
+    send('voice-log', e);
+    if (!SERVER_OUTCOME[e.outcome]) return;
+    voiceOutbox.push(voiceSummary(e));
+    if (voiceOutbox.length > VOICE_LOG_MAX) voiceOutbox = voiceOutbox.slice(-VOICE_LOG_MAX);
+    if (!voiceFlushTimer) voiceFlushTimer = setTimeout(() => { voiceFlushTimer = null; sendVoiceLog({}); }, 3000);
+}
+
+async function sendVoiceLog({ replace = false, clear = false }) {
+    if (!engine?.supports('request') || !voiceLogServer) return;
+    const entries = replace ? voiceLog.slice().reverse().filter((e) => SERVER_OUTCOME[e.outcome]).map(voiceSummary) : voiceOutbox;
+    if (!replace && !clear && !entries.length) return;
+    if (!replace) voiceOutbox = [];
+    try {
+        await engine.request('voice.log', { entries: entries.slice(-VOICE_LOG_MAX), replace: replace || clear }, 10000);
+    } catch (e) {
+        if (String(e?.code || '') === 'unknown_method') voiceLogServer = false;
+        else log.info('voice log not sent', { error: e?.code || e?.message });
+    }
+}
+
+// ── 0.2.13: learning ─────────────────────────────────────────────────────────────────────────────
+/** Ask CertiFried to change an automation's aliases, "not a command" examples or its own threshold, then sync them back. */
+async function voiceLearn(automationId, ops) {
+    if (!engine?.supports('request')) throw new Error('Connect Studio to CertiFried first. What Studio learns is saved on your automation.');
+    const id = Number(automationId);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('Click Refresh first, so Studio knows which automation this belongs to.');
+    let r;
+    try {
+        r = await engine.request('voice.learn', { automationId: id, ...ops }, 10000);
+    } catch (e) {
+        if (String(e?.code || '') === 'unknown_method') throw new Error('CertiFried has not been updated for this yet. Try again later.');
+        throw new Error(e?.message || 'CertiFried did not save it.');
+    }
+    await refreshVoicePhrases().catch((e) => log.info('voice phrases not refreshed after learning', { error: e?.message }));
+    return r;
+}
+
+/** Things that were not this command, for calibration: "not a command" lines with words, and other commands' lines. */
+function voiceNegatives(cmd) {
+    const out = [];
+    for (const e of voiceLog) {
+        if (!e.heard || e.learned?.kind === 'alias') continue;
+        if (e.outcome === 'noise' || e.outcome === 'nowake') out.push(e.heard);
+        else if ((e.outcome === 'fired' || e.outcome === 'cooldown') && e.automationId && e.automationId !== cmd.automationId) out.push(e.heard);
+    }
+    return out.slice(0, 200);
+}
+
+const LEARN_ACTIONS = new Set(['alias', 'negative', 'wrong', 'undo']);
+/** The voice log's buttons: "This was <command>", "Not a command", "Wrong, undo learning", and Undo of any of them. */
+async function learnFromLog({ id, action, automationId }) {
+    if (!LEARN_ACTIONS.has(action)) throw new Error('Unknown action');
+    const e = voiceLog.find((x) => x.id === id);
+    if (!e) throw new Error('That line is no longer in the list.');
+    const words = normaliseWords(e.heard || '');
+    const cmdFor = (aid) => voiceCommands(config.get().voice).find((c) => c.automationId === aid) || null;
+    if (action === 'undo') {
+        const l = e.learned;
+        if (!l) throw new Error('Nothing was learned from this line.');
+        const ops = { add: {}, remove: {} };
+        if (l.kind === 'alias') ops.remove.aliases = [l.text];
+        if (l.kind === 'negative') ops.remove.negatives = [l.text];
+        if (l.kind === 'wrong') { if (l.negative) ops.remove.negatives = [l.negative]; if (l.removedAlias) ops.add.aliases = [l.removedAlias]; }
+        await voiceLearn(l.automationId, ops);
+        e.learned = null;
+    } else if (action === 'alias') {
+        const aid = Number(automationId) || e.closestAutomationId || e.automationId;
+        if (!words) throw new Error('Studio did not keep the words of this line. Turn on "Log all speech" to teach Studio from the log.');
+        if (!cmdFor(aid)) throw new Error('Pick one of your voice commands.');
+        await voiceLearn(aid, { add: { aliases: [words] } });
+        e.learned = { kind: 'alias', automationId: aid, text: words, phrase: cmdFor(aid)?.text || null };
+    } else if (action === 'negative') {
+        const aid = e.automationId || e.closestAutomationId;
+        if (!words) throw new Error('Studio did not keep the words of this line. Turn on "Log all speech" to teach Studio from the log.');
+        const c = cmdFor(aid);
+        if (!c) throw new Error('This line is not close to any of your commands, so there is nothing to learn.');
+        if (scorePhrase(words, c.text).score >= 0.97) throw new Error(`These are the words of "${c.text}" itself, so they cannot be marked as not a command.`);
+        await voiceLearn(aid, { add: { negatives: [words] } });
+        e.learned = { kind: 'negative', automationId: aid, text: words, phrase: c.text };
+    } else {
+        // a command that ran but should not have: forget the alias that matched, and remember these words as not it
+        if (e.outcome !== 'fired' && e.outcome !== 'cooldown') throw new Error('Only a command that ran can be undone.');
+        const c = cmdFor(e.automationId);
+        if (!c) throw new Error('That command is no longer in Studio\'s list.');
+        const removedAlias = e.via === 'alias' && e.alias ? normaliseWords(e.alias) : null;
+        const negative = words && scorePhrase(words, c.text).score < 0.97 ? words : null;
+        if (!removedAlias && !negative) throw new Error(words ? `Studio heard the words of "${c.text}" itself. Raise its "how sure" setting on the dashboard if it runs when you did not say it.` : 'Studio did not keep the words of this line. Turn on "Log all speech" to undo from the log.');
+        await voiceLearn(e.automationId, { add: negative ? { negatives: [negative] } : {}, remove: removedAlias ? { aliases: [removedAlias] } : {} });
+        e.learned = { kind: 'wrong', automationId: e.automationId, removedAlias, negative, phrase: c.text };
+    }
+    send('voice-log', e);
+    pushState();
+    return { learned: e.learned };
+}
+
+function clearVoiceLog() {
+    voiceLog.length = 0;
+    voiceOutbox = [];
+    sendVoiceLog({ clear: true }).catch(() => {});
+    pushState();
+}
+
+/** The switchover's voice.enable: voice on, phrases fetched, listening (or the reason it is not), within a few seconds. */
+async function enableVoice(p) {
+    if (process.platform !== 'win32') { const e = new Error('Voice commands need Windows'); e.code = 'not_windows'; throw e; }
+    const patch = { enabled: true };
+    if (p.threshold !== undefined && p.threshold !== null && Number.isFinite(Number(p.threshold))) { patch.threshold = clampThreshold(p.threshold); patch.thresholdSetAt = Date.now(); }
+    config.update({ voice: patch });
+    try { await refreshVoicePhrases(); } catch (e) { log.info('voice.enable: could not fetch phrases', { error: e?.message }); }
+    await applyVoice();
+    let st = voice ? voice.status() : { state: 'off' };
+    for (let i = 0; i < 25 && voice && st.state !== 'listening' && st.state !== 'error'; i++) {
+        await new Promise((r) => setTimeout(r, 200));
+        st = voice.status();
+    }
+    reportState();
+    pushState();
+    return { enabled: true, state: st.state, error: st.error || null, phrases: st.phrases || 0, threshold: clampThreshold(config.get().voice.threshold) };
+}
+
+/** The switchover's Undo: voice on or off and the confidence, as they were before the switchover. */
+async function setVoice(p) {
+    const patch = {};
+    if (p.enabled !== undefined && p.enabled !== null) patch.enabled = !!p.enabled;
+    if (p.threshold !== undefined && p.threshold !== null && Number.isFinite(Number(p.threshold))) {
+        patch.threshold = clampThreshold(p.threshold);
+        // 0.2.10: the server's one-off correction to 0.7 passes onlyIfUnset, so a value the person chose is never overwritten.
+        if (p.onlyIfUnset && config.get().voice.thresholdSetAt) delete patch.threshold;
+        else patch.thresholdSetAt = Date.now();
+    }
+    if (!Object.keys(patch).length) {
+        if (p.onlyIfUnset) { const v = config.get().voice; return { enabled: !!v.enabled, state: voice ? voice.status().state : 'off', threshold: clampThreshold(v.threshold), thresholdSet: true, unchanged: true }; }
+        const e = new Error('Nothing to set'); e.code = 'bad_params'; throw e;
+    }
+    config.update({ voice: patch });
+    if (patch.enabled !== undefined) applyVoice();
+    reportState();
+    pushState();
+    const v = config.get().voice;
+    return { enabled: !!v.enabled, state: voice ? voice.status().state : 'off', threshold: clampThreshold(v.threshold), thresholdSet: !!v.thresholdSetAt };
+}
+
 function onVoicePhrase({ text, confidence }) {
     const sent = engine?.supports('event') ? engine.sendEvent({ type: 'voice.phrase', metadata: { phrase: text, confidence } }) : false;
+    log.info('voice command', { phrase: text, confidence, sent: !!sent });   // the command only, never other speech
     addActivity({ kind: 'event', title: `Heard "${text}"`, detail: `${Math.round(confidence * 100)}% sure${sent ? '' : ' · not sent: not connected to CertiFried'}`, ok: !!sent });
 }
 
@@ -954,7 +1340,7 @@ function registerIpc() {
     handle('lights:off', async () => { config.update({ lights: { enabled: false } }); lightsChanged(); return {}; });
     handle('lights:drivers', async ({ drivers }) => {
         const patch = {};
-        for (const k of ['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra']) if (drivers && typeof drivers[k] === 'boolean') patch[k] = drivers[k];
+        for (const k of ['govee', 'hue', 'lifx', 'nanoleaf', 'elgato', 'litra', 'goveeble']) if (drivers && typeof drivers[k] === 'boolean') patch[k] = drivers[k];
         config.update({ lights: { drivers: patch } });
         lightsChanged();
         return {};
@@ -975,7 +1361,78 @@ function registerIpc() {
         } finally { lightsBusy = null; lightsChanged(); }
     });
     handle('lights:forget', async ({ id }) => { lights.forget(String(id || '')); lightsChanged(); return {}; });
+    // 0.2.14: heart rate. Scanning lists devices that advertise the Heart Rate Service (all: every named device nearby).
+    handle('heart:scan', async (p) => {
+        try { return { devices: await heart.scan({ all: !!p?.all }) }; } catch (e) { const err = new Error(e.message); err.code = e.code; throw err; }
+    });
+    handle('heart:choose', async (p) => {
+        config.update({ heart: { enabled: true } });
+        const st = heart.choose({ address: p?.address, name: p?.name });
+        pushState();
+        return { heart: st };
+    });
+    handle('heart:forget', async () => { heart.forget(); pushState(); return {}; });
+    handle('heart:settings', async (p) => {
+        const patch = {};
+        if (typeof p?.enabled === 'boolean') patch.enabled = p.enabled;
+        if (typeof p?.share === 'boolean') patch.share = p.share;
+        if (!Object.keys(patch).length) { const e = new Error('Nothing to set'); e.code = 'bad_params'; throw e; }
+        config.update({ heart: patch });
+        if (patch.enabled !== undefined) heart.start();
+        pushState();
+        return { heart: heartView() };
+    });
     handle('lights:test', async ({ id }) => { await lights.test(String(id || '')); return {}; });
+    // 0.2.10: the cloud lights the server runs with the streamer's Govee / LIFX key, and its test flash.
+    handle('lights:cloud', async () => {
+        if (!engine?.supports('request')) throw new Error('Connect Studio to CertiFried to see the lights on your Govee key.');
+        try { return await engine.request('lights.cloud', {}, 15000); } catch (e) {
+            if (String(e?.code) === 'unknown_method') throw new Error('The CertiFried server does not list cloud lights yet.');
+            throw new Error(e?.message || 'Could not get the cloud lights.');
+        }
+    });
+    handle('lights:cloudTest', async ({ id }) => {
+        if (!engine?.supports('request')) throw new Error('Connect Studio to CertiFried first.');
+        const r = await engine.request('lights.cloudTest', { device: String(id || '').slice(0, 120) }, 20000);
+        if (!r?.ok) throw new Error(r?.message || 'The light did not flash.');
+        return { message: r.message || 'Flashed.' };
+    });
+    handle('alertAudio:find', async () => ({ sources: await alertAudio.find() }));
+    // 0.2.11: the list of programs automations may start (Settings, Programs it may run).
+    handle('programs:pick', async () => {
+        const r = await dialog.showOpenDialog(mainWindow, { title: 'Pick a program', properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe', 'bat', 'cmd'] }] });
+        return { path: r.canceled ? null : (r.filePaths[0] || null) };
+    });
+    handle('programs:save', async ({ program }) => {
+        const v = validateProgram(program || {});
+        if (!v.ok) throw new Error(v.error);
+        const list = (config.get().programs || []).filter((x) => x.id !== v.value.id);
+        if (list.some((x) => x.name.toLowerCase() === v.value.name.toLowerCase())) throw new Error('Another program already has that name.');
+        if (list.length >= MAX_PROGRAMS) throw new Error(`At most ${MAX_PROGRAMS} programs.`);
+        config.replace('programs', [...list, v.value]);
+        log.info('program list changed', { added: v.value.name });
+        pushState();
+        return { program: v.value };
+    });
+    handle('programs:remove', async ({ id }) => {
+        config.replace('programs', (config.get().programs || []).filter((x) => x.id !== String(id || '')));
+        pushState();
+        return {};
+    });
+    handle('alertAudio:apply', async () => {
+        const r = await alertAudio.apply();
+        addActivity({ kind: 'info', title: `CertiFried now manages the audio of ${r.applied.length} Sound Alerts / Blerp source${r.applied.length === 1 ? '' : 's'}`, detail: r.applied.join(', '), ok: r.applied.length > 0 });
+        vodSafe.ensure('alert audio').catch(() => {});
+        pushState(); reportState();
+        return r;
+    });
+    handle('alertAudio:undo', async () => {
+        const r = await alertAudio.undo();
+        addActivity({ kind: 'info', title: 'Sound Alerts and Blerp audio put back as it was', detail: r.restored.join(', '), ok: true });
+        vodSafe.ensure('alert audio undo').catch(() => {});
+        pushState(); reportState();
+        return r;
+    });
 
     handle('voicemeeter:settings', async ({ enabled }) => {
         config.update({ voicemeeter: { enabled: !!enabled } });
@@ -1064,18 +1521,69 @@ function registerIpc() {
         const patch = {};
         if (p.enabled !== undefined) patch.enabled = !!p.enabled;
         if (typeof p.inputDeviceId === 'string' && p.inputDeviceId.length <= 200) patch.inputDeviceId = p.inputDeviceId || 'default';
-        if (p.mode === 'always' || p.mode === 'ptt') patch.mode = p.mode;
+        if (p.mode === 'always' || p.mode === 'ptt' || p.mode === 'wake') patch.mode = p.mode;
+        if (p.engine === 'auto' || p.engine === 'cpu' || p.engine === 'windows') patch.engine = p.engine;
+        if (p.matchThreshold !== undefined) { const t = Number(p.matchThreshold); if (Number.isFinite(t)) patch.matchThreshold = clampMatch(t); }
+        if (typeof p.wakePhrase === 'string') {
+            const w = p.wakePhrase.replace(/\s+/g, ' ').trim().slice(0, 40);
+            if (w.split(' ').length > 4 || w.replace(/[^a-z0-9]/gi, '').length < 4) throw new Error('Use a wake phrase of two to four words, such as "hey studio".');
+            patch.wakePhrase = w;
+        }
         if (typeof p.pttKey === 'string') {
             const { UiohookKey } = (() => { try { return require('uiohook-napi'); } catch { return { UiohookKey: null }; } })();
             if (UiohookKey) { try { parseKeys(p.pttKey, UiohookKey); } catch { throw new Error('Pick a single key, such as F13 or Num 0.'); } }
             patch.pttKey = p.pttKey.slice(0, 30);
         }
-        if (p.threshold !== undefined) { const t = Number(p.threshold); if (Number.isFinite(t)) patch.threshold = Math.max(0.5, Math.min(0.95, Math.round(t * 100) / 100)); }
+        if (p.threshold !== undefined) { const t = Number(p.threshold); if (Number.isFinite(t)) { patch.threshold = clampThreshold(t); patch.thresholdSetAt = Date.now(); } }
+        if (p.logAllSpeech !== undefined) patch.logAllSpeech = !!p.logAllSpeech;
+        if (p.shareSpeechText !== undefined) patch.shareSpeechText = !!p.shareSpeechText;
+        if (p.keepRecordings !== undefined) patch.keepRecordings = !!p.keepRecordings;
+        if (p.trainTakes !== undefined) patch.trainTakes = clampTakes(p.trainTakes);
+        if (patch.logAllSpeech === false) {
+            // Privacy: turning it off also forgets the words already in the log.
+            patch.shareSpeechText = false;
+            for (const e of voiceLog) if (e.outcome === 'noise' || e.outcome === 'nowake' || e.outcome === 'below') e.heard = null;
+        }
         config.update({ voice: patch });
-        if (patch.enabled !== undefined || patch.inputDeviceId !== undefined || patch.mode !== undefined || patch.pttKey !== undefined) applyVoice();
+        if (patch.logAllSpeech !== undefined) voice?.refresh();
+        if (patch.engine !== undefined) { voiceFallback = null; whisperVoice.stop(); windowsVoice.stop(); }
+        if (patch.inputDeviceId !== undefined) config.update({ voice: { inputPickedBy: 'person', inputPickedAt: Date.now() } });
+        if (patch.enabled !== undefined || patch.inputDeviceId !== undefined || patch.mode !== undefined || patch.pttKey !== undefined || patch.engine !== undefined) await applyVoice();
+        reportState();
         pushState();
         return {};
     });
+    handle('voice:clearLog', async () => { clearVoiceLog(); return {}; });
+    // 0.2.13: "Teach Studio how you say it", and teaching from the voice log
+    handle('voice:train', async (p) => {
+        if (!trainer) throw new Error('Voice commands are not ready yet.');
+        switch (p.action) {
+            case 'start': {
+                if (voice !== whisperVoice) throw new Error('Teaching needs Whisper. Pick Whisper under Speech recognition.');
+                if (!engine?.supports('request')) throw new Error('Connect Studio to CertiFried first. What Studio learns is saved on your automation.');
+                const takes = clampTakes(p.takes ?? config.get().voice.trainTakes);
+                if (takes !== config.get().voice.trainTakes) config.update({ voice: { trainTakes: takes } });
+                return { training: trainer.start({ key: String(p.key || ''), takes }) };
+            }
+            case 'stop': return { training: trainer.stop() };
+            case 'resume': return { training: trainer.resume() };
+            case 'delete': return { training: trainer.deleteTake(String(p.id || '')) };
+            case 'cancel': return { training: trainer.cancel() };
+            case 'save': return { saved: await trainer.save(), training: null };
+            default: throw new Error('Unknown action');
+        }
+    });
+    handle('voice:learn', async (p) => learnFromLog({ id: String(p.id || ''), action: String(p.action || ''), automationId: p.automationId }));
+    // 0.2.12: the one-click switch from a mix bus to the microphone Studio suggests, and "Try Whisper again" after a fallback
+    handle('voice:useMic', async () => {
+        const s = inputView.suggestion;
+        if (!s) throw new Error('There is no other microphone to switch to.');
+        config.update({ voice: { inputDeviceId: s.id, inputDeviceLabel: s.label, inputPickedBy: 'person', inputPickedAt: Date.now() } });
+        addActivity({ kind: 'info', title: `Voice commands now use ${s.label}`, ok: true });
+        await applyVoice();
+        return { label: s.label };
+    });
+    handle('voice:retryWhisper', async () => { voiceFallback = null; windowsVoice.stop(); await applyVoice(); return {}; });
     handle('voice:devices', async () => ({ devices: (await audioRequest('devices', { kind: 'audioinput' })) || [] }));
     handle('voice:refresh', async () => {
         const list = await refreshVoicePhrases();
@@ -1159,8 +1667,21 @@ app.whenReady().then(() => {
     obs = createObs({ logger: log, getPassword: () => config.getSecret('obsPassword') });
     // Phase 5 devices. Tests and packaged test launches point every device at 127.0.0.1 mocks (sandbox.js).
     step('device sandbox', () => { sandbox = loadSandbox(process.env, { logger: log }); if (sandbox) log.warn('device sandbox in use: lights, Litra and Voicemeeter are mocks'); });
-    lights = createLights({ config, logger: log, sandbox, hid: sandbox ? fakeHid(sandbox.record) : null });
+    lights = createLights({ config, logger: log, sandbox, hid: sandbox ? fakeHid(sandbox.record) : null,
+        // 0.2.11: Govee over Bluetooth. The helper is unpacked next to app.asar like the voice helper; the cloud lights (from the
+        // server) say which Bluetooth lights are the streamer's own.
+        ble: { helperPath: path.join(__dirname, '..', 'ble', 'govee-ble-helper.exe').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`), getCloudMacs: () => cloudMacs } });
     lights.onChange(() => lightsChanged());
+    // 0.2.14: heart rate over Bluetooth LE, through its own helper next to the Govee one (both unpacked next to app.asar).
+    heart = createHeartRate({
+        helperPath: sandbox ? null : path.join(__dirname, '..', 'ble', 'heart-ble-helper.exe').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`),
+        logger: log, getSettings: () => config.get().heart,
+        saveDevice: (d) => config.update({ heart: { device: d } }),
+        onReading: onHeartReading,
+        onStatus: () => { send('heart', heartView()); pushState(); },
+    });
+    heartSender = createSender({ send: sendHeart });
+    step('heart rate', () => heart.start());
     voicemeeter = createVoicemeeter({ logger: log, binding: sandbox ? fakeVoicemeeterBinding(sandbox.record) : null, record: sandbox ? sandbox.record : null,
         // In the sandbox the settings-file list comes from a folder in the scratch data folder, never the real Documents.
         documentsDir: sandbox ? path.join(userData, 'sandbox-documents') : app.getPath('documents'), enabled: false });
@@ -1174,6 +1695,9 @@ app.whenReady().then(() => {
         },
     });
     vodSafe.onChange(onVodChange);
+    programRunner = createProgramRunner({ getList: () => config.get().programs || [], logger: log });
+    alertAudio = createAlertAudio({ obs, logger: log, getVod: async () => vodSafe.ensure('alert audio check'),
+        getSaved: () => config.get().alertAudio, save: (v) => config.replace('alertAudio', v) });
     router = createRouter({ extra: {
         'music.prepare': () => vodSafe.prepare(),
         ...lightHandlers(),
@@ -1181,6 +1705,21 @@ app.whenReady().then(() => {
         // 0.2.7: add CertiFried overlays next to the sources they replace (hidden), show / hide for the switchover, and
         // close Firebot / Streamer.bot when the streamer ticks it (obs-sources.js).
         ...sourceHandlers(obs, { resolveOverlay }),
+        // 0.2.8: the switchover turns voice commands on (capability 'voice'): set the switch, fetch the phrases, start listening and
+        // answer with where it got to. An optional threshold (0.2 to 0.95) is applied first.
+        'voice.enable': (p) => enableVoice(p || {}),
+        // 0.2.9: Undo of the switchover puts the voice switch and confidence back as they were.
+        'voice.set': (p) => setVoice(p || {}),
+        // 0.2.10: SoundAlerts and Blerp browser sources get "Control audio via OBS" and stay off the VOD track, like
+        // CertiFried Music (alert-audio.js). { undo: true } puts the recorded old settings back. Capability 'alertaudio'.
+        // 0.2.11: "Run a program on your PC": only a program on the streamer's own list here, by name (programs.js).
+        'system.run': (p) => programRunner.run(p || {}),
+        'obs.alert_audio': async (p) => {
+            const r = p?.undo ? await alertAudio.undo() : await alertAudio.apply();
+            vodSafe.ensure('alert audio').catch(() => {});
+            pushState(); reportState();
+            return r;
+        },
         // The dashboard's "Ask Studio to look again" (Devices): look for lights and Voicemeeter once more and report.
         'devices.check': async () => {
             const s = config.get();
@@ -1191,12 +1730,52 @@ app.whenReady().then(() => {
         },
     }, obs, sound, library, keys, screenshotDir: process.env.CF_STUDIO_USER_DATA ? path.join(userData, 'Screenshots') : path.join(app.getPath('pictures'), 'CertiFried Studio'), logger: log, defaultSoundMode: () => config.get().sound.defaultMode });
     hotkeys = createHotkeys({ globalShortcut, onTrigger: triggerBinding, logger: log });
-    voice = createVoice({
+    const voiceDir = path.join(__dirname, '..', 'voice').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+    const voiceStatus = (s) => { pushState(); if (s && s.state !== lastVoiceState) { lastVoiceState = s.state; reportState(); } };
+    const automationOn = (id) => { const a = automations.find((x) => x.id === id); return a ? a.enabled : true; };
+    windowsVoice = createVoice({
         // The helper script must be a real file for PowerShell: it is unpacked next to app.asar in the installed app.
-        helperPath: path.join(__dirname, '..', 'voice', 'speech-helper.ps1').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`),
+        helperPath: path.join(voiceDir, 'speech-helper.ps1'),
         tmpDir: path.join(userData, 'voice'), logger: log, getSettings: () => config.get().voice,
-        onPhrase: onVoicePhrase, onStatus: () => pushState(),
+        onPhrase: onVoicePhrase,
+        onLog: onVoiceLog,
+        isEnabled: automationOn,
+        onStatus: voiceStatus,
     });
+    // 0.2.12: Whisper. Its folder also holds the Visual C++ runtime that onnxruntime (the voice detector) needs, so it goes on
+    // PATH before onnxruntime is loaded; the model and the graphics card files are downloaded into <userData>\voice once.
+    const whisperBin = path.join(voiceDir, 'whisper');
+    process.env.PATH = `${whisperBin};${process.env.PATH || ''}`;
+    const whisperEngine = createWhisperEngine({ binDir: whisperBin, dataDir: path.join(userData, 'voice'), logger: log });
+    whisperVoice = createWhisperVoice({
+        vad: createSileroVad({ modelPath: path.join(voiceDir, 'silero_vad.onnx') }),
+        recogniser: whisperEngine,
+        getSettings: () => config.get().voice, logger: log,
+        onPhrase: onVoicePhrase,
+        onLog: onVoiceLog,
+        isEnabled: automationOn,
+        onStatus: voiceStatus,
+    });
+    whisperVoice.onEngineFailed = onWhisperFailed;
+    trainer = createVoiceTrainer({
+        voice: whisperVoice,
+        getCommand: (key) => whisperVoice.command(key) || null,
+        getNegatives: voiceNegatives,
+        learn: (cmd, r) => voiceLearn(cmd.automationId, { add: { aliases: r.aliases }, confidence: r.confidence, trained: { takes: r.takes } }),
+        recordingsDir: path.join(userData, 'voice', 'training'),
+        keepRecordings: () => !!config.get().voice.keepRecordings,
+        wavBytes, logger: log,
+        onUpdate: () => pushState(),
+    });
+    let whisperCrashes = [];
+    whisperEngine.onExit = () => {
+        const t = Date.now();
+        whisperCrashes = whisperCrashes.filter((x) => t - x < 60000);
+        whisperCrashes.push(t);
+        if (whisperCrashes.length > 3) { onWhisperFailed(new Error('Whisper keeps stopping on this PC.')); return; }
+        setTimeout(() => { if (voice === whisperVoice && config.get().voice.enabled) whisperVoice.restart(); }, 1000);
+    };
+    voice = whisperVoice;
     updater = createUpdater({ app, logger: log, isPortable, onStatus: () => pushState() });
 
     obs.on('status', (st, d) => {
@@ -1295,12 +1874,14 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => { /* stay in the tray */ });
 app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => {
-    try { stopPtt(); voice?.stop(); } catch { /* ignore */ }
+    // 0.2.12: both engines; whisper-server is a child process that Windows would otherwise leave running
+    try { stopPtt(); whisperVoice?.stop(); windowsVoice?.stop(); } catch { /* ignore */ }
     try { globalShortcut.unregisterAll(); } catch { /* ignore */ }
     try { engine?.stop(); } catch { /* ignore */ }
     try { obs?.stop(); } catch { /* ignore */ }
     try { lights?.close(); } catch { /* ignore */ }
     try { voicemeeter?.close(); } catch { /* ignore */ }
+    try { heartSender?.close(); heart?.close(); } catch { /* ignore */ }
     try { bridge?.stop(); } catch { /* ignore */ }
     log?.info('CertiFried Studio closed');
 });

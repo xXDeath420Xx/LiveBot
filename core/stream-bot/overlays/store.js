@@ -9,6 +9,7 @@
  *     rotateKey(profileId, id) → key             the old key stops at once (its hash is gone)
  *     byKeyHash(hash) → overlay (with profileId) | null   only for an enabled profile
  *     touch(id)                                  last_seen_at, when a page connects
+ *     widgets: lastStreamStart / eventsSince / latestEvent / biggestEvent / moderatorsSince   the event log, read only
  *     media: listMedia(profileId) / getMedia(profileId, fileId) / addMedia(profileId, row) / removeMedia(profileId, fileId)
  *     exportProfile(profileId) / deleteProfile(profileId)   /privacy (no key columns in the export)
  *
@@ -93,6 +94,46 @@ export function createOverlayStore({ db, prefix = 'stream_bot_', encryption = nu
         },
         async touch(id) {
             await q(`UPDATE ${T('overlays')} SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
+        },
+
+        // ── the event log, read for widgets (credits, labels, tip jar) ──
+        /** When this profile's stream last went live (any platform; test events skipped), or null. */
+        async lastStreamStart(profileId, notBefore = null) {
+            const r = (await q(`SELECT MAX(occurred_at) AS at FROM ${T('events')} WHERE profile_id = ? AND type = 'stream.online' AND is_test = 0${notBefore ? ' AND occurred_at >= ?' : ''}`,
+                notBefore ? [profileId, notBefore] : [profileId]))[0];
+            return r?.at ? new Date(r.at) : null;
+        },
+        /** Events of these types since a time, oldest first: { type, platform, name, login, amount, currency, metadata, at }. */
+        async eventsSince(profileId, since, types, limit = 2000) {
+            if (!types.length) return [];
+            const n = Math.min(5000, Math.max(1, Number(limit) || 2000));
+            const rows = await q(`SELECT type, platform, actor_name, actor_login, amount, currency, metadata, occurred_at FROM ${T('events')}
+                WHERE profile_id = ? AND occurred_at >= ? AND is_test = 0 AND type IN (${types.map(() => '?').join(', ')}) ORDER BY id DESC LIMIT ${n}`, [profileId, since, ...types]);
+            return rows.reverse().map((r) => ({ type: r.type, platform: r.platform, name: r.actor_name || null, login: r.actor_login || null,
+                amount: r.amount == null ? null : Number(r.amount), currency: r.currency || null, metadata: parse(r.metadata, {}) || {}, at: r.occurred_at }));
+        },
+        /** The newest event of one of these types (labels), or null. `where` filters on the row after reading. */
+        async latestEvent(profileId, types, { since = null, scan = 50, where = null } = {}) {
+            const rows = await q(`SELECT type, platform, actor_name, amount, currency, metadata, occurred_at FROM ${T('events')}
+                WHERE profile_id = ? AND is_test = 0 AND type IN (${types.map(() => '?').join(', ')})${since ? ' AND occurred_at >= ?' : ''} ORDER BY id DESC LIMIT ${Math.min(500, scan)}`,
+                [profileId, ...types, ...(since ? [since] : [])]);
+            for (const r of rows) {
+                const e = { type: r.type, platform: r.platform, name: r.actor_name || null, amount: r.amount == null ? null : Number(r.amount), currency: r.currency || null, metadata: parse(r.metadata, {}) || {}, at: r.occurred_at };
+                if (!where || where(e)) return e;
+            }
+            return null;
+        },
+        /** Moderators who chatted since a time, from the stored chat (only when the profile keeps chat; role kept as metadata._roles). */
+        async moderatorsSince(profileId, since) {
+            const rows = await q(`SELECT DISTINCT actor_name FROM ${T('events')} WHERE profile_id = ? AND type = 'chat' AND occurred_at >= ? AND is_test = 0
+                AND metadata LIKE '%"moderator"%' AND actor_name IS NOT NULL LIMIT 300`, [profileId, since]);
+            return rows.map((r) => String(r.actor_name).slice(0, 40));
+        },
+        /** The largest single event of a type (top cheer), since a time or ever. */
+        async biggestEvent(profileId, type, since = null) {
+            const r = (await q(`SELECT platform, actor_name, amount, currency, occurred_at FROM ${T('events')}
+                WHERE profile_id = ? AND is_test = 0 AND type = ?${since ? ' AND occurred_at >= ?' : ''} ORDER BY amount DESC, id DESC LIMIT 1`, [profileId, type, ...(since ? [since] : [])]))[0];
+            return r ? { platform: r.platform, name: r.actor_name || null, amount: r.amount == null ? null : Number(r.amount), currency: r.currency || null, at: r.occurred_at } : null;
         },
 
         // ── media index ──

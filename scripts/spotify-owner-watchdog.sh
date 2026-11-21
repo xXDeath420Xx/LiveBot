@@ -50,7 +50,7 @@ for p in json.load(sys.stdin):
 }
 
 DUMP_DIR="${DUMP_DIR:-/home/death/CertiFriedUtility/logs}"
-ERR_LOG="${ERR_LOG:-/home/death/.pm2/logs/${PROCESS_NAME}-error.log}"
+ERR_LOG="${ERR_LOG:-${PM2_HOME:-$HOME/.pm2}/logs/${PROCESS_NAME}-error.log}"
 
 # SIGQUIT makes the Go runtime print every goroutine's stack to stderr and exit; pm2's
 # autorestart brings it back. That stack dump is the evidence needed to find the actual spin,
